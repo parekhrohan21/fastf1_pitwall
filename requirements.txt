@@ -1,0 +1,5 @@
+fastf1>=3.3.0
+streamlit>=1.32.0
+matplotlib>=3.8.0
+pandas>=2.2.0
+numpy>=1.26.0
