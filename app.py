@@ -209,12 +209,15 @@ with col_b:
 def lap_selector(driver: str, suffix: str = ""):
     driver_laps = sess.laps.pick_drivers(driver).pick_quicklaps().reset_index(drop=True)
     if driver_laps.empty:
+        # Fallback: use all laps with a valid lap time instead of only quick laps
+        driver_laps = sess.laps.pick_drivers(driver).dropna(subset=["LapTime"]).reset_index(drop=True)
+    if driver_laps.empty:
         st.warning(f"No valid laps found for {driver}.")
         return None, None
     lap_options = ["Fastest"] + [str(int(ln)) for ln in driver_laps["LapNumber"].tolist()]
     choice = st.selectbox(f"🔢 Lap — {driver}", lap_options, key=f"lap_{driver}{suffix}")
     if choice == "Fastest":
-        lap = driver_laps.pick_fastest()
+        lap = driver_laps.loc[driver_laps["LapTime"].idxmin()]
     else:
         lap = driver_laps[driver_laps["LapNumber"] == int(choice)].iloc[0]
     return lap, driver_laps
@@ -229,22 +232,30 @@ with col_d:
         lap2 = laps2 = None
 
 # ── Telemetry fetching ─────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False, ttl=600)
-def get_telemetry(_lap):
-    return _lap.get_car_data().add_distance()
+# NOTE: We intentionally do NOT use @st.cache_data here because FastF1 lap
+# objects are not reliably hashable, causing cache collisions between drivers.
+# Instead we cache in session_state keyed by (sess_key, driver, lap_number).
 
-
-def safe_telemetry(lap):
+def get_telemetry_cached(driver: str, lap, label: str = ""):
+    """Fetch and cache telemetry in session_state to avoid per-driver collisions."""
     if lap is None:
         return None
     try:
-        return get_telemetry(lap)
+        lap_num = int(lap["LapNumber"])
     except Exception:
-        return None
+        lap_num = -1
+    cache_key = f"tel_{sess_key}_{driver}_{lap_num}"
+    if cache_key not in st.session_state:
+        try:
+            st.session_state[cache_key] = lap.get_car_data().add_distance()
+        except Exception as exc:
+            st.warning(f"⚠️ Could not load telemetry for {driver}: {exc}")
+            st.session_state[cache_key] = None
+    return st.session_state[cache_key]
 
 
-tel1 = safe_telemetry(lap1)
-tel2 = safe_telemetry(lap2) if compare else None
+tel1 = get_telemetry_cached(driver1, lap1)
+tel2 = get_telemetry_cached(driver2, lap2) if (compare and driver2 and lap2 is not None) else None
 
 # ── Lap summary cards ──────────────────────────────────────────────────────────
 st.markdown("---")
