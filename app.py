@@ -294,7 +294,7 @@ def render_summary(lap, driver: str):
 
 
 render_summary(lap1, driver1)
-if compare and lap2:
+if compare and lap2 is not None:
     st.markdown("")
     render_summary(lap2, driver2)
 
