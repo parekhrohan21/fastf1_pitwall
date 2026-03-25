@@ -286,9 +286,13 @@ def render_summary(lap, driver: str):
 
     compound = lap.get("Compound", "?")
     tyre_age = lap.get("TyreLife", "?")
+    try:
+        tyre_age_str = str(int(tyre_age)) if tyre_age != "?" and not pd.isna(tyre_age) else "?"
+    except (ValueError, TypeError):
+        tyre_age_str = "?"
     st.markdown(
         f"&nbsp;&nbsp;🔴 **Tyre:** {compound} &nbsp;|&nbsp; "
-        f"**Age:** {int(tyre_age) if not pd.isna(tyre_age) else '?'} laps",
+        f"**Age:** {tyre_age_str} laps",
         unsafe_allow_html=True,
     )
 
