@@ -150,7 +150,7 @@ def load_schedule(year: int) -> pd.DataFrame:
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_session(year: int, gp: str, session_type: str = "R"):
     sess = fastf1.get_session(year, gp, session_type)
-    sess.load(telemetry=True, laps=True, weather=False, messages=False)
+    sess.load(telemetry=True, laps=True, weather=True, messages=True)
     return sess
 
 
@@ -389,8 +389,39 @@ def render_summary(lap, driver: str, colour: str = "#e10600"):
         tyre_age_str = str(int(tyre_age)) if tyre_age != "?" and not pd.isna(tyre_age) else "?"
     except (ValueError, TypeError):
         tyre_age_str = "?"
+    try:
+        w = lap.get_weather_data()
+        air = f"{w['AirTemp']:.1f}°C" if not pd.isna(w.get("AirTemp")) else "?"
+        track = f"{w['TrackTemp']:.1f}°C" if not pd.isna(w.get("TrackTemp")) else "?"
+        hum = f"{w['Humidity']:.0f}%" if not pd.isna(w.get("Humidity")) else "?"
+        weather_str = f"&nbsp;&nbsp;🌡️ **Air:** {air} &nbsp;|&nbsp; ☀️ **Track:** {track} &nbsp;|&nbsp; 💧 **Humidity:** {hum}"
+    except Exception:
+        weather_str = ""
+
+    try:
+        track_status = str(lap.get("TrackStatus", "1"))
+        status_map = {
+            "1": "🟢 Clear",
+            "2": "🟡 Yellow Flag",
+            "3": "🔵 Unused",
+            "4": "🚓 Safety Car",
+            "5": "🔴 Red Flag",
+            "6": "🐢 VSC",
+            "7": "🐢 VSC Ending"
+        }
+        if len(track_status) > 1:
+            status_str = f"🏁 Multiple ({track_status})"
+        else:
+            status_str = status_map.get(track_status, "🟢 Clear")
+    except Exception:
+        status_str = "🟢 Clear"
+
     st.markdown(
-        f"&nbsp;&nbsp;🔴 **Tyre:** {compound} &nbsp;|&nbsp; **Age:** {tyre_age_str} laps",
+        f"<div style='margin-bottom: 4px;'>"
+        f"&nbsp;&nbsp;🔴 **Tyre:** {compound} &nbsp;|&nbsp; **Age:** {tyre_age_str} laps"
+        f"</div><div>"
+        f"&nbsp;&nbsp;🛣️ **Track:** {status_str} {weather_str}"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
