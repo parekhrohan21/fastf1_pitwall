@@ -15,6 +15,7 @@ import matplotlib.ticker as ticker
 import matplotlib.patches as mpatches
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 
 warnings.filterwarnings("ignore")
 
@@ -651,3 +652,385 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         fig_d.tight_layout()
         st.pyplot(fig_d, use_container_width=True)
         plt.close(fig_d)
+
+# ── Track Map ─────────────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
+
+map_tab1, map_tab2 = st.tabs(["🎨  Speed Map", "🎬  Race Replay"])
+
+# ────────────────────────────────────────────────────────────────────────────
+# TAB 1 — Static speed-coloured track map
+# ────────────────────────────────────────────────────────────────────────────
+with map_tab1:
+    @st.cache_data(show_spinner=False, ttl=600)
+    def _get_telemetry_for_map(_lap, driver: str, sess_k: str):
+        """Return merged position + car telemetry for a lap."""
+        try:
+            return _lap.get_telemetry()
+        except Exception:
+            return None
+
+    def _speed_map_fig(lap, driver: str, colour: str, lap2=None, driver2=None, colour2=None):
+        tel = _get_telemetry_for_map(lap, driver, sess_key)
+        if tel is None or tel.empty:
+            return None
+
+        # Need X, Y and Speed columns
+        needed = {"X", "Y", "Speed"}
+        if not needed.issubset(tel.columns):
+            return None
+
+        fig = go.Figure()
+
+        # ── Track outline (thick dark grey line)
+        fig.add_trace(go.Scatter(
+            x=tel["X"], y=tel["Y"],
+            mode="lines",
+            line=dict(color="#1c1c1c", width=16),
+            showlegend=False, hoverinfo="skip",
+        ))
+
+        # ── Driver 2 path (solid team colour, lower opacity)
+        if lap2 is not None and driver2:
+            tel2 = _get_telemetry_for_map(lap2, driver2, sess_key)
+            if tel2 is not None and needed.issubset(tel2.columns):
+                fig.add_trace(go.Scatter(
+                    x=tel2["X"], y=tel2["Y"],
+                    mode="markers",
+                    marker=dict(color=colour2, size=3, opacity=0.45),
+                    name=f"{driver2} path",
+                    hoverinfo="skip",
+                ))
+
+        # ── Driver 1 speed-coloured scatter
+        fig.add_trace(go.Scatter(
+            x=tel["X"], y=tel["Y"],
+            mode="markers",
+            marker=dict(
+                color=tel["Speed"],
+                colorscale=[
+                    [0.0,  "#1a1aff"],
+                    [0.35, "#00c8ff"],
+                    [0.65, "#00e400"],
+                    [0.85, "#ffd700"],
+                    [1.0,  "#ff2200"],
+                ],
+                size=4,
+                colorbar=dict(
+                    title=dict(text="Speed (km/h)", font=dict(color="#666", size=10)),
+                    tickfont=dict(color="#555", size=9),
+                    thickness=10, len=0.7,
+                    bgcolor="rgba(0,0,0,0)",
+                    bordercolor="#1e1e1e",
+                    x=1.02,
+                ),
+                showscale=True,
+            ),
+            name=driver,
+            hovertemplate=(
+                f"<b>{driver}</b><br>"
+                "Speed: %{marker.color:.0f} km/h<br>"
+                "X: %{x:.0f}  Y: %{y:.0f}"
+                "<extra></extra>"
+            ),
+        ))
+
+        # ── Start / finish marker
+        fig.add_trace(go.Scatter(
+            x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
+            mode="markers",
+            marker=dict(symbol="star", size=16, color="#ffffff",
+                        line=dict(color="#e10600", width=2)),
+            name="Start / Finish",
+            hovertemplate="Start / Finish<extra></extra>",
+        ))
+
+        fig.update_layout(
+            paper_bgcolor="#080808", plot_bgcolor="#080808",
+            showlegend=True,
+            legend=dict(font=dict(color="#888", size=11),
+                        bgcolor="rgba(0,0,0,0)"),
+            xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
+            yaxis=dict(visible=False),
+            height=520,
+            margin=dict(l=0, r=80, t=10, b=10),
+            hoverlabel=dict(bgcolor="#111", font_color="#eee",
+                            bordercolor="#333"),
+        )
+        return fig
+
+    if lap1 is not None:
+        sm_fig = _speed_map_fig(
+            lap1, driver1, colour1,
+            lap2=(lap2 if compare else None),
+            driver2=(driver2 if compare else None),
+            colour2=colour2,
+        )
+        if sm_fig:
+            st.plotly_chart(sm_fig, use_container_width=True)
+        else:
+            st.info("Position data not available for this lap.")
+    else:
+        st.info("Load a session and select a lap to view the speed map.")
+
+# ────────────────────────────────────────────────────────────────────────────
+# TAB 2 — Animated race replay with all cars
+# ────────────────────────────────────────────────────────────────────────────
+with map_tab2:
+    replay_key = f"replay_{sess_key}"
+    if replay_key not in st.session_state:
+        st.session_state[replay_key] = None
+
+    # ── Placeholder / button
+    if st.session_state[replay_key] is None:
+        st.markdown(
+            "<div style='text-align:center; padding:56px 24px; border:1px dashed #1e1e1e; "
+            "border-radius:12px; margin:8px 0;'>"
+            "<div style='font-size:52px; margin-bottom:14px;'>🎬</div>"
+            "<div style='font-size:14px; color:#666;'>Animated replay of all cars on track.</div>"
+            "<div style='font-size:12px; color:#333; margin-top:6px;'>"
+            "Samples every 5 s · up to 500 frames · ~20 s to build"
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    gen_col, _ = st.columns([1, 3])
+    with gen_col:
+        gen_btn = st.button("🎬  Generate Race Replay", key="gen_replay",
+                            use_container_width=True)
+
+    if gen_btn:
+        st.session_state[replay_key] = None   # reset so we rebuild
+        with st.spinner("Building animation — sampling all car positions…"):
+            try:
+                # ── Build driver number → abbr + colour map
+                drv_meta = {}
+                for drv_num in sess.drivers:
+                    try:
+                        info = sess.get_driver(drv_num)
+                        abbr   = info.get("Abbreviation", drv_num)
+                        colour = _team_colour(info.get("TeamName", ""))
+                        drv_meta[drv_num] = {"abbr": abbr, "colour": colour}
+                    except Exception:
+                        drv_meta[drv_num] = {"abbr": drv_num, "colour": "#888"}
+
+                # ── Extract position time series for each driver
+                T_STEP   = 5          # seconds between animation frames
+                MAX_SECS = 7200       # cap at 2 hours
+                MAX_FRAMES = 500
+
+                all_data = {}         # drv_num -> {t, x, y}
+                for drv_num in sess.drivers:
+                    try:
+                        pdf = sess.pos_data[drv_num]
+                        if pdf is None or pdf.empty:
+                            continue
+                        t_s = pdf["SessionTime"].dt.total_seconds().values
+                        all_data[drv_num] = {
+                            "t": t_s,
+                            "x": pdf["X"].values,
+                            "y": pdf["Y"].values,
+                        }
+                    except Exception:
+                        pass
+
+                if not all_data:
+                    st.warning("No position data available for this session.")
+                    st.stop()
+
+                # ── Build common time grid
+                t_min = min(d["t"][0]  for d in all_data.values())
+                t_max = min(max(d["t"][-1] for d in all_data.values()), t_min + MAX_SECS)
+                t_grid = np.arange(t_min, t_max, T_STEP)
+                if len(t_grid) > MAX_FRAMES:
+                    t_grid = t_grid[:MAX_FRAMES]
+
+                # ── Pre-interpolate positions for every driver onto t_grid
+                grids = {}
+                valid_drvs = []
+                for drv_num, d in all_data.items():
+                    if len(d["t"]) < 10:
+                        continue
+                    xi = np.interp(t_grid, d["t"], d["x"],
+                                   left=np.nan, right=np.nan)
+                    yi = np.interp(t_grid, d["t"], d["y"],
+                                   left=np.nan, right=np.nan)
+                    # Mark frames where driver has retired as NaN
+                    retired_at = d["t"][-1]
+                    xi[t_grid > retired_at + T_STEP] = np.nan
+                    yi[t_grid > retired_at + T_STEP] = np.nan
+                    grids[drv_num] = (xi, yi)
+                    valid_drvs.append(drv_num)
+
+                if not valid_drvs:
+                    st.warning("Insufficient position data for animation.")
+                    st.stop()
+
+                # ── Track outline from the driver with most data points
+                longest = max(all_data, key=lambda k: len(all_data[k]["t"]))
+                track_x = all_data[longest]["x"]
+                track_y = all_data[longest]["y"]
+
+                # Thin track to ~1000 pts for display
+                thin = max(1, len(track_x) // 1000)
+                track_x = track_x[::thin]
+                track_y = track_y[::thin]
+
+                # ── Helper: format seconds as MM:SS
+                def _fmt(sec: float) -> str:
+                    m, s = int(sec // 60), int(sec % 60)
+                    return f"{m:02d}:{s:02d}"
+
+                # ── Build initial traces
+                init_traces = [
+                    go.Scatter(
+                        x=track_x, y=track_y, mode="lines",
+                        line=dict(color="#1c1c1c", width=14),
+                        showlegend=False, hoverinfo="skip",
+                    )
+                ]
+                for drv_num in valid_drvs:
+                    meta  = drv_meta.get(drv_num, {"abbr": drv_num, "colour": "#888"})
+                    xi, yi = grids[drv_num]
+                    x0 = [xi[0]] if not np.isnan(xi[0]) else []
+                    y0 = [yi[0]] if not np.isnan(yi[0]) else []
+                    init_traces.append(go.Scatter(
+                        x=x0, y=y0,
+                        mode="markers+text",
+                        marker=dict(
+                            color=meta["colour"], size=14,
+                            line=dict(color="#000", width=1.5),
+                        ),
+                        text=[meta["abbr"]],
+                        textposition="top center",
+                        textfont=dict(size=8, color=meta["colour"]),
+                        name=meta["abbr"],
+                        hovertemplate=f"<b>{meta['abbr']}</b><extra></extra>",
+                        showlegend=True,
+                    ))
+
+                # ── Build animation frames
+                frames = []
+                slider_steps = []
+                n_drvs = len(valid_drvs)
+
+                for f_i, t_sec in enumerate(t_grid):
+                    label = _fmt(t_sec)
+                    fdata = [
+                        go.Scatter(
+                            x=track_x, y=track_y, mode="lines",
+                            line=dict(color="#1c1c1c", width=14),
+                            showlegend=False, hoverinfo="skip",
+                        )
+                    ]
+                    for drv_num in valid_drvs:
+                        meta  = drv_meta.get(drv_num, {"abbr": drv_num, "colour": "#888"})
+                        xi, yi = grids[drv_num]
+                        px, py = xi[f_i], yi[f_i]
+                        fdata.append(go.Scatter(
+                            x=[px] if not np.isnan(px) else [],
+                            y=[py] if not np.isnan(py) else [],
+                            mode="markers+text",
+                            marker=dict(
+                                color=meta["colour"], size=14,
+                                line=dict(color="#000", width=1.5),
+                            ),
+                            text=[meta["abbr"]],
+                            textposition="top center",
+                            textfont=dict(size=8, color=meta["colour"]),
+                            name=meta["abbr"],
+                            hovertemplate=f"<b>{meta['abbr']}</b><extra></extra>",
+                        ))
+
+                    frames.append(go.Frame(data=fdata, name=label))
+                    # Add slider step only every ~5 frames to reduce clutter
+                    slider_steps.append(dict(
+                        args=[[label], dict(
+                            frame=dict(duration=150, redraw=False),
+                            transition=dict(duration=0),
+                            mode="immediate",
+                        )],
+                        label=label if f_i % 12 == 0 else "",
+                        method="animate",
+                    ))
+
+                # ── Compose layout
+                layout = go.Layout(
+                    paper_bgcolor="#080808", plot_bgcolor="#080808",
+                    showlegend=True,
+                    legend=dict(
+                        font=dict(color="#888", size=10),
+                        bgcolor="rgba(15,15,15,0.85)",
+                        bordercolor="#222", borderwidth=1,
+                        orientation="v", x=1.01, y=0.5,
+                        yanchor="middle",
+                        itemsizing="constant",
+                    ),
+                    xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
+                    yaxis=dict(visible=False),
+                    height=560,
+                    margin=dict(l=0, r=130, t=20, b=70),
+                    hoverlabel=dict(bgcolor="#111", font_color="#eee",
+                                   bordercolor="#333"),
+                    updatemenus=[dict(
+                        type="buttons", showactive=False,
+                        x=0.04, y=-0.10, xanchor="left",
+                        buttons=[
+                            dict(
+                                label="▶  Play",
+                                method="animate",
+                                args=[None, dict(
+                                    frame=dict(duration=150, redraw=False),
+                                    transition=dict(duration=0),
+                                    fromcurrent=True, mode="immediate",
+                                )],
+                            ),
+                            dict(
+                                label="⏸  Pause",
+                                method="animate",
+                                args=[[None], dict(
+                                    frame=dict(duration=0, redraw=False),
+                                    transition=dict(duration=0),
+                                    mode="immediate",
+                                )],
+                            ),
+                        ],
+                        font=dict(color="#ccc", size=12),
+                        bgcolor="#1a1a1a", bordercolor="#333",
+                        pad=dict(r=10, t=8),
+                    )],
+                    sliders=[dict(
+                        active=0,
+                        steps=slider_steps,
+                        currentvalue=dict(
+                            prefix="Session time  ",
+                            font=dict(color="#777", size=11),
+                            visible=True, xanchor="center",
+                        ),
+                        pad=dict(t=45, b=8),
+                        font=dict(color="#444", size=8),
+                        bgcolor="#111", bordercolor="#1e1e1e",
+                        tickcolor="#2a2a2a",
+                        len=0.88, x=0.06,
+                    )],
+                )
+
+                replay_fig = go.Figure(
+                    data=init_traces, layout=layout, frames=frames
+                )
+                st.session_state[replay_key] = replay_fig
+
+            except Exception as exc:
+                import traceback
+                st.error(f"Could not build replay: {exc}")
+                with st.expander("Full traceback"):
+                    st.code(traceback.format_exc())
+
+    if st.session_state[replay_key] is not None:
+        st.plotly_chart(st.session_state[replay_key], use_container_width=True)
+        n_frames = len(st.session_state[replay_key].frames)
+        session_secs = n_frames * 5
+        st.caption(
+            f"⏱  {n_frames} frames · {session_secs // 60} min {session_secs % 60} s covered · "
+            "5 s per frame · Click ▶ Play or drag the slider"
+        )
