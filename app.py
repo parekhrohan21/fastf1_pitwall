@@ -40,10 +40,19 @@ st.markdown("""
     html, body, * { font-family: 'Inter', sans-serif !important; }
 
     /* ── Base */
-    [data-testid="stAppViewContainer"] { background: #080808; color: #e0e0e0; }
+    [data-testid="stAppViewContainer"] {
+        background: #080808; color: #e0e0e0;
+        overflow-x: hidden;          /* prevent horizontal scroll */
+    }
     [data-testid="stSidebar"] { background: #0c0c0c; border-right: 1px solid #1f1f1f; }
     [data-testid="stSidebar"] * { color: #d0d0d0 !important; }
     [data-testid="stSidebar"] .stButton > button { width: 100%; }
+
+    /* All images & iframes scale with their container */
+    img, iframe, canvas, video {
+        max-width: 100% !important;
+        height: auto !important;
+    }
 
     /* ── Typography */
     h1, h2, h3 { color: #fff; letter-spacing: -0.5px; font-weight: 700; }
@@ -56,7 +65,7 @@ st.markdown("""
         content: ''; flex: 1; height: 1px; background: #1e1e1e;
     }
 
-    /* ── Metric cards */
+    /* ── Metric cards — fluid, wrap at narrow viewports */
     .metric-card {
         background: #111;
         border: 1px solid #1e1e1e;
@@ -66,6 +75,8 @@ st.markdown("""
         transition: border-color 0.2s, transform 0.15s;
         position: relative;
         overflow: hidden;
+        min-width: 0;                 /* flex/grid child: don't overflow */
+        box-sizing: border-box;
     }
     .metric-card::before {
         content: ''; position: absolute; top: 0; left: 0; right: 0;
@@ -77,7 +88,7 @@ st.markdown("""
         text-transform: uppercase; font-weight: 500;
     }
     .metric-value {
-        font-size: 20px; font-weight: 700; color: #fff;
+        font-size: clamp(14px, 2.5vw, 20px); font-weight: 700; color: #fff;
         margin-top: 6px; font-family: 'JetBrains Mono', monospace !important;
         letter-spacing: -0.5px;
     }
@@ -91,9 +102,10 @@ st.markdown("""
         border-left: 3px solid var(--colour);
         background: linear-gradient(90deg, var(--colour-dim), transparent 60%);
         display: flex; align-items: center; gap: 10px;
+        min-width: 0; box-sizing: border-box; flex-wrap: wrap;
     }
     .driver-code {
-        font-size: 28px; font-weight: 800; letter-spacing: -1px;
+        font-size: clamp(20px, 4vw, 28px); font-weight: 800; letter-spacing: -1px;
         color: var(--colour); line-height: 1;
     }
     .driver-meta { font-size: 10px; color: #555; letter-spacing: 1.5px; text-transform: uppercase; }
@@ -104,9 +116,10 @@ st.markdown("""
         border-radius: 20px; padding: 4px 12px 4px 4px;
         font-size: 12px; font-weight: 600;
         background: #151515; border: 1px solid #222;
+        max-width: 100%; box-sizing: border-box;
     }
     .tyre-dot {
-        width: 24px; height: 24px; border-radius: 50%;
+        width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
         font-size: 10px; font-weight: 800;
     }
@@ -118,8 +131,9 @@ st.markdown("""
         border-radius: 8px; padding: 10px 14px;
         font-size: 12px; color: #888;
         margin-top: 8px;
+        width: 100%; box-sizing: border-box;
     }
-    .weather-item { display: flex; align-items: center; gap: 5px; }
+    .weather-item { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .weather-item strong { color: #ccc; font-weight: 500; }
 
     /* ── Buttons */
@@ -129,6 +143,7 @@ st.markdown("""
         padding: 10px 20px; letter-spacing: 0.2px;
         transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
         box-shadow: 0 2px 12px rgba(225,6,0,0.3);
+        width: 100%;
     }
     .stButton > button:hover {
         background: #c00400; transform: translateY(-1px);
@@ -141,6 +156,21 @@ st.markdown("""
     [data-testid="stRadio"] > div { gap: 12px; }
     .stCheckbox label { font-size: 13px; }
     .stSelectbox label { font-size: 12px; color: #888 !important; letter-spacing: 0.5px; }
+
+    /* Ensure Streamlit block containers don't overflow */
+    [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {
+        min-width: 0;
+    }
+    .element-container { min-width: 0; max-width: 100%; }
+
+    /* ── Narrow viewport tweaks (< 768 px) */
+    @media (max-width: 768px) {
+        .driver-code { font-size: 20px; }
+        .metric-value { font-size: 14px; }
+        .weather-strip { gap: 10px; font-size: 11px; }
+        .tyre-badge { font-size: 11px; }
+        .section-title { font-size: 10px; letter-spacing: 2px; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -316,7 +346,7 @@ if sess is None:
         "Professional F1 lap telemetry explorer. Select a season, Grand Prix and session "
         "in the sidebar, then hit <strong style='color:#e10600;'>Load Session</strong>."
         "</p>"
-        "<div style='display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:left;'>"
+        "<div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; text-align:left;'>"
         "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
         "<div style='font-size:18px;'>📈</div><div style='font-size:13px; color:#888; margin-top:4px;'>Speed · Throttle · Brake<br>RPM · Gear · DRS</div></div>"
         "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
@@ -650,7 +680,7 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         ax_d.legend(fontsize=9, facecolor="#111", edgecolor="#222",
                     labelcolor="#ddd", framealpha=0.9)
         fig_d.tight_layout()
-        st.pyplot(fig_d, use_container_width=True)
+        st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
 
 # ── Track Map ─────────────────────────────────────────────────────────────────
