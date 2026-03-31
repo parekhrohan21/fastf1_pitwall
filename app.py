@@ -35,13 +35,12 @@ st.set_page_config(
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
-
-    html, body, * { font-family: 'Inter', sans-serif !important; }
+    html, body, * { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important; font-weight: 300; }
 
     /* ── Base */
     [data-testid="stAppViewContainer"] {
-        background: #080808; color: #e0e0e0;
+        background: #000000; color: #ffffff;
+
         overflow-x: hidden;          /* prevent horizontal scroll */
     }
     [data-testid="stSidebar"] { background: #0c0c0c; border-right: 1px solid #1f1f1f; }
@@ -55,60 +54,57 @@ st.markdown("""
     }
 
     /* ── Typography */
-    h1, h2, h3 { color: #fff; letter-spacing: -0.5px; font-weight: 700; }
+    h1, h2, h3 { color: #fff; letter-spacing: -0.5px; font-weight: 300; }
     .section-title {
-        font-size: 11px; font-weight: 600; letter-spacing: 2.5px;
-        text-transform: uppercase; color: #555; margin: 24px 0 12px;
-        display: flex; align-items: center; gap: 8px;
+        font-size: 12px; font-weight: 400; letter-spacing: 1px;
+        text-transform: uppercase; color: #8e8e93; margin: 32px 0 16px;
+        display: flex; align-items: center; gap: 12px;
     }
     .section-title::after {
-        content: ''; flex: 1; height: 1px; background: #1e1e1e;
+        content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.1);
     }
 
     /* ── Metric cards — fluid, wrap at narrow viewports */
     .metric-card {
-        background: #111;
-        border: 1px solid #1e1e1e;
-        border-radius: 10px;
-        padding: 14px 16px 12px;
+        background: rgba(30, 30, 30, 0.5);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        padding: 16px 16px 14px;
         text-align: center;
-        transition: border-color 0.2s, transform 0.15s;
+        transition: opacity 0.2s, transform 0.15s;
         position: relative;
         overflow: hidden;
         min-width: 0;                 /* flex/grid child: don't overflow */
         box-sizing: border-box;
     }
-    .metric-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0;
-        height: 2px; background: var(--accent, #e10600);
-    }
-    .metric-card:hover { border-color: #333; transform: translateY(-1px); }
+    .metric-card:hover { opacity: 0.8; transform: scale(0.98); }
     .metric-label {
-        font-size: 9px; color: #505050; letter-spacing: 2px;
-        text-transform: uppercase; font-weight: 500;
+        font-size: 10px; color: #8e8e93; letter-spacing: 1.5px;
+        text-transform: uppercase; font-weight: 400;
     }
     .metric-value {
-        font-size: clamp(14px, 2.5vw, 20px); font-weight: 700; color: #fff;
-        margin-top: 6px; font-family: 'JetBrains Mono', monospace !important;
+        font-size: clamp(16px, 2.5vw, 24px); font-weight: 300; color: #fff;
+        margin-top: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         letter-spacing: -0.5px;
     }
-    .metric-sub { font-size: 11px; color: #555; margin-top: 3px; }
+    .metric-sub { font-size: 11px; color: #8e8e93; margin-top: 4px; font-weight: 300; }
 
     /* ── Driver banner */
     .driver-banner {
-        border-radius: 10px;
-        padding: 12px 16px;
-        margin-bottom: 10px;
-        border-left: 3px solid var(--colour);
-        background: linear-gradient(90deg, var(--colour-dim), transparent 60%);
-        display: flex; align-items: center; gap: 10px;
+        border-radius: 16px;
+        padding: 14px 20px;
+        margin-bottom: 12px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(30,30,30,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        display: flex; align-items: center; gap: 12px;
         min-width: 0; box-sizing: border-box; flex-wrap: wrap;
     }
     .driver-code {
-        font-size: clamp(20px, 4vw, 28px); font-weight: 800; letter-spacing: -1px;
-        color: var(--colour); line-height: 1;
+        font-size: clamp(24px, 4vw, 32px); font-weight: 300; letter-spacing: -1px;
+        color: var(--colour, #FF8700); line-height: 1;
     }
-    .driver-meta { font-size: 10px; color: #555; letter-spacing: 1.5px; text-transform: uppercase; }
+    .driver-meta { font-size: 11px; color: #8e8e93; letter-spacing: 1px; text-transform: uppercase; font-weight: 400; }
 
     /* ── Tyre badge */
     .tyre-badge {
@@ -127,27 +123,29 @@ st.markdown("""
     /* ── Weather strip */
     .weather-strip {
         display: flex; gap: 16px; flex-wrap: wrap;
-        background: #0e0e0e; border: 1px solid #1a1a1a;
-        border-radius: 8px; padding: 10px 14px;
-        font-size: 12px; color: #888;
+        background: rgba(30, 30, 30, 0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px; padding: 12px 16px;
+        font-size: 13px; color: #a0a0a0; font-weight: 300;
         margin-top: 8px;
         width: 100%; box-sizing: border-box;
     }
     .weather-item { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-    .weather-item strong { color: #ccc; font-weight: 500; }
+    .weather-item strong { color: #fff; font-weight: 500; }
 
     /* ── Buttons */
     .stButton > button {
-        background: #e10600; color: #fff; border: none;
-        border-radius: 8px; font-weight: 600; font-size: 13px;
-        padding: 10px 20px; letter-spacing: 0.2px;
-        transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-        box-shadow: 0 2px 12px rgba(225,6,0,0.3);
+        background: #FF8700; color: #fff; border: none;
+        border-radius: 40px; font-weight: 500; font-size: 15px;
+        padding: 12px 24px; letter-spacing: 0.2px;
+        transition: opacity 0.15s, transform 0.1s;
+        box-shadow: none;
         width: 100%;
     }
     .stButton > button:hover {
-        background: #c00400; transform: translateY(-1px);
-        box-shadow: 0 4px 20px rgba(225,6,0,0.5);
+        opacity: 0.8; transform: scale(0.98);
+        background: #FF8700; color: #fff;
+
     }
 
     /* ── Misc */
@@ -209,7 +207,7 @@ def _team_colour(team: str) -> str:
     for k, v in TEAM_COLOURS.items():
         if k.lower() in team.lower():
             return v
-    return "#e10600"
+    return "#FF8700"
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -238,7 +236,7 @@ def driver_colour(sess, driver: str) -> str:
     try:
         return _team_colour(sess.get_driver(driver).get("TeamName", ""))
     except Exception:
-        return "#e10600"
+        return "#FF8700"
 
 
 def get_telemetry_cached(driver: str, lap, sess_key: str):
@@ -344,7 +342,7 @@ if sess is None:
         "<h1 style='font-size:36px; font-weight:800; color:#fff; margin-bottom:8px;'>Pit Wall</h1>"
         "<p style='color:#555; font-size:15px; line-height:1.6; margin-bottom:32px;'>"
         "Professional F1 lap telemetry explorer. Select a season, Grand Prix and session "
-        "in the sidebar, then hit <strong style='color:#e10600;'>Load Session</strong>."
+        "in the sidebar, then hit <strong style='color:#FF8700;'>Load Session</strong>."
         "</p>"
         "<div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; text-align:left;'>"
         "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
@@ -461,7 +459,7 @@ def weather_strip_html(lap) -> str:
         return ""
 
 
-def render_summary(lap, driver: str, colour: str = "#e10600"):
+def render_summary(lap, driver: str, colour: str = "#FF8700"):
     if lap is None:
         return
     try:
@@ -769,8 +767,8 @@ with map_tab1:
         fig.add_trace(go.Scatter(
             x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
             mode="markers",
-            marker=dict(symbol="star", size=16, color="#ffffff",
-                        line=dict(color="#e10600", width=2)),
+            marker=dict(symbol="circle", size=14, color="#FF8700",
+                        line=dict(color="#ffffff", width=2)),
             name="Start / Finish",
             hovertemplate="Start / Finish<extra></extra>",
         ))
