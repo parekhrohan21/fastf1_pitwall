@@ -195,11 +195,11 @@ TRACK_STATUS_MAP = {
 
 MATPLOTLIB_THEME = {
     "figure.facecolor": "#080808", "axes.facecolor": "#0e0e0e",
-    "axes.edgecolor": "#1e1e1e", "axes.labelcolor": "#666",
-    "xtick.color": "#444", "ytick.color": "#444",
-    "grid.color": "#141414", "text.color": "#ccc",
+    "axes.edgecolor": "#1e1e1e", "axes.labelcolor": "#aaaaaa",
+    "xtick.color": "#999999", "ytick.color": "#999999",
+    "grid.color": "#141414", "text.color": "#ffffff",
     "font.family": "DejaVu Sans",
-    "xtick.labelsize": 8, "ytick.labelsize": 8,
+    "xtick.labelsize": 10, "ytick.labelsize": 10,
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -257,19 +257,19 @@ def get_telemetry_cached(driver: str, lap, sess_key: str):
 
 
 def style_ax(ax, ylabel: str, special: str = ""):
-    ax.set_ylabel(ylabel, fontsize=9, color="#555", labelpad=8)
+    ax.set_ylabel(ylabel, fontsize=11, color="#aaaaaa", labelpad=8)
     ax.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
-    ax.tick_params(axis="both", length=3, color="#333")
+    ax.tick_params(axis="both", length=3, color="#666666", labelsize=10)
     for spine in ax.spines.values():
         spine.set_edgecolor("#1e1e1e")
     if special == "brake":
         ax.set_ylim(-0.05, 1.05)
         ax.set_yticks([0, 1])
-        ax.set_yticklabels(["Off", "On"], fontsize=8)
+        ax.set_yticklabels(["Off", "On"], fontsize=10)
     elif special == "drs":
         ax.set_ylim(-1, 15)
         ax.set_yticks([0, 8, 12])
-        ax.set_yticklabels(["Off", "On", "On"], fontsize=7)
+        ax.set_yticklabels(["Off", "On", "On"], fontsize=9)
     else:
         ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
 
@@ -593,13 +593,13 @@ def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
         if ax_i < N - 1:
             ax.set_xticklabels([])
         else:
-            ax.set_xlabel("Distance (m)", fontsize=9, color="#555", labelpad=6)
+            ax.set_xlabel("Distance (m)", fontsize=11, color="#aaaaaa", labelpad=8)
 
     # Row labels on right side
     for ax_i, (label, _, _, _) in enumerate(CHANNELS):
         axes[ax_i].yaxis.set_label_position("left")
         axes[ax_i].text(1.002, 0.5, label, transform=axes[ax_i].transAxes,
-                        fontsize=8, color="#444", va="center", ha="left",
+                        fontsize=10, color="#999999", va="center", ha="left",
                         rotation=0, fontweight="600")
 
     fig.suptitle(title_str, fontsize=12, fontweight="bold", color="#fff", y=0.98)
@@ -668,14 +668,14 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         ax_d.fill_between(tel1["Distance"], delta,
                           where=(delta < 0),  color=colour2, alpha=0.6,
                           label=f"{driver2} faster", interpolate=True)
-        ax_d.set_ylabel("Δ Speed (km/h)", fontsize=9, color="#555")
-        ax_d.set_xlabel("Distance (m)", fontsize=9, color="#555")
+        ax_d.set_ylabel("Δ Speed (km/h)", fontsize=11, color="#aaaaaa")
+        ax_d.set_xlabel("Distance (m)", fontsize=11, color="#aaaaaa")
         ax_d.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
         for spine in ax_d.spines.values():
             spine.set_edgecolor("#1e1e1e")
         ax_d.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
-        ax_d.tick_params(colors="#444", labelsize=8)
-        ax_d.legend(fontsize=9, facecolor="#111", edgecolor="#222",
+        ax_d.tick_params(colors="#999999", labelsize=10)
+        ax_d.legend(fontsize=10, facecolor="#111", edgecolor="#222",
                     labelcolor="#ddd", framealpha=0.9)
         fig_d.tight_layout()
         st.pyplot(fig_d, width='stretch')
