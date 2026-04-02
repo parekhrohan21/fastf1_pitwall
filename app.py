@@ -39,7 +39,7 @@ st.markdown("""
 
     /* ── Base */
     [data-testid="stAppViewContainer"] {
-        background: #000000; color: #ffffff;
+        background-color: var(--background-color); color: var(--text-color);
 
         overflow-x: hidden;          /* prevent horizontal scroll */
     }
@@ -61,14 +61,13 @@ st.markdown("""
         display: flex; align-items: center; gap: 12px;
     }
     .section-title::after {
-        content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.1);
+        content: ''; flex: 1; height: 1px; background: rgba(128,128,128,0.2);
     }
 
     /* ── Metric cards — fluid, wrap at narrow viewports */
     .metric-card {
-        background: rgba(30, 30, 30, 0.5);
-        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(128,128,128,0.2);
         border-radius: 16px;
         padding: 16px 16px 14px;
         text-align: center;
@@ -84,7 +83,7 @@ st.markdown("""
         text-transform: uppercase; font-weight: 400;
     }
     .metric-value {
-        font-size: clamp(16px, 2.5vw, 24px); font-weight: 300; color: #fff;
+        font-size: clamp(16px, 2.5vw, 24px); font-weight: 300; color: var(--text-color);
         margin-top: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         letter-spacing: -0.5px;
     }
@@ -95,8 +94,8 @@ st.markdown("""
         border-radius: 16px;
         padding: 14px 20px;
         margin-bottom: 12px;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: rgba(30,30,30,0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(128,128,128,0.2);
+        background: var(--secondary-background-color);
         display: flex; align-items: center; gap: 12px;
         min-width: 0; box-sizing: border-box; flex-wrap: wrap;
     }
@@ -111,7 +110,7 @@ st.markdown("""
         display: inline-flex; align-items: center; gap: 8px;
         border-radius: 20px; padding: 4px 12px 4px 4px;
         font-size: 12px; font-weight: 600;
-        background: #151515; border: 1px solid #222;
+        background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.3);
         max-width: 100%; box-sizing: border-box;
     }
     .tyre-dot {
@@ -123,15 +122,15 @@ st.markdown("""
     /* ── Weather strip */
     .weather-strip {
         display: flex; gap: 16px; flex-wrap: wrap;
-        background: rgba(30, 30, 30, 0.5); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(128,128,128,0.2);
         border-radius: 16px; padding: 12px 16px;
         font-size: 13px; color: #a0a0a0; font-weight: 300;
         margin-top: 8px;
         width: 100%; box-sizing: border-box;
     }
     .weather-item { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-    .weather-item strong { color: #fff; font-weight: 500; }
+    .weather-item strong { color: var(--text-color); font-weight: 500; }
 
     /* ── Buttons */
     .stButton > button {
@@ -149,7 +148,7 @@ st.markdown("""
     }
 
     /* ── Misc */
-    hr { border-color: #1a1a1a; margin: 20px 0; }
+    hr { border-color: rgba(128,128,128,0.2); margin: 20px 0; }
     [data-testid="stRadio"] label { font-size: 13px !important; }
     [data-testid="stRadio"] > div { gap: 12px; }
     .stCheckbox label { font-size: 13px; }
@@ -194,10 +193,6 @@ TRACK_STATUS_MAP = {
 }
 
 MATPLOTLIB_THEME = {
-    "figure.facecolor": "#080808", "axes.facecolor": "#0e0e0e",
-    "axes.edgecolor": "#1e1e1e", "axes.labelcolor": "#aaaaaa",
-    "xtick.color": "#999999", "ytick.color": "#999999",
-    "grid.color": "#141414", "text.color": "#ffffff",
     "font.family": "DejaVu Sans",
     "xtick.labelsize": 10, "ytick.labelsize": 10,
 }
@@ -257,11 +252,12 @@ def get_telemetry_cached(driver: str, lap, sess_key: str):
 
 
 def style_ax(ax, ylabel: str, special: str = ""):
-    ax.set_ylabel(ylabel, fontsize=11, color="#aaaaaa", labelpad=8)
+    ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
     ax.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
-    ax.tick_params(axis="both", length=3, color="#666666", labelsize=10)
+    ax.tick_params(axis="both", length=3, labelsize=10)
     for spine in ax.spines.values():
-        spine.set_edgecolor("#1e1e1e")
+        spine.set_edgecolor("gray")
+        spine.set_alpha(0.3)
     if special == "brake":
         ax.set_ylim(-0.05, 1.05)
         ax.set_yticks([0, 1])
@@ -278,8 +274,8 @@ def style_ax(ax, ylabel: str, special: str = ""):
 with st.sidebar:
     st.markdown(
         "<div style='padding: 4px 0 16px'>"
-        "<div style='font-size:22px; font-weight:800; letter-spacing:-0.5px; color:#fff;'>🏎 Pit Wall</div>"
-        "<div style='font-size:11px; color:#444; letter-spacing:2px; text-transform:uppercase; margin-top:2px;'>F1 Telemetry Explorer</div>"
+        "<div style='font-size:22px; font-weight:800; letter-spacing:-0.5px;'>🏎 Pit Wall</div>"
+        "<div style='font-size:11px; letter-spacing:2px; text-transform:uppercase; margin-top:2px; opacity: 0.6;'>F1 Telemetry Explorer</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -593,23 +589,21 @@ def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
         if ax_i < N - 1:
             ax.set_xticklabels([])
         else:
-            ax.set_xlabel("Distance (m)", fontsize=11, color="#aaaaaa", labelpad=8)
+            ax.set_xlabel("Distance (m)", fontsize=11, labelpad=8)
 
-    # Row labels on right side
     for ax_i, (label, _, _, _) in enumerate(CHANNELS):
         axes[ax_i].yaxis.set_label_position("left")
         axes[ax_i].text(1.002, 0.5, label, transform=axes[ax_i].transAxes,
-                        fontsize=10, color="#999999", va="center", ha="left",
-                        rotation=0, fontweight="600")
+                        fontsize=10, va="center", ha="left",
+                        rotation=0, fontweight="600", alpha=0.6)
 
-    fig.suptitle(title_str, fontsize=12, fontweight="bold", color="#fff", y=0.98)
+    fig.suptitle(title_str, fontsize=12, fontweight="bold", y=0.98)
 
     # Legend
     handles = [mpatches.Patch(color=c, label=d) for d, c, _ in drivers_telemetry]
     if len(handles) > 1:
         fig.legend(handles=handles, loc="upper right",
                    bbox_to_anchor=(0.97, 0.965), fontsize=9,
-                   facecolor="#111", edgecolor="#222", labelcolor="#ddd",
                    framealpha=0.9, handlelength=1.2, handleheight=0.8)
     return fig
 
@@ -658,25 +652,24 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         speed2_i = np.interp(tel1["Distance"], tel2["Distance"], tel2["Speed"])
         delta = tel1["Speed"].values - speed2_i
 
-        fig_d, ax_d = plt.subplots(figsize=(14, 2.8),
-                                   facecolor=MATPLOTLIB_THEME["figure.facecolor"])
-        ax_d.set_facecolor(MATPLOTLIB_THEME["axes.facecolor"])
-        ax_d.axhline(0, color="#333", linewidth=0.8)
+        fig_d, ax_d = plt.subplots(figsize=(14, 2.8), facecolor="none")
+        ax_d.set_facecolor("none")
+        ax_d.axhline(0, color="gray", alpha=0.5, linewidth=0.8)
         ax_d.fill_between(tel1["Distance"], delta,
                           where=(delta >= 0), color=colour1, alpha=0.6,
                           label=f"{driver1} faster", interpolate=True)
         ax_d.fill_between(tel1["Distance"], delta,
                           where=(delta < 0),  color=colour2, alpha=0.6,
                           label=f"{driver2} faster", interpolate=True)
-        ax_d.set_ylabel("Δ Speed (km/h)", fontsize=11, color="#aaaaaa")
-        ax_d.set_xlabel("Distance (m)", fontsize=11, color="#aaaaaa")
+        ax_d.set_ylabel("Δ Speed (km/h)", fontsize=11)
+        ax_d.set_xlabel("Distance (m)", fontsize=11)
         ax_d.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
         for spine in ax_d.spines.values():
-            spine.set_edgecolor("#1e1e1e")
+            spine.set_edgecolor("gray")
+            spine.set_alpha(0.3)
         ax_d.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
-        ax_d.tick_params(colors="#999999", labelsize=10)
-        ax_d.legend(fontsize=10, facecolor="#111", edgecolor="#222",
-                    labelcolor="#ddd", framealpha=0.9)
+        ax_d.tick_params(labelsize=10)
+        ax_d.legend(fontsize=10, framealpha=0.9)
         fig_d.tight_layout()
         st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
@@ -714,7 +707,7 @@ with map_tab1:
         fig.add_trace(go.Scatter(
             x=tel["X"], y=tel["Y"],
             mode="lines",
-            line=dict(color="#1c1c1c", width=16),
+            line=dict(color="gray", width=16),
             showlegend=False, hoverinfo="skip",
         ))
 
@@ -745,11 +738,9 @@ with map_tab1:
                 ],
                 size=4,
                 colorbar=dict(
-                    title=dict(text="Speed (km/h)", font=dict(color="#666", size=10)),
-                    tickfont=dict(color="#555", size=9),
+                    title=dict(text="Speed (km/h)"),
                     thickness=10, len=0.7,
                     bgcolor="rgba(0,0,0,0)",
-                    bordercolor="#1e1e1e",
                     x=1.02,
                 ),
                 showscale=True,
@@ -768,22 +759,18 @@ with map_tab1:
             x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
             mode="markers",
             marker=dict(symbol="circle", size=14, color="#FF8700",
-                        line=dict(color="#ffffff", width=2)),
+                        line=dict(color="white", width=2)),
             name="Start / Finish",
             hovertemplate="Start / Finish<extra></extra>",
         ))
 
         fig.update_layout(
-            paper_bgcolor="#080808", plot_bgcolor="#080808",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             showlegend=True,
-            legend=dict(font=dict(color="#888", size=11),
-                        bgcolor="rgba(0,0,0,0)"),
             xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
             yaxis=dict(visible=False),
             height=520,
             margin=dict(l=0, r=80, t=10, b=10),
-            hoverlabel=dict(bgcolor="#111", font_color="#eee",
-                            bordercolor="#333"),
         )
         return fig
 
@@ -812,11 +799,11 @@ with map_tab2:
     # ── Placeholder / button
     if st.session_state[replay_key] is None:
         st.markdown(
-            "<div style='text-align:center; padding:56px 24px; border:1px dashed #1e1e1e; "
+            "<div style='text-align:center; padding:56px 24px; border:1px dashed var(--text-color); "
             "border-radius:12px; margin:8px 0;'>"
             "<div style='font-size:52px; margin-bottom:14px;'>🎬</div>"
-            "<div style='font-size:14px; color:#666;'>Animated replay of all cars on track.</div>"
-            "<div style='font-size:12px; color:#333; margin-top:6px;'>"
+            "<div style='font-size:14px;'>Animated replay of all cars on track.</div>"
+            "<div style='font-size:12px; margin-top:6px;'>"
             "Samples every 5 s · up to 500 frames · ~20 s to build"
             "</div></div>",
             unsafe_allow_html=True,
@@ -913,7 +900,7 @@ with map_tab2:
                 init_traces = [
                     go.Scatter(
                         x=track_x, y=track_y, mode="lines",
-                        line=dict(color="#1c1c1c", width=14),
+                        line=dict(color="gray", width=14),
                         showlegend=False, hoverinfo="skip",
                     )
                 ]
@@ -927,7 +914,7 @@ with map_tab2:
                         mode="markers+text",
                         marker=dict(
                             color=meta["colour"], size=14,
-                            line=dict(color="#000", width=1.5),
+                            line=dict(color="black", width=1.5),
                         ),
                         text=[meta["abbr"]],
                         textposition="top center",
@@ -947,7 +934,7 @@ with map_tab2:
                     fdata = [
                         go.Scatter(
                             x=track_x, y=track_y, mode="lines",
-                            line=dict(color="#1c1c1c", width=14),
+                            line=dict(color="gray", width=14),
                             showlegend=False, hoverinfo="skip",
                         )
                     ]
@@ -961,7 +948,7 @@ with map_tab2:
                             mode="markers+text",
                             marker=dict(
                                 color=meta["colour"], size=14,
-                                line=dict(color="#000", width=1.5),
+                                line=dict(color="black", width=1.5),
                             ),
                             text=[meta["abbr"]],
                             textposition="top center",
@@ -984,12 +971,10 @@ with map_tab2:
 
                 # ── Compose layout
                 layout = go.Layout(
-                    paper_bgcolor="#080808", plot_bgcolor="#080808",
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     showlegend=True,
                     legend=dict(
-                        font=dict(color="#888", size=10),
-                        bgcolor="rgba(15,15,15,0.85)",
-                        bordercolor="#222", borderwidth=1,
+                        bordercolor="gray", borderwidth=0.5,
                         orientation="v", x=1.01, y=0.5,
                         yanchor="middle",
                         itemsizing="constant",
