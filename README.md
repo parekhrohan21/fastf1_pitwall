@@ -14,7 +14,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays.
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
-- **Premium Aesthetics**: A custom built, fully responsive dark-mode UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics.
+- **Premium Aesthetics**: A custom built, fully responsive UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics that dynamically adapts to both **Light** and **Dark** mode device themes natively.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
