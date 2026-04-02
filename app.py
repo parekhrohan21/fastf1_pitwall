@@ -40,11 +40,10 @@ st.markdown("""
     /* ── Base */
     [data-testid="stAppViewContainer"] {
         background-color: var(--background-color); color: var(--text-color);
-
-        overflow-x: hidden;          /* prevent horizontal scroll */
     }
-    [data-testid="stSidebar"] { background: #0c0c0c; border-right: 1px solid #1f1f1f; }
-    [data-testid="stSidebar"] * { color: #d0d0d0 !important; }
+    [data-testid="stSidebar"] { 
+        background-color: var(--secondary-background-color) !important; 
+    }
     [data-testid="stSidebar"] .stButton > button { width: 100%; }
 
     /* All images & iframes scale with their container */
@@ -149,16 +148,6 @@ st.markdown("""
 
     /* ── Misc */
     hr { border-color: rgba(128,128,128,0.2); margin: 20px 0; }
-    [data-testid="stRadio"] label { font-size: 13px !important; }
-    [data-testid="stRadio"] > div { gap: 12px; }
-    .stCheckbox label { font-size: 13px; }
-    .stSelectbox label { font-size: 12px; color: #888 !important; letter-spacing: 0.5px; }
-
-    /* Ensure Streamlit block containers don't overflow */
-    [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {
-        min-width: 0;
-    }
-    .element-container { min-width: 0; max-width: 100%; }
 
     /* ── Narrow viewport tweaks (< 768 px) */
     @media (max-width: 768px) {
@@ -305,7 +294,7 @@ with st.sidebar:
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
-        "<div style='font-size:10px; color:#333; letter-spacing:0.5px; text-align:center;'>"
+        "<div style='font-size:10px; opacity:0.5; letter-spacing:0.5px; text-align:center;'>"
         "Data © FastF1 / Ergast / F1<br>Educational use only"
         "</div>",
         unsafe_allow_html=True,
@@ -335,20 +324,20 @@ if sess is None:
     st.markdown(
         "<div style='max-width:560px; margin:80px auto; text-align:center;'>"
         "<div style='font-size:64px; margin-bottom:16px;'>🏎</div>"
-        "<h1 style='font-size:36px; font-weight:800; color:#fff; margin-bottom:8px;'>Pit Wall</h1>"
-        "<p style='color:#555; font-size:15px; line-height:1.6; margin-bottom:32px;'>"
+        "<h1 style='font-size:36px; font-weight:800; color:var(--text-color); margin-bottom:8px;'>Pit Wall</h1>"
+        "<p style='opacity:0.7; font-size:15px; line-height:1.6; margin-bottom:32px;'>"
         "Professional F1 lap telemetry explorer. Select a season, Grand Prix and session "
         "in the sidebar, then hit <strong style='color:#FF8700;'>Load Session</strong>."
         "</p>"
         "<div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; text-align:left;'>"
-        "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
-        "<div style='font-size:18px;'>📈</div><div style='font-size:13px; color:#888; margin-top:4px;'>Speed · Throttle · Brake<br>RPM · Gear · DRS</div></div>"
-        "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
-        "<div style='font-size:18px;'>⏱</div><div style='font-size:13px; color:#888; margin-top:4px;'>Lap time &amp; sector splits<br>Tyre compound &amp; age</div></div>"
-        "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
-        "<div style='font-size:18px;'>👥</div><div style='font-size:13px; color:#888; margin-top:4px;'>Head-to-head comparison<br>Overlapping or separate</div></div>"
-        "<div style='background:#111; border:1px solid #1e1e1e; border-radius:10px; padding:14px 16px;'>"
-        "<div style='font-size:18px;'>🌤</div><div style='font-size:13px; color:#888; margin-top:4px;'>Weather conditions<br>Track status per lap</div></div>"
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.2); border-radius:10px; padding:14px 16px;'>"
+        "<div style='font-size:18px;'>📈</div><div style='font-size:13px; opacity:0.7; margin-top:4px;'>Speed · Throttle · Brake<br>RPM · Gear · DRS</div></div>"
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.2); border-radius:10px; padding:14px 16px;'>"
+        "<div style='font-size:18px;'>⏱</div><div style='font-size:13px; opacity:0.7; margin-top:4px;'>Lap time &amp; sector splits<br>Tyre compound &amp; age</div></div>"
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.2); border-radius:10px; padding:14px 16px;'>"
+        "<div style='font-size:18px;'>👥</div><div style='font-size:13px; opacity:0.7; margin-top:4px;'>Head-to-head comparison<br>Overlapping or separate</div></div>"
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.2); border-radius:10px; padding:14px 16px;'>"
+        "<div style='font-size:18px;'>🌤</div><div style='font-size:13px; opacity:0.7; margin-top:4px;'>Weather conditions<br>Track status per lap</div></div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
