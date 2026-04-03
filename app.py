@@ -547,7 +547,7 @@ H_RATIOS = [3, 2, 1, 2, 1.5, 1]
 
 def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
     """drivers_telemetry: list of (driver_label, colour, tel_df)"""
-    fig = plt.figure(figsize=(fig_width, 11), facecolor=MATPLOTLIB_THEME["figure.facecolor"])
+    fig = plt.figure(figsize=(fig_width, 11), facecolor="none")
     gs = gridspec.GridSpec(N, 1, figure=fig, hspace=0.04,
                            height_ratios=H_RATIOS, top=0.94, bottom=0.06,
                            left=0.07, right=0.97)
