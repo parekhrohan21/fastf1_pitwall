@@ -15,7 +15,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
 - **Premium Aesthetics**: A custom built, fully responsive UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics that dynamically adapts to both **Light** and **Dark** mode device themes natively.
-- **Native UI Compatibility**: Full support for Streamlit's native overlays (e.g. settings menus, sidebar navigation icons) and system-animated run indicators without custom CSS overlapping or breakage.
+- **Native UI Compatibility**: Full support for Streamlit's native overlays (e.g. settings menus, sidebar navigation icons) and system-animated run indicators without custom CSS overlapping or breakage. Material Symbols icons (sidebar collapse arrow, toolbar buttons) are explicitly preserved via targeted CSS font rules.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -26,6 +26,9 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 |---|---|
 | Python 3.11+ | Docker Desktop installed & running |
 | pip | No Python needed locally |
+
+> [!NOTE]
+> The app is built against **Streamlit 1.44+** and uses the current `width='stretch'` API (replacing the deprecated `use_container_width` parameter). Always use the version pinned in `requirements.txt`.
 
 ---
 
@@ -102,6 +105,7 @@ Open **http://localhost:8501**.
 | Session fails to load | Some recent/future sessions may not be published fully yet. Try an older completed race. |
 | Port 8501 already in use | Run `lsof -i :8501` and kill the process, or run Streamlit on a different port using `streamlit run app.py --server.port 8502` |
 | Docker fails to connect API | The Docker Daemon is not running. Launch the Docker Desktop explicitly first using `open -a Docker`, wait 30 seconds for the engine to initialize, and try again. |
+| Sidebar shows `keyboard_double_arrow_left` text | The custom font CSS is overriding Streamlit's icon font. Ensure you are running the latest version of the app — this was patched via explicit `Material Symbols` CSS restoration. |
 
 ---
 
