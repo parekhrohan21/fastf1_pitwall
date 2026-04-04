@@ -305,7 +305,7 @@ with st.sidebar:
     session_type = session_map[session_label]
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
-    load_btn = st.button("⬇️  Load Session", use_container_width=True)
+    load_btn = st.button("⬇️  Load Session")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
@@ -625,7 +625,7 @@ if chart_mode == "Overlapping" or not compare:
         title += f"  ·  {driver1}"
 
     fig = build_chart(drv_list, title)
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
     plt.close(fig)
 
 # ── Separate ──────────────────────────────────────────────────────────────────
@@ -645,7 +645,7 @@ else:
                 lt = ""
             title = f"{driver}  ·  {lt}"
             fig = build_chart([(driver, colour, tel)], title, fig_width=7)
-            st.pyplot(fig, use_container_width=True)
+            st.pyplot(fig, width="stretch")
             plt.close(fig)
 
 # ── Speed delta (overlapping + comparison) ────────────────────────────────────
@@ -786,7 +786,7 @@ with map_tab1:
             colour2=colour2,
         )
         if sm_fig:
-            st.plotly_chart(sm_fig, use_container_width=True)
+            st.plotly_chart(sm_fig, width="stretch")
         else:
             st.info("Position data not available for this lap.")
     else:
@@ -816,7 +816,7 @@ with map_tab2:
     gen_col, _ = st.columns([1, 3])
     with gen_col:
         gen_btn = st.button("🎬  Generate Race Replay", key="gen_replay",
-                            use_container_width=True)
+                            width="stretch")
 
     if gen_btn:
         st.session_state[replay_key] = None   # reset so we rebuild
@@ -1044,7 +1044,7 @@ with map_tab2:
                     st.code(traceback.format_exc())
 
     if st.session_state[replay_key] is not None:
-        st.plotly_chart(st.session_state[replay_key], use_container_width=True)
+        st.plotly_chart(st.session_state[replay_key], width="stretch")
         n_frames = len(st.session_state[replay_key].frames)
         session_secs = n_frames * 5
         st.caption(
