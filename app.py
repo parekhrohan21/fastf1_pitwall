@@ -35,7 +35,22 @@ st.set_page_config(
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    html, body, *:not(.material-symbols-rounded):not(i):not(svg) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; font-weight: 300; }
+    /* ── Base font — iOS-style system stack */
+    html, body, * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                     Helvetica, Arial, sans-serif;
+        font-weight: 300;
+    }
+
+    /* Restore Google Material Symbols so sidebar icons render correctly
+       instead of showing raw ligature text like "keyboard_double_arrow_left" */
+    .material-symbols-rounded,
+    .material-symbols-outlined,
+    [data-testid="collapsedControl"] span,
+    button[kind="header"] span {
+        font-family: "Material Symbols Rounded", "Material Symbols Outlined" !important;
+        font-weight: 400 !important;
+    }
 
     /* ── Base */
     [data-testid="stAppViewContainer"] {
