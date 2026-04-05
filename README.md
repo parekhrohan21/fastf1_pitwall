@@ -16,6 +16,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
 - **Premium Aesthetics**: A custom built, fully responsive UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics that dynamically adapts to both **Light** and **Dark** mode device themes natively.
 - **Native UI Compatibility**: Full support for Streamlit's native overlays (e.g. settings menus, sidebar navigation icons) and system-animated run indicators without custom CSS overlapping or breakage. Material Symbols icons (sidebar collapse arrow, toolbar buttons) are explicitly preserved via targeted CSS font rules.
+- **Gap to Leader Chart**: Interactive Plotly chart showing every driver's time gap to the race leader lap-by-lap. Selected driver(s) are highlighted in team colour against a faded field, with ▼ pit lap markers and a final gap stat card per driver.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -93,7 +94,8 @@ Open **http://localhost:8501**.
 4. **Click ⬇️ Load Session** — The first load streams the data from the F1 API and takes ~10-30 seconds. Afterwards, it is cached down to milliseconds.
 5. **Select Drivers and Laps** — Pick a driver and select *Fastest* or a specific lap number.
 6. **Compare Drivers** — Tick **👥 Compare with Driver 2** to overlay traces and generate the Speed Delta chart.
-7. **Track Map & Replacements** — Scroll down to the Track Map tabs to view the speed heat-map or build the full multi-car Race Replay animation!
+7. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
+8. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map or build the full multi-car Race Replay animation!
 
 ---
 
