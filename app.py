@@ -678,6 +678,148 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
 
+# ── Gap to Leader ─────────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_gap_data(sess_k: str):
+    """Return a dict {driver: pd.Series(gap_seconds, index=lap_number)} for all drivers."""
+    try:
+        laps = st.session_state["session"].laps.copy()
+        # Only use valid laps with a recorded LapTime
+        laps = laps.dropna(subset=["LapTime", "LapNumber", "Driver"])
+        laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
+        # For each driver sort by lap number and compute cumulative race time
+        gap_dict = {}
+        for drv, grp in laps.groupby("Driver"):
+            grp = grp.sort_values("LapNumber").copy()
+            grp["CumTime"] = grp["LapTimeSec"].cumsum()
+            gap_dict[drv] = grp.set_index("LapNumber")["CumTime"]
+        if not gap_dict:
+            return None, None
+        # Build leader reference: at each lap, min cumulative time across drivers
+        all_laps_idx = sorted({lap for s in gap_dict.values() for lap in s.index})
+        leader_time = pd.Series(index=all_laps_idx, dtype=float)
+        for lap in all_laps_idx:
+            times_at_lap = [s.get(lap) for s in gap_dict.values() if lap in s.index]
+            times_at_lap = [t for t in times_at_lap if t is not None]
+            if times_at_lap:
+                leader_time[lap] = min(times_at_lap)
+        # Convert each driver's cumulative time to gap vs leader
+        gap_to_leader = {}
+        for drv, cum in gap_dict.items():
+            gap = cum - leader_time.reindex(cum.index)
+            gap_to_leader[drv] = gap
+        # Also return track status by lap for shading
+        try:
+            ts = st.session_state["session"].track_status.copy()
+            ts["LapNumber"] = ts.index
+        except Exception:
+            ts = None
+        return gap_to_leader, ts
+    except Exception:
+        return None, None
+
+def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_laps):
+    """Build and return a Plotly figure of gap to leader."""
+    fig = go.Figure()
+
+    # Grey background traces for all other drivers
+    for drv, gap in gap_to_leader.items():
+        if drv in highlight_drivers:
+            continue
+        fig.add_trace(go.Scatter(
+            x=list(gap.index), y=list(gap.values),
+            mode="lines",
+            line=dict(color="rgba(180,180,180,0.18)", width=1),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
+    # Mark pit laps for highlighted drivers
+    try:
+        pit_laps_all = session_laps[session_laps["PitOutTime"].notna()]["LapNumber"].tolist()
+    except Exception:
+        pit_laps_all = []
+
+    # Highlighted driver traces
+    for drv, col in zip(highlight_drivers, highlight_colours):
+        if drv not in gap_to_leader:
+            continue
+        gap = gap_to_leader[drv]
+        # Pit lap markers
+        pit_x = [ln for ln in pit_laps_all
+                 if ln in gap.index and
+                 session_laps[(session_laps["Driver"] == drv) &
+                              (session_laps["LapNumber"] == ln)].shape[0] > 0]
+        fig.add_trace(go.Scatter(
+            x=list(gap.index), y=list(gap.values),
+            mode="lines",
+            line=dict(color=col, width=2.5),
+            name=drv,
+            hovertemplate=f"<b>{drv}</b><br>Lap %{{x}}<br>Gap: +%{{y:.1f}} s<extra></extra>",
+        ))
+        if pit_x:
+            fig.add_trace(go.Scatter(
+                x=pit_x,
+                y=[gap.get(ln) for ln in pit_x],
+                mode="markers",
+                marker=dict(symbol="triangle-down", size=10, color=col,
+                            line=dict(color="white", width=1)),
+                name=f"{drv} pit",
+                hovertemplate=f"<b>{drv}</b> PIT<br>Lap %{{x}}<extra></extra>",
+                showlegend=True,
+            ))
+
+    # Leader line at 0
+    fig.add_hline(y=0, line=dict(color="rgba(255,135,0,0.5)", width=1.5, dash="dot"),
+                  annotation_text="Leader", annotation_position="right")
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=16, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title="Lap", gridcolor="rgba(128,128,128,0.15)",
+                   tickmode="linear", dtick=5, zeroline=False),
+        yaxis=dict(title="Gap to Leader (s)", gridcolor="rgba(128,128,128,0.15)",
+                   zeroline=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                    bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+        height=420,
+    )
+    return fig
+
+# Only show for race/qualifying sessions (gap is meaningful)
+_gtl_data, _ts_data = _build_gap_data(sess_key)
+
+if _gtl_data is None:
+    st.info("Gap to Leader data is not available for this session.")
+else:
+    _highlight = [driver1]
+    _colours   = [colour1]
+    if compare and driver2 and driver2 in _gtl_data:
+        _highlight.append(driver2)
+        _colours.append(colour2)
+
+    _gtl_fig = _gap_chart_fig(_gtl_data, _highlight, _colours, sess.laps)
+    st.plotly_chart(_gtl_fig, width="stretch")
+
+    # Show quick stats below the chart
+    _stat_cols = st.columns(len(_highlight))
+    for _col, _drv, _col_colour in zip(_stat_cols, _highlight, _colours):
+        if _drv in _gtl_data:
+            _gap_s = _gtl_data[_drv]
+            _final_gap = _gap_s.iloc[-1]
+            _max_gap   = _gap_s.max()
+            _col.markdown(
+                f"<div class='metric-card'>"
+                f"<div class='metric-label'>{_drv} — Final Gap</div>"
+                f"<div class='metric-value' style='color:{_col_colour};'>+{_final_gap:.1f}s</div>"
+                f"<div class='metric-sub'>Peak: +{_max_gap:.1f} s behind leader</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
 # ── Track Map ─────────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
 
