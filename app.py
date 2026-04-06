@@ -1057,7 +1057,7 @@ else:
         _colours.append(colour2)
 
     _gtl_fig = _gap_chart_fig(_gtl_data, _highlight, _colours, sess.laps)
-    st.plotly_chart(_gtl_fig, width="stretch")
+    st.plotly_chart(_gtl_fig, use_container_width=True)
 
     # Show quick stats below the chart
     _stat_cols = st.columns(len(_highlight))
@@ -1183,7 +1183,7 @@ with map_tab1:
             colour2=colour2,
         )
         if sm_fig:
-            st.plotly_chart(sm_fig, width="stretch")
+            st.plotly_chart(sm_fig, use_container_width=True)
         else:
             st.info("Position data not available for this lap.")
     else:
@@ -1441,7 +1441,7 @@ with map_tab2:
                     st.code(traceback.format_exc())
 
     if st.session_state[replay_key] is not None:
-        st.plotly_chart(st.session_state[replay_key], width="stretch")
+        st.plotly_chart(st.session_state[replay_key], use_container_width=True)
         n_frames = len(st.session_state[replay_key].frames)
         session_secs = n_frames * 5
         st.caption(
