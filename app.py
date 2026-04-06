@@ -33,17 +33,50 @@ st.set_page_config(
 )
 
 # ── Custom CSS ────────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown("""<!-- ── Google Font: Inter for premium typographic quality ── -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-    /* ── Base font — iOS-style system stack */
-    html, body, * {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                     Helvetica, Arial, sans-serif;
-        font-weight: 300;
+    /* ═══════════════════════════════════════════════════════════
+       KEYFRAME ANIMATIONS
+    ═══════════════════════════════════════════════════════════ */
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInLeft {
+        from { opacity: 0; transform: translateX(-14px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes shimmer {
+        0%   { background-position: -800px 0; }
+        100% { background-position:  800px 0; }
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.55; }
+    }
+    @keyframes accentGrow {
+        from { width: 0; }
+        to   { width: 100%; }
     }
 
-    /* Restore Google Material Symbols so sidebar icons render correctly
-       instead of showing raw ligature text like "keyboard_double_arrow_left" */
+    /* ═══════════════════════════════════════════════════════════
+       BASE FONT
+    ═══════════════════════════════════════════════════════════ */
+    html, body, * {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                     Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 300;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Restore Google Material Symbols icons */
     .material-symbols-rounded,
     .material-symbols-outlined,
     [data-testid="collapsedControl"] span,
@@ -52,124 +85,346 @@ st.markdown("""
         font-weight: 400 !important;
     }
 
-    /* ── Base */
+    /* ═══════════════════════════════════════════════════════════
+       PAGE & SIDEBAR BASE
+    ═══════════════════════════════════════════════════════════ */
     [data-testid="stAppViewContainer"] {
-        background-color: var(--background-color); color: var(--text-color);
+        background-color: var(--background-color);
+        color: var(--text-color);
+        animation: fadeIn 0.5s ease forwards;
     }
-    [data-testid="stSidebar"] { 
-        background-color: var(--secondary-background-color) !important; 
+    /* Main content fades in on load */
+    [data-testid="stMain"] {
+        animation: slideUp 0.5s ease 0.1s both;
+    }
+    [data-testid="stSidebar"] {
+        background-color: var(--secondary-background-color) !important;
+        border-right: 1px solid rgba(128,128,128,0.12) !important;
+        animation: slideInLeft 0.45s ease forwards;
     }
     [data-testid="stSidebar"] .stButton > button { width: 100%; }
 
-    /* All images & iframes scale with their container */
+    /* ═══════════════════════════════════════════════════════════
+       IMAGES / MEDIA
+    ═══════════════════════════════════════════════════════════ */
     img, iframe, canvas, video {
         max-width: 100% !important;
         height: auto !important;
+        transition: opacity 0.3s ease;
     }
 
-    /* ── Typography */
-    h1, h2, h3 { color: #fff; letter-spacing: -0.5px; font-weight: 300; }
+    /* ═══════════════════════════════════════════════════════════
+       TYPOGRAPHY
+    ═══════════════════════════════════════════════════════════ */
+    h1, h2, h3 {
+        letter-spacing: -0.5px;
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
     .section-title {
-        font-size: 12px; font-weight: 400; letter-spacing: 1px;
-        text-transform: uppercase; color: #8e8e93; margin: 32px 0 16px;
-        display: flex; align-items: center; gap: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #FF8700;
+        margin: 36px 0 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: slideUp 0.4s ease both;
+        opacity: 0.9;
+    }
+    .section-title::before {
+        content: '';
+        width: 3px;
+        height: 14px;
+        border-radius: 2px;
+        background: #FF8700;
+        flex-shrink: 0;
     }
     .section-title::after {
-        content: ''; flex: 1; height: 1px; background: rgba(128,128,128,0.2);
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(to right, rgba(255,135,0,0.25), rgba(128,128,128,0.08));
     }
 
-    /* ── Metric cards — fluid, wrap at narrow viewports */
+    /* ═══════════════════════════════════════════════════════════
+       METRIC CARDS
+    ═══════════════════════════════════════════════════════════ */
     .metric-card {
         background: var(--secondary-background-color);
-        border: 1px solid rgba(128,128,128,0.2);
-        border-radius: 16px;
-        padding: 16px 16px 14px;
+        border: 1px solid rgba(128,128,128,0.15);
+        border-radius: 20px;
+        padding: 18px 18px 16px;
         text-align: center;
-        transition: opacity 0.2s, transform 0.15s;
         position: relative;
         overflow: hidden;
-        min-width: 0;                 /* flex/grid child: don't overflow */
+        min-width: 0;
         box-sizing: border-box;
+        transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1),
+                    border-color 0.25s ease,
+                    box-shadow 0.25s ease;
+        animation: slideUp 0.45s ease both;
     }
-    .metric-card:hover { opacity: 0.8; transform: scale(0.98); }
+    .metric-card::before {
+        /* Subtle top accent line */
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(to right, #FF8700, transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-4px) scale(1.015);
+        border-color: rgba(255,135,0,0.3);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,135,0,0.12);
+    }
+    .metric-card:hover::before { opacity: 1; }
+
     .metric-label {
-        font-size: 10px; color: #8e8e93; letter-spacing: 1.5px;
-        text-transform: uppercase; font-weight: 400;
+        font-size: 10px;
+        color: #8e8e93;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+        font-weight: 500;
     }
     .metric-value {
-        font-size: clamp(16px, 2.5vw, 24px); font-weight: 300; color: var(--text-color);
-        margin-top: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: clamp(18px, 2.5vw, 26px);
+        font-weight: 300;
+        color: var(--text-color);
+        margin-top: 10px;
         letter-spacing: -0.5px;
+        transition: color 0.2s ease;
     }
     .metric-sub { font-size: 11px; color: #8e8e93; margin-top: 4px; font-weight: 300; }
 
-    /* ── Driver banner */
+    /* ═══════════════════════════════════════════════════════════
+       DRIVER BANNER
+    ═══════════════════════════════════════════════════════════ */
     .driver-banner {
-        border-radius: 16px;
-        padding: 14px 20px;
-        margin-bottom: 12px;
-        border: 1px solid rgba(128,128,128,0.2);
+        border-radius: 20px;
+        padding: 16px 22px;
+        margin-bottom: 14px;
+        border: 1px solid rgba(128,128,128,0.15);
         background: var(--secondary-background-color);
-        display: flex; align-items: center; gap: 12px;
-        min-width: 0; box-sizing: border-box; flex-wrap: wrap;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        animation: slideUp 0.4s ease both;
+        position: relative;
+        overflow: hidden;
+    }
+    .driver-banner::after {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: var(--colour, #FF8700);
+        border-radius: 0 2px 2px 0;
+    }
+    .driver-banner:hover {
+        border-color: rgba(255,135,0,0.25);
+        box-shadow: 0 6px 24px rgba(0,0,0,0.1);
     }
     .driver-code {
-        font-size: clamp(24px, 4vw, 32px); font-weight: 300; letter-spacing: -1px;
-        color: var(--colour, #FF8700); line-height: 1;
+        font-size: clamp(26px, 4vw, 34px);
+        font-weight: 200;
+        letter-spacing: -1px;
+        color: var(--colour, #FF8700);
+        line-height: 1;
     }
-    .driver-meta { font-size: 11px; color: #8e8e93; letter-spacing: 1px; text-transform: uppercase; font-weight: 400; }
+    .driver-meta {
+        font-size: 10px;
+        color: #8e8e93;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
 
-    /* ── Tyre badge */
+    /* ═══════════════════════════════════════════════════════════
+       TYRE BADGE
+    ═══════════════════════════════════════════════════════════ */
     .tyre-badge {
-        display: inline-flex; align-items: center; gap: 8px;
-        border-radius: 20px; padding: 4px 12px 4px 4px;
-        font-size: 12px; font-weight: 600;
-        background: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.3);
-        max-width: 100%; box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 24px;
+        padding: 5px 14px 5px 5px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(128,128,128,0.25);
+        max-width: 100%;
+        box-sizing: border-box;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .tyre-badge:hover {
+        transform: scale(1.04);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     }
     .tyre-dot {
-        width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+        width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
         font-size: 10px; font-weight: 800;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
     }
 
-    /* ── Weather strip */
+    /* ═══════════════════════════════════════════════════════════
+       WEATHER STRIP
+    ═══════════════════════════════════════════════════════════ */
     .weather-strip {
-        display: flex; gap: 16px; flex-wrap: wrap;
+        display: flex; gap: 18px; flex-wrap: wrap;
         background: var(--secondary-background-color);
-        border: 1px solid rgba(128,128,128,0.2);
-        border-radius: 16px; padding: 12px 16px;
-        font-size: 13px; color: #a0a0a0; font-weight: 300;
-        margin-top: 8px;
-        width: 100%; box-sizing: border-box;
+        border: 1px solid rgba(128,128,128,0.15);
+        border-radius: 20px;
+        padding: 14px 20px;
+        font-size: 13px;
+        color: #a0a0a0;
+        font-weight: 300;
+        margin-top: 10px;
+        width: 100%;
+        box-sizing: border-box;
+        animation: slideUp 0.5s ease both;
+        transition: border-color 0.3s ease;
     }
+    .weather-strip:hover { border-color: rgba(255,135,0,0.2); }
     .weather-item { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .weather-item strong { color: var(--text-color); font-weight: 500; }
 
-    /* ── Buttons */
+    /* ═══════════════════════════════════════════════════════════
+       BUTTONS  — McLaren Orange pill
+    ═══════════════════════════════════════════════════════════ */
     .stButton > button {
-        background: #FF8700; color: #fff; border: none;
-        border-radius: 40px; font-weight: 500; font-size: 15px;
-        padding: 12px 24px; letter-spacing: 0.2px;
-        transition: opacity 0.15s, transform 0.1s;
-        box-shadow: none;
+        background: linear-gradient(135deg, #FF8700 0%, #e67600 100%);
+        color: #fff;
+        border: none;
+        border-radius: 40px;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 12px 28px;
+        letter-spacing: 0.3px;
+        transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1),
+                    box-shadow 0.2s ease,
+                    opacity 0.15s ease;
+        box-shadow: 0 4px 14px rgba(255,135,0,0.35);
         width: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+    .stButton > button::after {
+        /* Shine sweep animation on hover */
+        content: '';
+        position: absolute;
+        top: -50%; left: -60%;
+        width: 30%; height: 200%;
+        background: rgba(255,255,255,0.18);
+        transform: skewX(-20deg);
+        transition: left 0.4s ease;
     }
     .stButton > button:hover {
-        opacity: 0.8; transform: scale(0.98);
-        background: #FF8700; color: #fff;
-
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 22px rgba(255,135,0,0.45);
+    }
+    .stButton > button:hover::after { left: 130%; }
+    .stButton > button:active {
+        transform: translateY(0) scale(0.97);
+        box-shadow: 0 2px 8px rgba(255,135,0,0.25);
     }
 
-    /* ── Misc */
-    hr { border-color: rgba(128,128,128,0.2); margin: 20px 0; }
+    /* ═══════════════════════════════════════════════════════════
+       STREAMLIT TABS — polished, animated indicator
+    ═══════════════════════════════════════════════════════════ */
+    [data-testid="stTabs"] [role="tab"] {
+        font-weight: 500 !important;
+        font-size: 13px !important;
+        letter-spacing: 0.3px;
+        transition: color 0.2s ease;
+        padding-bottom: 10px !important;
+    }
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+        color: #FF8700 !important;
+    }
+    [data-testid="stTabs"] [role="tablist"] {
+        border-bottom: 1px solid rgba(128,128,128,0.15) !important;
+    }
 
-    /* ── Narrow viewport tweaks (< 768 px) */
+    /* ═══════════════════════════════════════════════════════════
+       PLOTLY / PYPLOT CONTAINERS
+    ═══════════════════════════════════════════════════════════ */
+    [data-testid="stPlotlyChart"],
+    [data-testid="stImage"],
+    .element-container {
+        animation: slideUp 0.5s ease both;
+    }
+    /* Subtle border + radius around charts */
+    [data-testid="stPlotlyChart"] > div {
+        border-radius: 16px;
+        overflow: hidden;
+        transition: box-shadow 0.3s ease;
+    }
+    [data-testid="stPlotlyChart"] > div:hover {
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       MISCELLANEOUS
+    ═══════════════════════════════════════════════════════════ */
+    hr { border-color: rgba(128,128,128,0.15); margin: 24px 0; }
+
+    /* Selectbox and widget labels */
+    label[data-baseweb] {
+        font-size: 11px !important;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        opacity: 0.6;
+    }
+
+    /* Info/warning boxes */
+    [data-testid="stAlert"] {
+        border-radius: 14px !important;
+        border-left: 3px solid #FF8700 !important;
+        animation: slideUp 0.35s ease both;
+    }
+
+    /* Expander */
+    [data-testid="stExpander"] {
+        border-radius: 14px !important;
+        border: 1px solid rgba(128,128,128,0.15) !important;
+        transition: box-shadow 0.2s ease;
+    }
+    [data-testid="stExpander"]:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    /* Spinner */
+    [data-testid="stSpinner"] {
+        animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    /* Caption / footnote */
+    [data-testid="stCaptionContainer"] {
+        font-size: 11px;
+        opacity: 0.55;
+        letter-spacing: 0.3px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
-        .driver-code { font-size: 20px; }
-        .metric-value { font-size: 14px; }
+        .driver-code   { font-size: 20px; }
+        .metric-value  { font-size: 14px; }
         .weather-strip { gap: 10px; font-size: 11px; }
-        .tyre-badge { font-size: 11px; }
+        .tyre-badge    { font-size: 11px; }
         .section-title { font-size: 10px; letter-spacing: 2px; }
     }
 </style>
