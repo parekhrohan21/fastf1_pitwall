@@ -614,7 +614,19 @@ if sess is None:
     st.stop()
 
 # ── Driver & lap controls ──────────────────────────────────────────────────────
-all_drivers = sorted(sess.laps["Driver"].dropna().unique().tolist())
+try:
+    all_drivers = sorted(sess.laps["Driver"].dropna().unique().tolist())
+    if not all_drivers:
+        raise ValueError("Empty drivers list")
+except Exception:
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.error(
+        "**Session Data Unavailable**\n\n"
+        "FastF1 could not load the lap data for this session. This usually happens if "
+        "the session is very recent and official telemetry hasn't been published yet, "
+        "or if the session was cancelled."
+    )
+    st.stop()
 
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
