@@ -6,6 +6,7 @@ Visualise lap telemetry for any F1 session since 2018.
 import os
 import warnings
 import streamlit as st
+import streamlit.components.v1 as components
 import fastf1
 import fastf1.plotting
 import matplotlib
@@ -30,6 +31,70 @@ st.set_page_config(
     page_icon="🏎",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+# ── Progressive Web App (PWA) Injection ───────────────────────────────────────
+# Streamlit does not expose the raw <head> for static file handling in Community Cloud.
+# We bypass this by injecting an invisible HTML component snippet that constructs and
+# attaches a Blob URL Web Manifest alongside iOS specific meta tags so mobile devices
+# can "Add to Home Screen" as a standalone app.
+components.html(
+    """
+    <script>
+        const manifestObj = {
+            "name": "Pit Wall Telemetry",
+            "short_name": "Pit Wall",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#000000",
+            "theme_color": "#FF8700",
+            "icons": [{
+                "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7🏎PC90ZXh0Pjwvc3ZnPg==",
+                "sizes": "192x192",
+                "type": "image/svg+xml"
+            }]
+        };
+        
+        // Generate Blob URL
+        const blob = new Blob([JSON.stringify(manifestObj)], {type: 'application/json'});
+        const manifestUrl = URL.createObjectURL(blob);
+        
+        // Locate parent document to break out of iframe
+        const parentDoc = window.parent.document;
+        
+        // Inject Manifest Link
+        if (!parentDoc.querySelector('link[rel="manifest"]')) {
+            const manifestLink = parentDoc.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = manifestUrl;
+            parentDoc.head.appendChild(manifestLink);
+        }
+
+        // Inject iOS Safari Meta tags
+        const metaTags = {
+            "apple-mobile-web-app-capable": "yes",
+            "apple-mobile-web-app-status-bar-style": "black-translucent",
+            "apple-mobile-web-app-title": "Pit Wall"
+        };
+        for (const [name, content] of Object.entries(metaTags)) {
+            if (!parentDoc.querySelector(`meta[name="${name}"]`)) {
+                const meta = parentDoc.createElement('meta');
+                meta.name = name;
+                meta.content = content;
+                parentDoc.head.appendChild(meta);
+            }
+        }
+        
+        // Inject Apple Touch Icon
+        if (!parentDoc.querySelector('link[rel="apple-touch-icon"]')) {
+            const appleIcon = parentDoc.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7🏎PC90ZXh0Pjwvc3ZnPg==";
+            parentDoc.head.appendChild(appleIcon);
+        }
+    </script>
+    """,
+    height=0,
 )
 
 # ── Custom CSS ────────────────────────────────────────────────────────────────
