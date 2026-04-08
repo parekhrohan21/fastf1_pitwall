@@ -17,6 +17,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Premium Aesthetics**: A custom built, fully responsive UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics. Now features the premium **Inter** font, seamless keyframe animations (fade-ins, slide-ups), glassmorphism interactive hovers, and dynamic adaptation to both **Light** and **Dark** mode device themes natively.
 - **Native UI Compatibility**: Full support for Streamlit's native overlays (e.g. settings menus, sidebar navigation icons) and system-animated run indicators without custom CSS overlapping or breakage. Material Symbols icons (sidebar collapse arrow, toolbar buttons) are explicitly preserved via targeted CSS font rules.
 - **Gap to Leader Chart**: Interactive Plotly chart showing every driver's time gap to the race leader lap-by-lap. Selected driver(s) are highlighted in team colour against a faded field, with ▼ pit lap markers and a final gap stat card per driver.
+- **Mobile PWA Ready**: The dashboard acts as a native mobile application. Pin it to your iOS or Android home screen for a fullscreen, address-bar-free app experience powered by an injected embedded Web Manifest!
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -83,6 +84,22 @@ docker run -p 8501:8501 -v $(pwd)/cache:/app/cache pitwall
 ```
 
 Open **http://localhost:8501**.
+
+---
+
+## 📱 Mobile App Install (PWA)
+
+Host the app on Streamlit Community Cloud (or your own cloud VM) and access the URL on your mobile phone.
+
+### iOS Safari
+1. Tap the **Share** icon at the bottom of the screen.
+2. Scroll down and tap **Add to Home Screen**.
+
+### Android Chrome
+1. Tap the **Triple Dot ⋮** menu in the top right.
+2. Tap **Add to Home screen** (or "Install app").
+
+The app will install seamlessly onto your device with a custom 🏎 icon, opening without a browser border via `standalone` display mode!
 
 ---
 
