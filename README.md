@@ -105,6 +105,8 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 
 ## 📚 How to Use the Dashboard
 
+> **Note:** The dashboard will automatically default to **Lando Norris**, **2025**, and the **British Grand Prix (Silverstone)** on first load.
+
 1. **Sidebar → Season** — pick a year (2018 – present)
 2. **Sidebar → Grand Prix** — pick any event from that season's calendar
 3. **Sidebar → Session** — choose Race, Qualifying, Sprint, FP1, FP2, or FP3
