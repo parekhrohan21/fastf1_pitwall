@@ -605,7 +605,8 @@ with st.sidebar:
     )
     st.markdown("<hr style='margin:0 0 16px'>", unsafe_allow_html=True)
 
-    year = st.selectbox("Season", list(range(2026, 2017, -1)), index=0, label_visibility="visible")
+    _years = list(range(2026, 2017, -1))
+    year = st.selectbox("Season", _years, index=_years.index(2025) if 2025 in _years else 0, label_visibility="visible")
 
     with st.spinner("Loading calendar…"):
         try:
@@ -615,7 +616,8 @@ with st.sidebar:
             st.error(f"Could not load {year} schedule: {e}")
             st.stop()
 
-    gp = st.selectbox("Grand Prix", gp_names, index=min(4, len(gp_names) - 1))
+    _def_gp_idx = gp_names.index("British Grand Prix") if "British Grand Prix" in gp_names else min(4, len(gp_names) - 1)
+    gp = st.selectbox("Grand Prix", gp_names, index=_def_gp_idx)
 
     session_map = {
         "Race": "R", "Qualifying": "Q", "Sprint": "S",
@@ -696,7 +698,8 @@ except Exception:
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
-    driver1 = st.selectbox("Driver 1", all_drivers, key="d1")
+    _def_d1_idx = all_drivers.index("4") if "4" in all_drivers else 0
+    driver1 = st.selectbox("Driver 1", all_drivers, index=_def_d1_idx, key="d1")
 with col_b:
     compare = st.checkbox("Compare with Driver 2", value=False)
     driver2 = None
