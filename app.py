@@ -519,6 +519,14 @@ TRACK_STATUS_MAP = {
 MATPLOTLIB_THEME = {
     "font.family": "DejaVu Sans",
     "xtick.labelsize": 10, "ytick.labelsize": 10,
+    "figure.facecolor": "none",
+    "axes.facecolor": "none",
+    "axes.edgecolor": "#888888",
+    "text.color": "#888888",
+    "axes.labelcolor": "#888888",
+    "xtick.color": "#888888",
+    "ytick.color": "#888888",
+    "savefig.transparent": True,
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -577,10 +585,10 @@ def get_telemetry_cached(driver: str, lap, sess_key: str):
 
 def style_ax(ax, ylabel: str, special: str = ""):
     ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
-    ax.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
-    ax.tick_params(axis="both", length=3, labelsize=10)
+    ax.grid(True, linestyle=":", linewidth=0.3, alpha=0.8, color="#888888")
+    ax.tick_params(axis="both", length=3, labelsize=10, colors="#888888")
     for spine in ax.spines.values():
-        spine.set_edgecolor("gray")
+        spine.set_edgecolor("#888888")
         spine.set_alpha(0.3)
     if special == "brake":
         ax.set_ylim(-0.05, 1.05)
