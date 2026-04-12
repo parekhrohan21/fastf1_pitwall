@@ -303,6 +303,22 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         border-color: rgba(var(--primary-rgb),0.25);
         box-shadow: 0 6px 24px rgba(0,0,0,0.1);
     }
+    .team-logo {
+        position: absolute;
+        top: 50%;
+        right: 18px;
+        transform: translateY(-50%);
+        height: 30px;
+        width: auto;
+        opacity: 0.85;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .driver-banner:hover .team-logo {
+        opacity: 1;
+        transform: translateY(-50%) scale(1.05);
+    }
     .driver-code {
         font-size: clamp(26px, 4vw, 34px);
         font-weight: 200;
@@ -542,6 +558,30 @@ def hex_to_rgb(hex_col: str) -> str:
         return ",".join(str(int(hex_col[i:i+2], 16)) for i in (0, 2, 4))
     except Exception:
         return "255, 135, 0"
+
+def _team_logo(team: str) -> str:
+    t = team.lower()
+    mapping = {
+        "red bull": "red-bull-racing-logo.png",
+        "ferrari": "ferrari-logo.png",
+        "mclaren": "mclaren-logo.png",
+        "mercedes": "mercedes-logo.png",
+        "aston martin": "aston-martin-logo.png",
+        "haas": "haas-f1-team-logo.png",
+        "williams": "williams-logo.png",
+        "alpine": "alpine-logo.png",
+        "rb": "rb-logo.png",
+        "vcarb": "rb-logo.png",
+        "sauber": "kick-sauber-logo.png",
+        "alfa romeo": "alfaromeo-logo.png",
+        "racing point": "racing-point-logo.png",
+        "renault": "renault-logo.png",
+        "alphatauri": "alphatauri-logo.png"
+    }
+    for k, filename in mapping.items():
+        if k in t:
+            return f"https://media.formula1.com/content/dam/fom-website/teams/2024/{filename}"
+    return ""
 
 def _team_colour(team: str) -> str:
     for k, v in TEAM_COLOURS.items():
@@ -826,10 +866,19 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
     except Exception:
         lap_num_str = ""
 
+    try:
+        raw_team = sess.get_driver(driver).get("TeamName", "")
+        logo_url = _team_logo(raw_team)
+    except Exception:
+        logo_url = ""
+
+    logo_img = f"<img src='{logo_url}' class='team-logo'>" if logo_url else ""
+
     st.markdown(
         f"<div class='driver-banner' style='--colour:{colour}; --colour-dim:{colour}18;'>"
         f"<div class='driver-code'>{driver}</div>"
         f"<div class='driver-meta'>{lap_num_str}</div>"
+        f"{logo_img}"
         f"</div>",
         unsafe_allow_html=True,
     )
