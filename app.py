@@ -102,6 +102,10 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
+    :root {
+        --primary-color: var(--primary-color);
+        --primary-rgb: 255, 135, 0;
+    }
     /* ═══════════════════════════════════════════════════════════
        KEYFRAME ANIMATIONS
     ═══════════════════════════════════════════════════════════ */
@@ -192,7 +196,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         font-weight: 600;
         letter-spacing: 2px;
         text-transform: uppercase;
-        color: #FF8700;
+        color: var(--primary-color);
         margin: 36px 0 18px;
         display: flex;
         align-items: center;
@@ -205,14 +209,14 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         width: 3px;
         height: 14px;
         border-radius: 2px;
-        background: #FF8700;
+        background: var(--primary-color);
         flex-shrink: 0;
     }
     .section-title::after {
         content: '';
         flex: 1;
         height: 1px;
-        background: linear-gradient(to right, rgba(255,135,0,0.25), rgba(128,128,128,0.08));
+        background: linear-gradient(to right, rgba(var(--primary-rgb),0.25), rgba(128,128,128,0.08));
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -239,14 +243,14 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         position: absolute;
         top: 0; left: 0; right: 0;
         height: 2px;
-        background: linear-gradient(to right, #FF8700, transparent);
+        background: linear-gradient(to right, var(--primary-color), transparent);
         opacity: 0;
         transition: opacity 0.3s ease;
     }
     .metric-card:hover {
         transform: translateY(-4px) scale(1.015);
-        border-color: rgba(255,135,0,0.3);
-        box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,135,0,0.12);
+        border-color: rgba(var(--primary-rgb),0.3);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(var(--primary-rgb),0.12);
     }
     .metric-card:hover::before { opacity: 1; }
 
@@ -292,18 +296,18 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         position: absolute;
         left: 0; top: 0; bottom: 0;
         width: 3px;
-        background: var(--colour, #FF8700);
+        background: var(--colour, var(--primary-color));
         border-radius: 0 2px 2px 0;
     }
     .driver-banner:hover {
-        border-color: rgba(255,135,0,0.25);
+        border-color: rgba(var(--primary-rgb),0.25);
         box-shadow: 0 6px 24px rgba(0,0,0,0.1);
     }
     .driver-code {
         font-size: clamp(26px, 4vw, 34px);
         font-weight: 200;
         letter-spacing: -1px;
-        color: var(--colour, #FF8700);
+        color: var(--colour, var(--primary-color));
         line-height: 1;
     }
     .driver-meta {
@@ -360,7 +364,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         animation: slideUp 0.5s ease both;
         transition: border-color 0.3s ease;
     }
-    .weather-strip:hover { border-color: rgba(255,135,0,0.2); }
+    .weather-strip:hover { border-color: rgba(var(--primary-rgb),0.2); }
     .weather-item { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .weather-item strong { color: var(--text-color); font-weight: 500; }
 
@@ -368,7 +372,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
        BUTTONS  — McLaren Orange pill
     ═══════════════════════════════════════════════════════════ */
     .stButton > button {
-        background: linear-gradient(135deg, #FF8700 0%, #e67600 100%);
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color) 100%);
         color: #fff;
         border: none;
         border-radius: 40px;
@@ -379,7 +383,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1),
                     box-shadow 0.2s ease,
                     opacity 0.15s ease;
-        box-shadow: 0 4px 14px rgba(255,135,0,0.35);
+        box-shadow: 0 4px 14px rgba(var(--primary-rgb),0.35);
         width: 100%;
         position: relative;
         overflow: hidden;
@@ -396,12 +400,12 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
     }
     .stButton > button:hover {
         transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 8px 22px rgba(255,135,0,0.45);
+        box-shadow: 0 8px 22px rgba(var(--primary-rgb),0.45);
     }
     .stButton > button:hover::after { left: 130%; }
     .stButton > button:active {
         transform: translateY(0) scale(0.97);
-        box-shadow: 0 2px 8px rgba(255,135,0,0.25);
+        box-shadow: 0 2px 8px rgba(var(--primary-rgb),0.25);
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -415,7 +419,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         padding-bottom: 10px !important;
     }
     [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
-        color: #FF8700 !important;
+        color: var(--primary-color) !important;
     }
     [data-testid="stTabs"] [role="tablist"] {
         border-bottom: 1px solid rgba(128,128,128,0.15) !important;
@@ -456,7 +460,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
     /* Info/warning boxes */
     [data-testid="stAlert"] {
         border-radius: 14px !important;
-        border-left: 3px solid #FF8700 !important;
+        border-left: 3px solid var(--primary-color) !important;
         animation: slideUp 0.35s ease both;
     }
 
@@ -530,6 +534,15 @@ MATPLOTLIB_THEME = {
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+def hex_to_rgb(hex_col: str) -> str:
+    hex_col = hex_col.lstrip("#")
+    if len(hex_col) == 3:
+        hex_col = "".join([c*2 for c in hex_col])
+    try:
+        return ",".join(str(int(hex_col[i:i+2], 16)) for i in (0, 2, 4))
+    except Exception:
+        return "255, 135, 0"
+
 def _team_colour(team: str) -> str:
     for k, v in TEAM_COLOURS.items():
         if k.lower() in team.lower():
@@ -672,7 +685,7 @@ if sess is None:
         "<h1 style='font-size:36px; font-weight:800; color:var(--text-color); margin-bottom:8px;'>Pit Wall</h1>"
         "<p style='opacity:0.7; font-size:15px; line-height:1.6; margin-bottom:32px;'>"
         "Professional F1 lap telemetry explorer. Select a season, Grand Prix and session "
-        "in the sidebar, then hit <strong style='color:#FF8700;'>Load Session</strong>."
+        "in the sidebar, then hit <strong style='color:var(--primary-color);'>Load Session</strong>."
         "</p>"
         "<div style='display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; text-align:left;'>"
         "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.2); border-radius:10px; padding:14px 16px;'>"
@@ -752,6 +765,9 @@ tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key) if (compare and driver2 and lap2 is not None) else None
 
 colour1 = driver_colour(sess, driver1)
+
+# Dynamically override the entire app theme to match the Driver's constructor colour
+st.markdown(f"<style>:root {{ --primary-color: {colour1}; --primary-rgb: {hex_to_rgb(colour1)}; }}</style>", unsafe_allow_html=True)
 colour2 = driver_colour(sess, driver2) if driver2 else "#27F4D2"
 
 matplotlib.rcParams.update(MATPLOTLIB_THEME)
@@ -1247,7 +1263,7 @@ with map_tab1:
         fig.add_trace(go.Scatter(
             x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
             mode="markers",
-            marker=dict(symbol="circle", size=14, color="#FF8700",
+            marker=dict(symbol="circle", size=14, color=colour,
                         line=dict(color="white", width=2)),
             name="Start / Finish",
             hovertemplate="Start / Finish<extra></extra>",
