@@ -303,21 +303,39 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         border-color: rgba(var(--primary-rgb),0.25);
         box-shadow: 0 6px 24px rgba(0,0,0,0.1);
     }
-    .team-logo {
+    .team-badge {
         position: absolute;
         top: 50%;
         right: 18px;
         transform: translateY(-50%);
-        height: 30px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 5px;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .team-logo {
+        height: 28px;
         width: auto;
         opacity: 0.85;
         object-fit: contain;
         filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
-        transition: opacity 0.3s ease, transform 0.3s ease;
+        transition: opacity 0.3s ease;
+    }
+    .team-name-label {
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: #8e8e93;
+        font-weight: 600;
+        text-align: right;
+        white-space: nowrap;
+    }
+    .driver-banner:hover .team-badge {
+        transform: translateY(-50%) scale(1.03);
     }
     .driver-banner:hover .team-logo {
         opacity: 1;
-        transform: translateY(-50%) scale(1.05);
     }
     .driver-code {
         font-size: clamp(26px, 4vw, 34px);
@@ -867,18 +885,32 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
         lap_num_str = ""
 
     try:
-        raw_team = sess.get_driver(driver).get("TeamName", "")
+        driver_info = sess.get_driver(driver)
+        raw_team = driver_info.get("TeamName", "")
         logo_url = _team_logo(raw_team)
     except Exception:
+        raw_team = ""
         logo_url = ""
 
-    logo_img = f"<img src='{logo_url}' class='team-logo'>" if logo_url else ""
+    if logo_url and raw_team:
+        team_badge_html = (
+            f"<div class='team-badge'>"
+            f"<img src='{logo_url}' class='team-logo'>"
+            f"<span class='team-name-label'>{raw_team}</span>"
+            f"</div>"
+        )
+    elif logo_url:
+        team_badge_html = f"<div class='team-badge'><img src='{logo_url}' class='team-logo'></div>"
+    elif raw_team:
+        team_badge_html = f"<div class='team-badge'><span class='team-name-label'>{raw_team}</span></div>"
+    else:
+        team_badge_html = ""
 
     st.markdown(
         f"<div class='driver-banner' style='--colour:{colour}; --colour-dim:{colour}18;'>"
         f"<div class='driver-code'>{driver}</div>"
         f"<div class='driver-meta'>{lap_num_str}</div>"
-        f"{logo_img}"
+        f"{team_badge_html}"
         f"</div>",
         unsafe_allow_html=True,
     )
