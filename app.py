@@ -535,6 +535,62 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
 </style>
 """, unsafe_allow_html=True)
 
+# ── Theme CSS override (dark / light) ─────────────────────────────────────────
+# Initialize theme state early so CSS is applied on every render
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = True
+
+if st.session_state["dark_mode"]:
+    st.markdown("""
+    <style>
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] > .main,
+    section.main > div.block-container {
+        background-color: #0d0d0d !important;
+        color: #e8e8e8 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #111111 !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #e8e8e8 !important;
+    }
+    .stSelectbox label, .stCheckbox label, div[data-baseweb] label,
+    p, span:not([class*="badge"]):not([class*="label"]) {
+        color: #e8e8e8 !important;
+    }
+    [data-testid="metric-container"] *, .stMetric * { color: #e8e8e8 !important; }
+    hr { border-color: rgba(255,255,255,0.1) !important; }
+    [data-testid="stDataFrame"], .dataframe { background: #1a1a1a !important; color: #e8e8e8 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <style>
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] > .main,
+    section.main > div.block-container {
+        background-color: #f5f5f7 !important;
+        color: #111111 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #111111 !important;
+    }
+    .stSelectbox label, .stCheckbox label, div[data-baseweb] label,
+    p, span:not([class*="badge"]):not([class*="label"]) {
+        color: #111111 !important;
+    }
+    [data-testid="metric-container"] *, .stMetric * { color: #111111 !important; }
+    .metric-card { background: #ffffff !important; border-color: rgba(0,0,0,0.08) !important; }
+    .metric-value, .metric-label, .metric-sub { color: #111111 !important; }
+    .driver-banner { background: #ffffff !important; }
+    .section-title { color: #111111 !important; }
+    .weather-strip { background: #ffffff !important; }
+    hr { border-color: rgba(0,0,0,0.1) !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 TEAM_COLOURS = {
     "Red Bull Racing": "#3671C6", "Ferrari": "#E8002D",
@@ -716,20 +772,6 @@ with st.sidebar:
     mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
     if st.button(mode_label, key="theme_toggle", use_container_width=True):
         st.session_state["dark_mode"] = not st.session_state["dark_mode"]
-        new_theme = "dark" if st.session_state["dark_mode"] else "light"
-        # Inject JS to call Streamlit's internal theme switcher
-        components.html(
-            f"""
-            <script>
-            const iframe = window.parent.document;
-            const btn = iframe.querySelector('[data-testid="baseButton-headerNoPadding"]');
-            // Use the internal Streamlit theme API via postMessage
-            window.parent.postMessage({{type: 'streamlit:setTheme', theme: {{base: '{new_theme}'}}}}, '*');
-            </script>
-            """,
-            height=0,
-        )
-        st.rerun()
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
     load_btn = st.button("⬇️  Load Session", use_container_width=True)
