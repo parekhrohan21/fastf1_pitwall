@@ -276,7 +276,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
     ═══════════════════════════════════════════════════════════ */
     .driver-banner {
         border-radius: 20px;
-        padding: 16px 22px;
+        padding: 16px 160px 16px 22px;
         margin-bottom: 14px;
         border: 1px solid rgba(128,128,128,0.15);
         background: var(--secondary-background-color);
@@ -285,11 +285,11 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         gap: 14px;
         min-width: 0;
         box-sizing: border-box;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         transition: border-color 0.3s ease, box-shadow 0.3s ease;
         animation: slideUp 0.4s ease both;
         position: relative;
-        overflow: hidden;
+        overflow: visible;
     }
     .driver-banner::after {
         content: '';
@@ -311,12 +311,14 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 5px;
-        transition: opacity 0.3s ease, transform 0.3s ease;
+        gap: 6px;
+        transition: transform 0.3s ease;
+        z-index: 2;
     }
     .team-logo {
-        height: 28px;
+        height: 30px;
         width: auto;
+        max-width: 110px;
         opacity: 0.85;
         object-fit: contain;
         filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
@@ -332,7 +334,7 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         white-space: nowrap;
     }
     .driver-banner:hover .team-badge {
-        transform: translateY(-50%) scale(1.03);
+        transform: translateY(-50%) scale(1.04);
     }
     .driver-banner:hover .team-logo {
         opacity: 1;
@@ -706,7 +708,31 @@ with st.sidebar:
     session_type = session_map[session_label]
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
-    load_btn = st.button("⬇️  Load Session")
+
+    # ── Dark / Light mode toggle ─────────────────────────────────────────────
+    if "dark_mode" not in st.session_state:
+        st.session_state["dark_mode"] = True
+
+    mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
+    if st.button(mode_label, key="theme_toggle", use_container_width=True):
+        st.session_state["dark_mode"] = not st.session_state["dark_mode"]
+        new_theme = "dark" if st.session_state["dark_mode"] else "light"
+        # Inject JS to call Streamlit's internal theme switcher
+        components.html(
+            f"""
+            <script>
+            const iframe = window.parent.document;
+            const btn = iframe.querySelector('[data-testid="baseButton-headerNoPadding"]');
+            // Use the internal Streamlit theme API via postMessage
+            window.parent.postMessage({{type: 'streamlit:setTheme', theme: {{base: '{new_theme}'}}}}, '*');
+            </script>
+            """,
+            height=0,
+        )
+        st.rerun()
+
+    st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+    load_btn = st.button("⬇️  Load Session", use_container_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
