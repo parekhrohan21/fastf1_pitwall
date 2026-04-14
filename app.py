@@ -540,6 +540,10 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = True
 
+def _toggle_theme():
+    """Called before rerun — so the CSS block above sees the new value immediately."""
+    st.session_state["dark_mode"] = not st.session_state["dark_mode"]
+
 if st.session_state["dark_mode"]:
     st.markdown("""
     <style>
@@ -765,13 +769,8 @@ with st.sidebar:
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
-    # ── Dark / Light mode toggle ─────────────────────────────────────────────
-    if "dark_mode" not in st.session_state:
-        st.session_state["dark_mode"] = True
-
     mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
-    if st.button(mode_label, key="theme_toggle", use_container_width=True):
-        st.session_state["dark_mode"] = not st.session_state["dark_mode"]
+    st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, use_container_width=True)
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
     load_btn = st.button("⬇️  Load Session", use_container_width=True)
