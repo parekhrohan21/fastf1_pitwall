@@ -562,6 +562,44 @@ if st.session_state["dark_mode"]:
     p, span:not([class*="badge"]):not([class*="label"]) {
         color: #e8e8e8 !important;
     }
+    /* ── Selectbox control box ── */
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div:hover,
+    [data-testid="stSidebar"] [data-baseweb="select"] [role="combobox"] {
+        background-color: #1e1e1e !important;
+        border-color: rgba(255,255,255,0.12) !important;
+        color: #e8e8e8 !important;
+    }
+    /* ── Selectbox selected value text ── */
+    [data-testid="stSidebar"] [data-baseweb="select"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-baseweb="select"] span,
+    [data-testid="stSidebar"] [data-baseweb="select"] div[class*="ValueContainer"] {
+        color: #e8e8e8 !important;
+    }
+    /* ── Dropdown popup list ── */
+    [data-baseweb="popover"] [data-baseweb="menu"],
+    ul[data-testid="stSelectboxVirtualDropdown"] {
+        background-color: #1a1a1a !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    [data-baseweb="popover"] li,
+    [data-baseweb="menu"] li,
+    ul[data-testid="stSelectboxVirtualDropdown"] li {
+        background-color: #1a1a1a !important;
+        color: #e8e8e8 !important;
+    }
+    [data-baseweb="popover"] li:hover,
+    [data-baseweb="menu"] li:hover,
+    ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
+        background-color: #2a2a2a !important;
+    }
+    /* ── Radio buttons ── */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label,
+    [data-testid="stSidebar"] .stRadio span { color: #e8e8e8 !important; }
+    /* ── Checkbox ── */
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label { color: #e8e8e8 !important; }
+    /* ── Spinner text ── */
+    [data-testid="stSidebar"] [data-testid="stSpinner"] p { color: #e8e8e8 !important; }
     [data-testid="metric-container"] *, .stMetric * { color: #e8e8e8 !important; }
     hr { border-color: rgba(255,255,255,0.1) !important; }
     [data-testid="stDataFrame"], .dataframe { background: #1a1a1a !important; color: #e8e8e8 !important; }
@@ -585,6 +623,42 @@ else:
     p, span:not([class*="badge"]):not([class*="label"]) {
         color: #111111 !important;
     }
+    /* ── Selectbox control box ── */
+    [data-testid="stSidebar"] [data-baseweb="select"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div:hover,
+    [data-testid="stSidebar"] [data-baseweb="select"] [role="combobox"] {
+        background-color: #f0f0f0 !important;
+        border-color: rgba(0,0,0,0.15) !important;
+        color: #111111 !important;
+    }
+    /* ── Selectbox selected value text ── */
+    [data-testid="stSidebar"] [data-baseweb="select"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-baseweb="select"] span,
+    [data-testid="stSidebar"] [data-baseweb="select"] div[class*="ValueContainer"] {
+        color: #111111 !important;
+    }
+    /* ── Dropdown popup list ── */
+    [data-baseweb="popover"] [data-baseweb="menu"],
+    ul[data-testid="stSelectboxVirtualDropdown"] {
+        background-color: #ffffff !important;
+        border: 1px solid rgba(0,0,0,0.12) !important;
+    }
+    [data-baseweb="popover"] li,
+    [data-baseweb="menu"] li,
+    ul[data-testid="stSelectboxVirtualDropdown"] li {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+    }
+    [data-baseweb="popover"] li:hover,
+    [data-baseweb="menu"] li:hover,
+    ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
+        background-color: #f0f0f0 !important;
+    }
+    /* ── Radio buttons ── */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label,
+    [data-testid="stSidebar"] .stRadio span { color: #111111 !important; }
+    /* ── Checkbox ── */
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label { color: #111111 !important; }
     [data-testid="metric-container"] *, .stMetric * { color: #111111 !important; }
     .metric-card { background: #ffffff !important; border-color: rgba(0,0,0,0.08) !important; }
     .metric-value, .metric-label, .metric-sub { color: #111111 !important; }
