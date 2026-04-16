@@ -603,6 +603,24 @@ if st.session_state["dark_mode"]:
     [data-testid="metric-container"] *, .stMetric * { color: #e8e8e8 !important; }
     hr { border-color: rgba(255,255,255,0.1) !important; }
     [data-testid="stDataFrame"], .dataframe { background: #1a1a1a !important; color: #e8e8e8 !important; }
+    /* ── Top toolbar / header bar ── */
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    header[data-testid="stHeader"] {
+        background-color: #0d0d0d !important;
+        border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+    }
+    [data-testid="stHeader"] * {
+        color: #e8e8e8 !important;
+    }
+    [data-testid="stHeader"] button,
+    [data-testid="stHeader"] svg {
+        fill: #e8e8e8 !important;
+        color: #e8e8e8 !important;
+    }
+    [data-testid="stDecoration"] {
+        background: linear-gradient(90deg, var(--primary-color), transparent) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 else:
@@ -666,6 +684,24 @@ else:
     .section-title { color: #111111 !important; }
     .weather-strip { background: #ffffff !important; }
     hr { border-color: rgba(0,0,0,0.1) !important; }
+    /* ── Top toolbar / header bar ── */
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    header[data-testid="stHeader"] {
+        background-color: #f5f5f7 !important;
+        border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+    }
+    [data-testid="stHeader"] * {
+        color: #111111 !important;
+    }
+    [data-testid="stHeader"] button,
+    [data-testid="stHeader"] svg {
+        fill: #111111 !important;
+        color: #111111 !important;
+    }
+    [data-testid="stDecoration"] {
+        background: linear-gradient(90deg, var(--primary-color), transparent) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
