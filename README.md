@@ -1,6 +1,6 @@
 # 🏎 Pit Wall — F1 Telemetry Dashboard
 
-A professional-grade **Streamlit + FastF1** dashboard with a custom McLaren/iOS 7 flat style design for exploring lap telemetry from any Formula 1 session since 2018.
+A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry from any Formula 1 session since 2018.
 
 Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside track maps, full race replays, and detailed lap/weather summaries.
 
@@ -14,7 +14,10 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays.
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
-- **Premium Aesthetics**: A custom built, fully responsive UI inspired by McLaren Papaya and iOS 7 flat/frosted glass aesthetics. Now features the premium **Inter** font, seamless keyframe animations (fade-ins, slide-ups), glassmorphism interactive hovers, and dynamic adaptation to both **Light** and **Dark** mode device themes natively (including fully transparent overlay rendering for static Matplotlib telemetry charts).
+- **Premium Aesthetics**: A custom built, fully responsive UI inspired by modern flat/frosted glass aesthetics. Features the premium **Inter** font, seamless keyframe animations (fade-ins, slide-ups), glassmorphism interactive hovers, and fully transparent overlay rendering for static Matplotlib telemetry charts.
+- **Dynamic Constructor Theming**: The entire application automatically recolours its UI variables (buttons, cards, banners, charts) to aggressively match the real-world **Constructor Team Colour** of the selected primary driver!
+- **Official Team Logos & Badges**: The Driver Summary banner integrates official high-resolution F1 team logos pulled dynamically via Python logic, laid out alongside the full FastF1 team name.
+- **Dedicated Light/Dark Toggle**: Switch effortlessly between a midnight `#0d0d0d` dark mode and a bright `#f5f5f7` light mode. A strict CSS-override toggle tracks state in the sidebar and flawlessly colors edge-cases like dropdowns menus, checkboxes, and the top toolbars.
 - **Native UI Compatibility**: Full support for Streamlit's native overlays (e.g. settings menus, sidebar navigation icons) and system-animated run indicators without custom CSS overlapping or breakage. Material Symbols icons (sidebar collapse arrow, toolbar buttons) are explicitly preserved via targeted CSS font rules.
 - **Gap to Leader Chart**: Interactive Plotly chart showing every driver's time gap to the race leader lap-by-lap. Selected driver(s) are highlighted in team colour against a faded field, with ▼ pit lap markers and a final gap stat card per driver.
 - **Mobile PWA Ready**: The dashboard acts as a native mobile application. Pin it to your iOS or Android home screen for a fullscreen, address-bar-free app experience powered by an injected embedded Web Manifest!
