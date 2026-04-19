@@ -4,8 +4,6 @@ A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-drive
 
 Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside track maps, full race replays, and detailed lap/weather summaries.
 
-
-will update with agent md file.
 ---
 
 ## 🚀 Key Features
@@ -132,7 +130,8 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 | Port 8501 already in use | Run `lsof -i :8501` and kill the process, or run Streamlit on a different port using `streamlit run app.py --server.port 8502` |
 | Docker fails to connect API | The Docker Daemon is not running. Launch the Docker Desktop explicitly first using `open -a Docker`, wait 30 seconds for the engine to initialize, and try again. |
 | Sidebar shows `keyboard_double_arrow_left` text | The custom font CSS is overriding Streamlit's icon font. Ensure you are running the latest version of the app — this was patched via explicit `Material Symbols` CSS restoration. |
-| Plotly config deprecation warning | Triggered by Plotly 6.x when using width as a direct argument. The codebase has been updated to use `use_container_width=True` to maintain compatibility with Streamlit without throwing Plotly warnings. |
+| Plotly deprecation warning on `use_container_width` | The codebase now uses `width='stretch'` / `width='content'` throughout. If you see this warning, ensure you are running the latest version of the app. |
+| Top bar doesn't change with theme | A known edge-case on older cached renders. Toggle the theme button once more — the CSS injection re-applies on every rerun. |
 
 ---
 
