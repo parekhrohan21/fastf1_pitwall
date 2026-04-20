@@ -133,6 +133,12 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         from { width: 0; }
         to   { width: 100%; }
     }
+    /* Rich page-enter: fade + rise + very subtle scale */
+    @keyframes pageEnter {
+        0%   { opacity: 0; transform: translateY(14px) scale(0.995); filter: blur(3px); }
+        60%  { opacity: 1; filter: blur(0); }
+        100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
 
     /* ═══════════════════════════════════════════════════════════
        BASE FONT
@@ -160,16 +166,21 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
     [data-testid="stAppViewContainer"] {
         background-color: var(--background-color);
         color: var(--text-color);
-        animation: fadeIn 0.5s ease forwards;
+        /* smooth background when theme switches */
+        transition: background-color 0.35s ease, color 0.35s ease;
     }
-    /* Main content fades in on load */
-    [data-testid="stMain"] {
-        animation: slideUp 0.5s ease 0.1s both;
+    /* Main content: rich entry every rerender */
+    [data-testid="stMain"],
+    section.main > div.block-container {
+        animation: pageEnter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+        /* smooth background when theme switches */
+        transition: background-color 0.35s ease, color 0.35s ease;
     }
     [data-testid="stSidebar"] {
         background-color: var(--secondary-background-color) !important;
         border-right: 1px solid rgba(128,128,128,0.12) !important;
-        animation: slideInLeft 0.45s ease forwards;
+        animation: slideInLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        transition: background-color 0.35s ease;
     }
     [data-testid="stSidebar"] .stButton > button { width: 100%; }
 
