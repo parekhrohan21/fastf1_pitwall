@@ -97,6 +97,49 @@ components.html(
     height=0,
 )
 
+# ── Page-transition JS ────────────────────────────────────────────────────────
+# Streamlit re-renders by toggling a [data-stale="true"] attribute on the root.
+# We watch for that attribute flip and replay the pageEnter animation each time.
+components.html(
+    """
+    <script>
+    (function () {
+        const parentDoc = window.parent.document;
+
+        function replayAnimation() {
+            const targets = parentDoc.querySelectorAll(
+                'section.main > div.block-container, [data-testid="stMain"]'
+            );
+            targets.forEach(el => {
+                el.style.animation = 'none';
+                // Force reflow so the browser registers the reset
+                void el.offsetHeight;
+                el.style.animation = '';
+            });
+        }
+
+        // Observe the stale attribute on the Streamlit root
+        const root = parentDoc.querySelector('[data-testid="stApp"]')
+                  || parentDoc.body;
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                if (m.attributeName === 'data-stale') {
+                    const wasStale = m.oldValue === 'true';
+                    const nowFresh = root.getAttribute('data-stale') === 'false';
+                    if (wasStale && nowFresh) {
+                        // A rerender just finished — replay transition
+                        requestAnimationFrame(replayAnimation);
+                    }
+                }
+            }
+        });
+        observer.observe(root, { attributes: true, attributeOldValue: true });
+    })();
+    </script>
+    """,
+    height=0,
+)
+
 # ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""<!-- ── Google Font: Inter for premium typographic quality ── -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
