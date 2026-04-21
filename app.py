@@ -1369,9 +1369,133 @@ if _all_none:
 else:
     st.plotly_chart(_lap_history_fig(_hist_pairs, _hist_laps), width="stretch")
 
+# ── Tyre Stint Timeline ───────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
+
+# Compound palette — matches F1 official colours
+_CMP_PALETTE = {
+    "SOFT":         {"fill": "#FF3333", "text": "#ffffff"},
+    "MEDIUM":       {"fill": "#FFD700", "text": "#111111"},
+    "HARD":         {"fill": "#CCCCCC", "text": "#111111"},
+    "INTERMEDIATE": {"fill": "#39B54A", "text": "#ffffff"},
+    "WET":          {"fill": "#0067FF", "text": "#ffffff"},
+    "UNKNOWN":      {"fill": "#888888", "text": "#ffffff"},
+}
 
 
-# ── Telemetry charts ──────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_stints(driver: str, sess_k: str):
+    """Return a list of stint dicts: {compound, start_lap, end_lap, laps, fresh}."""
+    try:
+        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps.dropna(subset=["LapNumber"]).sort_values("LapNumber")
+        stints, current = [], None
+        for _, row in laps.iterrows():
+            cmp = str(row.get("Compound", "UNKNOWN")).upper()
+            if cmp in ("NAN", "NONE", ""):
+                cmp = "UNKNOWN"
+            ln = int(row["LapNumber"])
+            fresh = bool(row.get("FreshTyre", False))
+            if current is None or cmp != current["compound"] or (
+                "PitOutTime" in row and pd.notna(row.get("PitOutTime"))
+            ):
+                if current:
+                    stints.append(current)
+                current = {"compound": cmp, "start_lap": ln,
+                           "end_lap": ln, "fresh": fresh}
+            else:
+                current["end_lap"] = ln
+        if current:
+            stints.append(current)
+        for s in stints:
+            s["laps"] = s["end_lap"] - s["start_lap"] + 1
+        return stints
+    except Exception:
+        return []
+
+
+def _stint_fig(drivers_stints: list) -> go.Figure:
+    """
+    drivers_stints: list of (driver_label, stints_list)
+    Draws a horizontal Gantt-style bar per driver, coloured by compound.
+    """
+    fig = go.Figure()
+    n_drivers = len(drivers_stints)
+
+    for row_idx, (driver, stints) in enumerate(drivers_stints):
+        y_pos = (n_drivers - 1 - row_idx) * 1.2   # vertical position
+        for s in stints:
+            palette = _CMP_PALETTE.get(s["compound"], _CMP_PALETTE["UNKNOWN"])
+            width   = s["end_lap"] - s["start_lap"] + 1
+            label   = f"{s['compound'].title()}<br>{s['laps']} laps"
+            fresh_marker = " ★" if s.get("fresh") else ""
+
+            fig.add_trace(go.Bar(
+                x=[width],
+                y=[driver],
+                base=[s["start_lap"] - 1],   # base = left-edge of bar
+                orientation="h",
+                name=s["compound"].title(),
+                marker=dict(
+                    color=palette["fill"],
+                    line=dict(color="rgba(255,255,255,0.25)", width=1),
+                ),
+                text=f"{s['compound'].title()}{fresh_marker} · {s['laps']}L",
+                textposition="inside",
+                insidetextfont=dict(color=palette["text"], size=10),
+                hovertemplate=(
+                    f"<b>{driver}</b><br>"
+                    f"Compound: {s['compound'].title()}{fresh_marker}<br>"
+                    f"Laps {s['start_lap']}–{s['end_lap']} "
+                    f"({s['laps']} laps)<extra></extra>"
+                ),
+                showlegend=False,
+            ))
+
+    # ── Compound legend swatches (manual)
+    for cmp, pal in _CMP_PALETTE.items():
+        if cmp == "UNKNOWN":
+            continue
+        fig.add_trace(go.Bar(
+            x=[0], y=[""], orientation="h",
+            marker=dict(color=pal["fill"]),
+            name=cmp.title(),
+            showlegend=True,
+        ))
+
+    fig.update_layout(
+        barmode="stack",
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Lap", gridcolor="rgba(128,128,128,0.15)",
+            tickmode="linear", dtick=5, zeroline=False,
+        ),
+        yaxis=dict(
+            gridcolor="rgba(0,0,0,0)", zeroline=False,
+            categoryorder="array",
+            categoryarray=[d for d, _ in reversed(drivers_stints)],
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            xanchor="left", x=0, bgcolor="rgba(0,0,0,0)",
+            title_text="Compound:",
+        ),
+        height=max(120, 100 + 70 * len(drivers_stints)),
+    )
+    return fig
+
+
+_stint_data = [(driver1, _build_stints(driver1, sess_key))]
+if compare and driver2:
+    _stint_data.append((driver2, _build_stints(driver2, sess_key)))
+
+if all(not s for _, s in _stint_data):
+    st.info("Stint data not available for this session.")
+else:
+    st.plotly_chart(_stint_fig(_stint_data), width="stretch")
+
+
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
 if tel1 is None:
