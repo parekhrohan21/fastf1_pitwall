@@ -407,6 +407,22 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         text-transform: uppercase;
         font-weight: 500;
     }
+    .driver-headshot {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        object-fit: cover;
+        object-position: top center;
+        border: 2.5px solid var(--colour, var(--primary-color));
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+        flex-shrink: 0;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        background: rgba(128,128,128,0.08);
+    }
+    .driver-banner:hover .driver-headshot {
+        transform: scale(1.06);
+        box-shadow: 0 6px 22px rgba(0,0,0,0.35);
+    }
 
     /* ═══════════════════════════════════════════════════════════
        TYRE BADGE
@@ -1117,11 +1133,13 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
 
     try:
         driver_info = sess.get_driver(driver)
-        raw_team = driver_info.get("TeamName", "")
-        logo_url = _team_logo(raw_team)
+        raw_team    = driver_info.get("TeamName", "")
+        logo_url    = _team_logo(raw_team)
+        headshot_url = driver_info.get("HeadshotUrl", "") or ""
     except Exception:
-        raw_team = ""
-        logo_url = ""
+        raw_team     = ""
+        logo_url     = ""
+        headshot_url = ""
 
     if logo_url and raw_team:
         team_badge_html = (
@@ -1137,10 +1155,19 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
     else:
         team_badge_html = ""
 
+    headshot_html = (
+        f"<img src='{headshot_url}' class='driver-headshot' "
+        f"onerror=\"this.style.display='none'\" alt='{driver}'>"
+        if headshot_url else ""
+    )
+
     st.markdown(
         f"<div class='driver-banner' style='--colour:{colour}; --colour-dim:{colour}18;'>"
+        f"{headshot_html}"
+        f"<div style='display:flex; flex-direction:column; gap:3px; min-width:0;'>"
         f"<div class='driver-code'>{driver}</div>"
         f"<div class='driver-meta'>{lap_num_str}</div>"
+        f"</div>"
         f"{team_badge_html}"
         f"</div>",
         unsafe_allow_html=True,
