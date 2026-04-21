@@ -1236,6 +1236,141 @@ if compare and lap2 is not None:
 else:
     render_summary(lap1, driver1, colour1)
 
+# ── Lap Time History ──────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_lap_history(driver: str, sess_k: str):
+    """Return cleaned lap DataFrame for a single driver from cached session."""
+    try:
+        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps.dropna(subset=["LapTime", "LapNumber"])
+        laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
+        # filter out obvious outliers (safety car laps, pit laps > 3× median)
+        median_t = laps["LapTimeSec"].median()
+        laps = laps[laps["LapTimeSec"] < median_t * 2.5].copy()
+        laps = laps.sort_values("LapNumber").reset_index(drop=True)
+        return laps
+    except Exception:
+        return None
+
+
+def _lap_history_fig(drivers_data: list, highlight_laps: list) -> go.Figure:
+    """
+    drivers_data : list of (driver, colour, laps_df)
+    highlight_laps: list of selected LapNumber per driver (same order)
+    """
+    fig = go.Figure()
+
+    for (driver, colour, laps), sel_lap in zip(drivers_data, highlight_laps):
+        if laps is None or laps.empty:
+            continue
+
+        # ── Compound-coloured marker colours
+        cmp_colours = {
+            "SOFT": "#FF3333", "MEDIUM": "#FFD700", "HARD": "#CCCCCC",
+            "INTERMEDIATE": "#39B54A", "WET": "#0067FF",
+        }
+        marker_colors = [
+            cmp_colours.get(str(c).upper(), "#888888")
+            for c in laps.get("Compound", ["?"] * len(laps))
+        ]
+
+        # ── Pit-out lap markers (first lap after a pit stop)
+        pit_mask = laps["PitOutTime"].notna() if "PitOutTime" in laps.columns else pd.Series(False, index=laps.index)
+        pit_laps  = laps[pit_mask]
+
+        # ── Main line trace
+        fig.add_trace(go.Scatter(
+            x=laps["LapNumber"],
+            y=laps["LapTimeSec"],
+            mode="lines+markers",
+            name=driver,
+            line=dict(color=colour, width=2),
+            marker=dict(
+                color=marker_colors,
+                size=7,
+                line=dict(color=colour, width=1.2),
+                symbol="circle",
+            ),
+            hovertemplate=(
+                f"<b>{driver}</b><br>"
+                "Lap %{x}<br>"
+                "Time: %{customdata}<br>"
+                "<extra></extra>"
+            ),
+            customdata=[
+                f"{int(t//60)}:{t%60:06.3f}"
+                for t in laps["LapTimeSec"]
+            ],
+        ))
+
+        # ── Pit-stop triangles
+        if not pit_laps.empty:
+            fig.add_trace(go.Scatter(
+                x=pit_laps["LapNumber"],
+                y=pit_laps["LapTimeSec"],
+                mode="markers",
+                marker=dict(symbol="triangle-up", size=11, color=colour,
+                            line=dict(color="white", width=1.2)),
+                name=f"{driver} pit-out",
+                hovertemplate=f"<b>{driver}</b> PIT OUT<br>Lap %{{x}}<extra></extra>",
+                showlegend=True,
+            ))
+
+        # ── Highlight selected lap
+        if sel_lap is not None:
+            try:
+                sel_row = laps[laps["LapNumber"] == int(sel_lap.get("LapNumber", -1))]
+                if not sel_row.empty:
+                    fig.add_vline(
+                        x=int(sel_row["LapNumber"].iloc[0]),
+                        line=dict(color=colour, width=1.5, dash="dot"),
+                        opacity=0.6,
+                        annotation_text=driver,
+                        annotation_position="top",
+                        annotation_font_size=10,
+                    )
+            except Exception:
+                pass
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=16, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Lap", gridcolor="rgba(128,128,128,0.15)",
+            tickmode="linear", dtick=5, zeroline=False,
+        ),
+        yaxis=dict(
+            title="Lap Time (s)", gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False,
+            tickformat=".1f",
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        hovermode="x unified",
+        height=280,
+    )
+    return fig
+
+
+_hist_pairs = [(driver1, colour1, _build_lap_history(driver1, sess_key))]
+_hist_laps  = [lap1]
+if compare and driver2:
+    _hist_pairs.append((driver2, colour2, _build_lap_history(driver2, sess_key)))
+    _hist_laps.append(lap2)
+
+_all_none = all(p[2] is None or p[2].empty for p in _hist_pairs)
+if _all_none:
+    st.info("Lap time history not available for this session.")
+else:
+    st.plotly_chart(_lap_history_fig(_hist_pairs, _hist_laps), width="stretch")
+
+
+
 # ── Telemetry charts ──────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
