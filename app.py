@@ -934,10 +934,10 @@ with st.sidebar:
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
     mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
-    st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, use_container_width=True)
+    st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, width="stretch")
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
-    load_btn = st.button("⬇️  Load Session", use_container_width=True)
+    load_btn = st.button("⬇️  Load Session", width="stretch")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
@@ -1473,7 +1473,7 @@ else:
         _colours.append(colour2)
 
     _gtl_fig = _gap_chart_fig(_gtl_data, _highlight, _colours, sess.laps)
-    st.plotly_chart(_gtl_fig, use_container_width=True)
+    st.plotly_chart(_gtl_fig, width="stretch")
 
     # Show quick stats below the chart
     _stat_cols = st.columns(len(_highlight))
@@ -1599,7 +1599,7 @@ with map_tab1:
             colour2=colour2,
         )
         if sm_fig:
-            st.plotly_chart(sm_fig, use_container_width=True)
+            st.plotly_chart(sm_fig, width="stretch")
         else:
             st.info("Position data not available for this lap.")
     else:
@@ -1857,7 +1857,7 @@ with map_tab2:
                     st.code(traceback.format_exc())
 
     if st.session_state[replay_key] is not None:
-        st.plotly_chart(st.session_state[replay_key], use_container_width=True)
+        st.plotly_chart(st.session_state[replay_key], width="stretch")
         n_frames = len(st.session_state[replay_key].frames)
         session_secs = n_frames * 5
         st.caption(
