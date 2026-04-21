@@ -2,7 +2,7 @@
 
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry from any Formula 1 session since 2018.
 
-Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside track maps, full race replays, and detailed lap/weather summaries.
+Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, tyre stint timelines, track maps, full race replays, and detailed lap/weather summaries.
 
 ---
 
@@ -14,6 +14,9 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays.
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
+- **Driver Headshot in Banner**: The driver summary banner automatically fetches and renders the official F1 headshot photo (from FastF1's `HeadshotUrl` field) as a circular portrait with a team-coloured ring border. Falls back silently if the image is unavailable.
+- **Lap Time History Chart**: An interactive Plotly line chart immediately below the driver banner showing every valid lap time across the race. Each point is colour-coded by **tyre compound** (Red/Gold/Grey/Green/Blue), pit-out laps are marked with ▲ triangles, and the currently selected lap is highlighted with a dotted vertical line.
+- **Tyre Stint Timeline**: A Gantt-style horizontal bar chart showing each driver's complete tyre strategy at a glance. Every stint is rendered as a coloured bar labelled with compound name, a ★ badge for fresh sets, and lap count. Fully supports comparison mode with both drivers stacked on the same axis.
 - **Premium Aesthetics**: A custom built, fully responsive UI inspired by modern flat/frosted glass aesthetics. Features the premium **Inter** font, seamless keyframe animations (fade-ins, slide-ups), glassmorphism interactive hovers, and fully transparent overlay rendering for static Matplotlib telemetry charts.
 - **Smooth Page Transitions**: Every Streamlit rerender triggers a polished `pageEnter` animation — a combined fade, upward slide, subtle scale, and soft blur-clear — powered by a `MutationObserver` that detects Streamlit's internal `data-stale` lifecycle attribute. The dark/light theme switch also cross-fades backgrounds smoothly via CSS `transition` rather than snapping.
 - **Dynamic Constructor Theming**: The entire application automatically recolours its UI variables (buttons, cards, banners, charts) to aggressively match the real-world **Constructor Team Colour** of the selected primary driver!
@@ -117,8 +120,10 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 4. **Click ⬇️ Load Session** — The first load streams the data from the F1 API and takes ~10-30 seconds. Afterwards, it is cached down to milliseconds.
 5. **Select Drivers and Laps** — Pick a driver and select *Fastest* or a specific lap number.
 6. **Compare Drivers** — Tick **👥 Compare with Driver 2** to overlay traces and generate the Speed Delta chart.
-7. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
-8. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map or build the full multi-car Race Replay animation!
+7. **Lap Time History** — Scroll past the driver banner to see the full race pace chart with compound-coloured dots, pit-out markers, and a highlighted line for your selected lap.
+8. **Tyre Stint Timeline** — View the complete tyre strategy as a horizontal colour-coded bar chart. In comparison mode both drivers are stacked for easy strategy comparison.
+9. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
+10. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map or build the full multi-car Race Replay animation!
 
 ---
 
