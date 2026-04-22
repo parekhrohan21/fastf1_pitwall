@@ -1605,7 +1605,68 @@ else:
             st.pyplot(fig, width="stretch")
             plt.close(fig)
 
+
+# ── Export Telemetry ──────────────────────────────────────────────────────────
+with st.expander("⬇️  Export Telemetry Data", expanded=False):
+    st.markdown(
+        "<div style='font-size:12px; opacity:0.65; margin-bottom:10px;'>"
+        "Download the raw telemetry for the selected lap(s) as a CSV file. "
+        "Includes Distance, Speed, Throttle, Brake, RPM, Gear, DRS, and lap metadata."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    def _build_export_csv(driver: str, tel_df, lap_obj) -> bytes:
+        """Merge lap metadata into the telemetry dataframe and return CSV bytes."""
+        if tel_df is None or tel_df.empty:
+            return b""
+        export_cols = [c for c in
+                       ["Distance", "Speed", "Throttle", "Brake", "RPM", "nGear", "DRS",
+                        "X", "Y", "Z", "Time", "SessionTime"]
+                       if c in tel_df.columns]
+        df = tel_df[export_cols].copy()
+        # Rename nGear → Gear for clarity
+        df = df.rename(columns={"nGear": "Gear"})
+        # Inject lap metadata as constant columns at the front
+        df.insert(0, "Driver",    driver)
+        df.insert(1, "LapNumber", int(lap_obj.get("LapNumber", 0)) if lap_obj is not None else "")
+        df.insert(2, "LapTime",   format_laptime(lap_obj.get("LapTime")) if lap_obj is not None else "")
+        df.insert(3, "Compound",  str(lap_obj.get("Compound", "?")).title() if lap_obj is not None else "")
+        return df.to_csv(index=False).encode("utf-8")
+
+    # ── Driver 1 download
+    exp_cols = [st.columns(2)[0]]   # left half
+    if compare and driver2 and tel2 is not None:
+        exp_cols = list(st.columns(2))
+
+    with exp_cols[0]:
+        csv1 = _build_export_csv(driver1, tel1, lap1)
+        fname1 = f"pitwall_{driver1}_lap{int(lap1.get('LapNumber', 0)) if lap1 is not None else 'X'}.csv"
+        st.download_button(
+            label=f"📥  {driver1} — Download CSV",
+            data=csv1,
+            file_name=fname1,
+            mime="text/csv",
+            disabled=(csv1 == b""),
+            width="stretch",
+        )
+
+    # ── Driver 2 download (comparison mode only)
+    if compare and driver2 and tel2 is not None and len(exp_cols) > 1:
+        with exp_cols[1]:
+            csv2 = _build_export_csv(driver2, tel2, lap2)
+            fname2 = f"pitwall_{driver2}_lap{int(lap2.get('LapNumber', 0)) if lap2 is not None else 'X'}.csv"
+            st.download_button(
+                label=f"📥  {driver2} — Download CSV",
+                data=csv2,
+                file_name=fname2,
+                mime="text/csv",
+                disabled=(csv2 == b""),
+                width="stretch",
+            )
+
 # ── Speed delta (overlapping + comparison) ────────────────────────────────────
+
 if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not None:
     if "Speed" in tel1.columns and "Speed" in tel2.columns:
         st.markdown("<div class='section-title'>Speed Delta</div>", unsafe_allow_html=True)
