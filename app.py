@@ -1696,8 +1696,113 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
 
+# ── Fastest Laps Leaderboard ──────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_leaderboard(sess_k: str):
+    """Return a ranked DataFrame of all drivers' fastest laps."""
+    try:
+        laps = st.session_state["session"].laps.copy()
+        laps = laps.dropna(subset=["LapTime", "Driver"])
+        # Get each driver's fastest lap
+        idx = laps.groupby("Driver")["LapTime"].idxmin()
+        best = laps.loc[idx].copy().reset_index(drop=True)
+        best["LapTimeSec"] = best["LapTime"].dt.total_seconds()
+        best = best.sort_values("LapTimeSec").reset_index(drop=True)
+
+        # Gap to P1
+        p1_time = best["LapTimeSec"].iloc[0]
+        best["GapToP1"] = best["LapTimeSec"] - p1_time
+
+        # Format columns
+        best["Pos"]      = best.index + 1
+        best["Time"]     = best["LapTime"].apply(format_laptime)
+        best["Gap"]      = best["GapToP1"].apply(
+            lambda g: "—" if g == 0 else f"+{g:.3f}s"
+        )
+        best["Lap"]      = best["LapNumber"].astype(int)
+        best["Compound"] = best["Compound"].fillna("?").astype(str).str.title()
+        best["Top Speed (km/h)"] = best["SpeedST"].apply(
+            lambda s: f"{s:.0f}" if pd.notna(s) else "—"
+        )
+
+        return best[["Pos", "Driver", "Time", "Gap", "Compound", "Lap", "Top Speed (km/h)"]]
+    except Exception:
+        return None
+
+
+def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list):
+    """Render leaderboard as a styled HTML table."""
+    colour_map = dict(zip(highlight_drivers, highlight_colours))
+    rows_html = ""
+    for _, row in lb_df.iterrows():
+        drv        = str(row["Driver"])
+        is_hl      = drv in colour_map
+        accent     = colour_map.get(drv, "transparent")
+        row_bg     = f"{accent}18" if is_hl else "transparent"
+        border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
+        pos_col    = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
+
+        # Compound colour dot
+        cmp_colours_map = {
+            "Soft": "#FF3333", "Medium": "#FFD700", "Hard": "#CCCCCC",
+            "Intermediate": "#39B54A", "Wet": "#0067FF",
+        }
+        cmp      = str(row["Compound"])
+        dot_col  = cmp_colours_map.get(cmp, "#888")
+        cmp_html = (
+            f"<span style='display:inline-block; width:8px; height:8px; "
+            f"border-radius:50%; background:{dot_col}; margin-right:5px; vertical-align:middle;'></span>"
+            f"{cmp}"
+        )
+
+        rows_html += (
+            f"<tr style='background:{row_bg}; {border_css}'>"
+            f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{drv}</td>"
+            f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{row['Time']}</td>"
+            f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{row['Gap']}</td>"
+            f"<td style='padding:7px 10px;'>{cmp_html}</td>"
+            f"<td style='padding:7px 10px; text-align:center;'>{row['Lap']}</td>"
+            f"<td style='padding:7px 10px; text-align:center;'>{row['Top Speed (km/h)']}</td>"
+            "</tr>"
+        )
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:8px 10px;'>Pos</th>
+          <th style='padding:8px 10px; text-align:left;'>Driver</th>
+          <th style='padding:8px 10px; text-align:left;'>Time</th>
+          <th style='padding:8px 10px; text-align:left;'>Gap</th>
+          <th style='padding:8px 10px; text-align:left;'>Compound</th>
+          <th style='padding:8px 10px;'>Lap</th>
+          <th style='padding:8px 10px;'>Top Speed</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+_lb = _build_leaderboard(sess_key)
+if _lb is None or _lb.empty:
+    st.info("Leaderboard not available for this session.")
+else:
+    _hl_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
+    _hl_colours  = [colour1] + ([colour2] if compare and driver2 else [])
+    _render_leaderboard(_lb, _hl_drivers, _hl_colours)
+
 # ── Gap to Leader ─────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
+
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def _build_gap_data(sess_k: str):
