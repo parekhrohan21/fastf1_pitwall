@@ -1369,6 +1369,179 @@ if _all_none:
 else:
     st.plotly_chart(_lap_history_fig(_hist_pairs, _hist_laps), width="stretch")
 
+# ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
+st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='font-size:11px; opacity:0.55; margin:-6px 0 10px; letter-spacing:0.3px;'>"
+    "Estimates each driver's true one-lap pace by removing the fuel-load penalty. "
+    "Each lap of fuel adds roughly <strong>0.03 s</strong> to the lap time — "
+    "correcting for this normalises all laps to equivalent <em>empty-tank</em> pace, "
+    "making it easier to compare stints across different fuel levels."
+    "</div>",
+    unsafe_allow_html=True,
+)
+
+# ── Fuel effect tuner
+_fuel_col, _ = st.columns([1, 3])
+with _fuel_col:
+    _fuel_effect = st.slider(
+        "Fuel effect (s / lap of fuel)",
+        min_value=0.01, max_value=0.06,
+        value=0.03, step=0.005, format="%.3f",
+        help="Industry standard is ~0.030 s per lap of fuel. Adjust to explore sensitivity.",
+        key="fuel_effect_slider",
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float):
+    """
+    Return DataFrame with raw LapTimeSec and FuelAdjSec columns.
+    Fuel correction: subtract (total_laps - lap_number) * fuel_effect
+    → normalises all laps to empty-tank pace (equivalent to a flying Q-lap).
+    """
+    try:
+        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps.dropna(subset=["LapTime", "LapNumber"])
+        laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
+
+        # Outlier filter — same as lap history (>2.5× median removed)
+        median_t = laps["LapTimeSec"].median()
+        laps = laps[laps["LapTimeSec"] < median_t * 2.5].copy()
+        laps = laps.sort_values("LapNumber").reset_index(drop=True)
+
+        # Total laps in the session (used to compute remaining fuel)
+        total_laps = int(st.session_state["session"].laps["LapNumber"].max())
+
+        # Remaining fuel = laps left to run AFTER current lap
+        laps["FuelLapsRemaining"] = (total_laps - laps["LapNumber"]).clip(lower=0)
+        laps["FuelCorrection"]    = laps["FuelLapsRemaining"] * fuel_effect
+        laps["FuelAdjSec"]        = laps["LapTimeSec"] - laps["FuelCorrection"]
+
+        return laps[["LapNumber", "LapTimeSec", "FuelAdjSec",
+                     "FuelCorrection", "Compound"]].copy()
+    except Exception:
+        return None
+
+
+def _fuel_pace_fig(drivers_data: list) -> go.Figure:
+    """
+    drivers_data: list of (driver, colour, df_with_raw_and_adj)
+    Plots raw (solid) and fuel-adjusted (dashed) traces side-by-side.
+    """
+    fig = go.Figure()
+
+    cmp_dot = {
+        "SOFT": "#FF3333", "MEDIUM": "#FFD700", "HARD": "#CCCCCC",
+        "INTERMEDIATE": "#39B54A", "WET": "#0067FF",
+    }
+
+    for driver, colour, df in drivers_data:
+        if df is None or df.empty:
+            continue
+
+        marker_colors = [
+            cmp_dot.get(str(c).upper(), "#888") for c in df["Compound"]
+        ]
+
+        # ── Raw pace (solid line, semi-transparent)
+        fig.add_trace(go.Scatter(
+            x=df["LapNumber"], y=df["LapTimeSec"],
+            mode="lines",
+            name=f"{driver} raw",
+            line=dict(color=colour, width=1.5, dash="dot"),
+            opacity=0.45,
+            hovertemplate=(
+                f"<b>{driver} — Raw</b><br>Lap %{{x}}<br>"
+                "Time: %{customdata}<extra></extra>"
+            ),
+            customdata=[f"{int(t//60)}:{t%60:06.3f}" for t in df["LapTimeSec"]],
+        ))
+
+        # ── Fuel-adjusted pace (solid, full opacity with compound markers)
+        fig.add_trace(go.Scatter(
+            x=df["LapNumber"], y=df["FuelAdjSec"],
+            mode="lines+markers",
+            name=f"{driver} fuel-adj",
+            line=dict(color=colour, width=2.2),
+            marker=dict(
+                color=marker_colors, size=6,
+                line=dict(color=colour, width=1),
+            ),
+            hovertemplate=(
+                f"<b>{driver} — Fuel-Adj</b><br>Lap %{{x}}<br>"
+                "Adj Time: %{customdata[0]}<br>"
+                "Correction: −%{customdata[1]:.3f} s"
+                "<extra></extra>"
+            ),
+            customdata=[
+                [f"{int(t//60)}:{t%60:06.3f}", c]
+                for t, c in zip(df["FuelAdjSec"], df["FuelCorrection"])
+            ],
+        ))
+
+    # ── Annotation for how to read the chart
+    fig.add_annotation(
+        text="— · — Raw pace  ——  Fuel-adjusted pace",
+        xref="paper", yref="paper", x=0.01, y=1.06,
+        showarrow=False, font=dict(size=10), opacity=0.5,
+        xanchor="left",
+    )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=32, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Lap", gridcolor="rgba(128,128,128,0.15)",
+            tickmode="linear", dtick=5, zeroline=False,
+        ),
+        yaxis=dict(
+            title="Lap Time (s)", gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False, tickformat=".1f",
+        ),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.04,
+            xanchor="left", x=0, bgcolor="rgba(0,0,0,0)",
+        ),
+        hovermode="x unified",
+        height=300,
+    )
+    return fig
+
+
+_fuel_pairs = [
+    (driver1, colour1, _build_fuel_adjusted(driver1, sess_key, _fuel_effect))
+]
+if compare and driver2:
+    _fuel_pairs.append(
+        (driver2, colour2, _build_fuel_adjusted(driver2, sess_key, _fuel_effect))
+    )
+
+_fuel_all_none = all(p[2] is None or p[2].empty for p in _fuel_pairs)
+if _fuel_all_none:
+    st.info("Fuel-adjusted pace not available for this session.")
+else:
+    st.plotly_chart(_fuel_pace_fig(_fuel_pairs), width="stretch")
+
+    # ── Pace summary stat cards
+    _pace_cols = st.columns(len(_fuel_pairs))
+    for _pc, (drv, col, df) in zip(_pace_cols, _fuel_pairs):
+        if df is None or df.empty:
+            continue
+        _best_raw  = df["LapTimeSec"].min()
+        _best_adj  = df["FuelAdjSec"].min()
+        _avg_adj   = df["FuelAdjSec"].median()
+        _pc.markdown(
+            f"<div class='metric-card' style='--accent:{col};'>"
+            f"<div class='metric-label'>{drv} — Fuel-Adj Pace</div>"
+            f"<div class='metric-value'>{int(_best_adj//60)}:{_best_adj%60:06.3f}</div>"
+            f"<div class='metric-sub'>"
+            f"Best raw: {int(_best_raw//60)}:{_best_raw%60:06.3f} · "
+            f"Median adj: {int(_avg_adj//60)}:{_avg_adj%60:06.3f}"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+
 # ── Tyre Stint Timeline ───────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
 
