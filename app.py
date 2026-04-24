@@ -879,6 +879,26 @@ def driver_colour(sess, driver: str) -> str:
         return "#FF8700"
 
 
+def _build_driver_labels(session) -> dict:
+    """
+    Build a mapping of driver number → display label, e.g. '4' → 'NOR · Norris'.
+    Uses FastF1 driver info for the actual season; falls back to the raw number.
+    """
+    labels = {}
+    try:
+        for drv in session.laps["Driver"].dropna().unique():
+            try:
+                info    = session.get_driver(str(drv))
+                abbr    = info.get("Abbreviation", str(drv))
+                last    = info.get("LastName", "").strip()
+                labels[str(drv)] = f"{abbr} · {last}" if last else abbr
+            except Exception:
+                labels[str(drv)] = str(drv)
+    except Exception:
+        pass
+    return labels
+
+
 def get_telemetry_cached(driver: str, lap, sess_key: str):
     if lap is None:
         return None
@@ -1021,17 +1041,30 @@ except Exception:
     )
     st.stop()
 
+# ── Driver name labels (built once per session) ───────────────────────────────
+_drv_labels: dict = _build_driver_labels(sess)
+
+def _fmt_driver(num: str) -> str:
+    """Format function for st.selectbox — shows 'ABR · Last Name' instead of raw number."""
+    return _drv_labels.get(str(num), str(num))
+
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
     _def_d1_idx = all_drivers.index("4") if "4" in all_drivers else 0
-    driver1 = st.selectbox("Driver 1", all_drivers, index=_def_d1_idx, key="d1")
+    driver1 = st.selectbox(
+        "Driver 1", all_drivers, index=_def_d1_idx, key="d1",
+        format_func=_fmt_driver,
+    )
 with col_b:
     compare = st.checkbox("Compare with Driver 2", value=False)
     driver2 = None
     if compare:
         remaining = [d for d in all_drivers if d != driver1]
-        driver2 = st.selectbox("Driver 2", remaining, key="d2")
+        driver2 = st.selectbox(
+            "Driver 2", remaining, key="d2",
+            format_func=_fmt_driver,
+        )
 
 
 def lap_selector(driver: str, suffix: str = ""):
@@ -1039,11 +1072,11 @@ def lap_selector(driver: str, suffix: str = ""):
     if dlaps.empty:
         dlaps = sess.laps.pick_drivers(driver).dropna(subset=["LapTime"]).reset_index(drop=True)
     if dlaps.empty:
-        st.warning(f"No valid laps for {driver}.")
+        st.warning(f"No valid laps for {_fmt_driver(driver)}.")
         return None, None
-    opts = ["Fastest"] + [str(int(ln)) for ln in dlaps["LapNumber"].tolist()]
-    choice = st.selectbox(f"Lap — {driver}", opts, key=f"lap_{driver}{suffix}")
-    lap = dlaps.loc[dlaps["LapTime"].idxmin()] if choice == "Fastest" \
+    opts   = ["Fastest"] + [str(int(ln)) for ln in dlaps["LapNumber"].tolist()]
+    choice = st.selectbox(f"Lap — {_fmt_driver(driver)}", opts, key=f"lap_{driver}{suffix}")
+    lap    = dlaps.loc[dlaps["LapTime"].idxmin()] if choice == "Fastest" \
         else dlaps[dlaps["LapNumber"] == int(choice)].iloc[0]
     return lap, dlaps
 
@@ -1934,7 +1967,7 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list)
         rows_html += (
             f"<tr style='background:{row_bg}; {border_css}'>"
             f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
-            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{drv}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{_fmt_driver(drv)}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{row['Time']}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{row['Gap']}</td>"
             f"<td style='padding:7px 10px;'>{cmp_html}</td>"
