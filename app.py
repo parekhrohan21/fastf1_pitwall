@@ -1626,14 +1626,11 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
     Draws a horizontal Gantt-style bar per driver, coloured by compound.
     """
     fig = go.Figure()
-    n_drivers = len(drivers_stints)
 
-    for row_idx, (driver, stints) in enumerate(drivers_stints):
-        y_pos = (n_drivers - 1 - row_idx) * 1.2   # vertical position
+    for driver, stints in drivers_stints:
         for s in stints:
             palette = _CMP_PALETTE.get(s["compound"], _CMP_PALETTE["UNKNOWN"])
             width   = s["end_lap"] - s["start_lap"] + 1
-            label   = f"{s['compound'].title()}<br>{s['laps']} laps"
             fresh_marker = " ★" if s.get("fresh") else ""
 
             fig.add_trace(go.Bar(
