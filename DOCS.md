@@ -184,6 +184,31 @@ This ensures the CSS injection block reads the updated value on the same rerun r
 
 ---
 
+## 6b. Compound Colour System
+
+`COMPOUND_COLOURS` in the Constants block (~line 787) is the **single source of truth** for all compound colours. Every consumer in the codebase derives from it — no inline dicts anywhere.
+
+```python
+COMPOUND_COLOURS = {
+    "SOFT":         {"fill": "#FF3333", "text": "#ffffff", "letter": "S"},
+    "MEDIUM":       {"fill": "#FFD700", "text": "#111111", "letter": "M"},
+    "HARD":         {"fill": "#CCCCCC", "text": "#111111", "letter": "H"},
+    "INTERMEDIATE": {"fill": "#39B54A", "text": "#ffffff", "letter": "I"},
+    "WET":          {"fill": "#0067FF", "text": "#ffffff", "letter": "W"},
+    "UNKNOWN":      {"fill": "#888888", "text": "#ffffff", "letter": "?"},
+}
+```
+
+| Key | Used by |
+|---|---|
+| `fill` | Chart markers (lap history, fuel pace), stint timeline bars, leaderboard dot |
+| `text` | Stint bar label contrast colour, tyre badge letter |
+| `letter` | Tyre badge abbreviation (`S`, `M`, `H`, `I`, `W`) |
+
+**Rule:** Always look up with `.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])`. Never define a new inline compound colour dict — extend `COMPOUND_COLOURS` instead.
+
+---
+
 ## 7. Helper Function Reference
 
 ### `hex_to_rgb(hex_col: str) -> str`
@@ -621,7 +646,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | Low | **Fuel-corrected qualifying sim** | Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | Tech debt | **Fix cache isolation** | Refactor `_build_lap_history`, `_build_stints`, `_build_leaderboard`, `_build_gap_data` to receive laps DataFrame as a parameter rather than accessing `st.session_state["session"]` internally |
-| Tech debt | **Consolidate compound colour dicts** | Merge `COMPOUND_COLOURS`, `_CMP_PALETTE`, inline `cmp_dot`, and `cmp_colours_map` into a single canonical structure |
+| ~~Tech debt~~ | ~~**Consolidate compound colour dicts**~~ | ✅ **Done** — `COMPOUND_COLOURS` is now the single canonical dict. `_CMP_PALETTE`, `cmp_dot`, and `cmp_colours_map` have all been removed. |
 
 ---
 
