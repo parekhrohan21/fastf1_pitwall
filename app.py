@@ -784,10 +784,18 @@ TEAM_COLOURS = {
     "Kick Sauber": "#52E252", "Haas F1 Team": "#B6BABD",
 }
 
+# Single source of truth for compound colours.
+# Keys are UPPER-CASE compound names.
+# fill   → background hex used in charts / badges
+# text   → label text colour (for contrast on filled backgrounds)
+# letter → single-character abbreviation shown on tyre badge
 COMPOUND_COLOURS = {
-    "SOFT": ("#FF3333", "S"), "MEDIUM": ("#FFD700", "M"),
-    "HARD": ("#FFFFFF", "H"), "INTERMEDIATE": ("#39B54A", "I"),
-    "WET": ("#0067FF", "W"),
+    "SOFT":         {"fill": "#FF3333", "text": "#ffffff", "letter": "S"},
+    "MEDIUM":       {"fill": "#FFD700", "text": "#111111", "letter": "M"},
+    "HARD":         {"fill": "#CCCCCC", "text": "#111111", "letter": "H"},
+    "INTERMEDIATE": {"fill": "#39B54A", "text": "#ffffff", "letter": "I"},
+    "WET":          {"fill": "#0067FF", "text": "#ffffff", "letter": "W"},
+    "UNKNOWN":      {"fill": "#888888", "text": "#ffffff", "letter": "?"},
 }
 
 TRACK_STATUS_MAP = {
@@ -1115,10 +1123,12 @@ st.markdown("<div class='section-title'>Lap Summary</div>", unsafe_allow_html=Tr
 
 
 def tyre_badge_html(compound: str, age_str: str, fresh: bool) -> str:
-    raw = str(compound).upper() if compound and compound != "?" else "?"
-    col, letter = COMPOUND_COLOURS.get(raw, ("#888", raw[0] if raw else "?"))
+    raw    = str(compound).upper() if compound and compound != "?" else "UNKNOWN"
+    pal    = COMPOUND_COLOURS.get(raw, COMPOUND_COLOURS["UNKNOWN"])
+    col    = pal["fill"]
+    letter = pal["letter"]
+    text_col = pal["text"]
     worn_label = "fresh" if fresh else f"{age_str} laps"
-    text_col = "#000" if raw in ("MEDIUM", "HARD", "INTERMEDIATE") else "#fff"
     return (
         f"<span class='tyre-badge'>"
         f"<span class='tyre-dot' style='background:{col}; color:{text_col};'>{letter}</span>"
@@ -1464,17 +1474,13 @@ def _fuel_pace_fig(drivers_data: list) -> go.Figure:
     """
     fig = go.Figure()
 
-    cmp_dot = {
-        "SOFT": "#FF3333", "MEDIUM": "#FFD700", "HARD": "#CCCCCC",
-        "INTERMEDIATE": "#39B54A", "WET": "#0067FF",
-    }
-
     for driver, colour, df in drivers_data:
         if df is None or df.empty:
             continue
 
         marker_colors = [
-            cmp_dot.get(str(c).upper(), "#888") for c in df["Compound"]
+            COMPOUND_COLOURS.get(str(c).upper(), COMPOUND_COLOURS["UNKNOWN"])["fill"]
+            for c in df["Compound"]
         ]
 
         # ── Raw pace (solid line, semi-transparent)
@@ -1578,15 +1584,7 @@ else:
 # ── Tyre Stint Timeline ───────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
 
-# Compound palette — matches F1 official colours
-_CMP_PALETTE = {
-    "SOFT":         {"fill": "#FF3333", "text": "#ffffff"},
-    "MEDIUM":       {"fill": "#FFD700", "text": "#111111"},
-    "HARD":         {"fill": "#CCCCCC", "text": "#111111"},
-    "INTERMEDIATE": {"fill": "#39B54A", "text": "#ffffff"},
-    "WET":          {"fill": "#0067FF", "text": "#ffffff"},
-    "UNKNOWN":      {"fill": "#888888", "text": "#ffffff"},
-}
+# _CMP_PALETTE removed — use COMPOUND_COLOURS (defined in Constants block) directly.
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -1629,7 +1627,7 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
 
     for driver, stints in drivers_stints:
         for s in stints:
-            palette = _CMP_PALETTE.get(s["compound"], _CMP_PALETTE["UNKNOWN"])
+            palette = COMPOUND_COLOURS.get(s["compound"], COMPOUND_COLOURS["UNKNOWN"])
             width   = s["end_lap"] - s["start_lap"] + 1
             fresh_marker = " ★" if s.get("fresh") else ""
 
@@ -1656,7 +1654,7 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
             ))
 
     # ── Compound legend swatches (manual)
-    for cmp, pal in _CMP_PALETTE.items():
+    for cmp, pal in COMPOUND_COLOURS.items():
         if cmp == "UNKNOWN":
             continue
         fig.add_trace(go.Bar(
@@ -1948,13 +1946,9 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list)
         border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
         pos_col    = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
 
-        # Compound colour dot
-        cmp_colours_map = {
-            "Soft": "#FF3333", "Medium": "#FFD700", "Hard": "#CCCCCC",
-            "Intermediate": "#39B54A", "Wet": "#0067FF",
-        }
-        cmp      = str(row["Compound"])
-        dot_col  = cmp_colours_map.get(cmp, "#888")
+        # Compound colour dot — derived from canonical COMPOUND_COLOURS
+        cmp     = str(row["Compound"])
+        dot_col = COMPOUND_COLOURS.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])["fill"]
         cmp_html = (
             f"<span style='display:inline-block; width:8px; height:8px; "
             f"border-radius:50%; background:{dot_col}; margin-right:5px; vertical-align:middle;'></span>"
