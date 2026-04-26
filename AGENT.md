@@ -38,6 +38,7 @@ fastf1_pitwall/
 ├── .gitignore
 ├── README.md           ← user-facing documentation (keep in sync)
 ├── AGENT.md            ← this file
+├── DOCS.md             ← technical developer documentation
 └── cache/              ← FastF1 disk cache (gitignored, never commit)
 ```
 
@@ -87,10 +88,15 @@ Driver numbers (e.g. `"4"`) are the internal keys throughout. The display layer 
 ### 4. `@st.cache_data` + `sess_key` pattern
 All data-builder functions are cached with `@st.cache_data(ttl=3600)`. The cache key always includes `sess_key` (a string `"{year}_{gp}_{session_type}"`). Do **not** add new session-state accesses inside `@st.cache_data` functions — pass data as parameters instead.
 
-### 5. Compound colours single source
-`COMPOUND_COLOURS` at line ~787 is the canonical compound colour dict (used for tyre badges).
-`_CMP_PALETTE` at line ~1582 is used by the Tyre Stint Timeline (includes `"text"` colour for contrast).
-When adding new chart types, derive colours from `COMPOUND_COLOURS` where possible.
+### 5. Single canonical compound colour dict
+`COMPOUND_COLOURS` at line ~787 is the **only** definition of compound colours in the entire codebase.
+It carries three keys per compound: `fill` (hex background), `text` (label contrast colour), `letter` (badge abbreviation).
+`_CMP_PALETTE` and all other inline dicts (`cmp_dot`, `cmp_colours_map`) have been removed.
+When adding new chart types, always derive colours with:
+```python
+pal = COMPOUND_COLOURS.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])
+```
+Do **not** define a new inline compound colour dict anywhere in `app.py`.
 
 ---
 
@@ -148,7 +154,9 @@ The app is healthy when:
 
 - Do not leave unused variables, computed values, or imports in `app.py`.
 - Before removing, verify with `grep` that the variable name has no other usages.
-- Known past dead code removed: `n_drivers`, `y_pos`, `label` in `_stint_fig`.
+- Known past cleanups:
+  - `n_drivers`, `y_pos`, `label` — removed from `_stint_fig` (were assigned but never read).
+  - `_CMP_PALETTE`, `cmp_dot`, `cmp_colours_map` — removed when compound colours were consolidated into `COMPOUND_COLOURS`.
 
 ---
 
