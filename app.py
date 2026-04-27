@@ -1056,6 +1056,105 @@ def _fmt_driver(num: str) -> str:
     """Format function for st.selectbox — shows 'ABR · Last Name' instead of raw number."""
     return _drv_labels.get(str(num), str(num))
 
+
+# ── Session Info Header ───────────────────────────────────────────────────────
+def _session_info_header(session, sess_type_code: str) -> None:
+    """Render a slim banner summarising the loaded session."""
+    try:
+        ev = session.event
+
+        # Human-readable session type
+        _type_labels = {
+            "R": "Race", "Q": "Qualifying", "SQ": "Sprint Qualifying",
+            "S": "Sprint", "FP1": "Practice 1", "FP2": "Practice 2",
+            "FP3": "Practice 3",
+        }
+        session_label = _type_labels.get(str(sess_type_code).upper(), str(sess_type_code))
+
+        # Basic event fields — safe fallback for each
+        circuit  = str(ev.get("Location",   ev.get("EventName", "—")))
+        country  = str(ev.get("Country",    "—"))
+        round_no = ev.get("RoundNumber",  "—")
+        raw_date = ev.get("EventDate",    None)
+
+        # Format date nicely
+        try:
+            date_str = pd.Timestamp(raw_date).strftime("%-d %B %Y")
+        except Exception:
+            date_str = str(raw_date)[:10] if raw_date else "—"
+
+        # Country → flag emoji lookup
+        _flags = {
+            "United Kingdom": "🇬🇧", "United States": "🇺🇸", "Italy": "🇮🇹",
+            "Monaco": "🇲🇨", "Spain": "🇪🇸", "France": "🇫🇷", "Germany": "🇩🇪",
+            "Belgium": "🇧🇪", "Netherlands": "🇳🇱", "Hungary": "🇭🇺",
+            "Austria": "🇦🇹", "Canada": "🇨🇦", "Australia": "🇦🇺",
+            "Japan": "🇯🇵", "China": "🇨🇳", "Bahrain": "🇧🇭",
+            "Saudi Arabia": "🇸🇦", "Azerbaijan": "🇦🇿", "Singapore": "🇸🇬",
+            "Mexico": "🇲🇽", "Brazil": "🇧🇷", "Abu Dhabi": "🇦🇪",
+            "United Arab Emirates": "🇦🇪", "Qatar": "🇶🇦", "Miami": "🇺🇸",
+            "Las Vegas": "🇺🇸",
+        }
+        flag = _flags.get(country, "🏁")
+
+        # Session type → icon
+        _type_icons = {
+            "Race": "🏆", "Qualifying": "⏱", "Sprint": "⚡",
+            "Sprint Qualifying": "⚡", "Practice 1": "🔧",
+            "Practice 2": "🔧", "Practice 3": "🔧",
+        }
+        sess_icon = _type_icons.get(session_label, "🏎")
+
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg,
+                    rgba(var(--primary-rgb), 0.08) 0%,
+                    var(--secondary-background-color) 60%);
+                border: 1px solid rgba(var(--primary-rgb), 0.25);
+                border-left: 4px solid var(--primary-color);
+                border-radius: 14px;
+                padding: 14px 20px;
+                margin-bottom: 18px;
+                display: flex;
+                align-items: center;
+                gap: 24px;
+                flex-wrap: wrap;
+            ">
+                <div style="font-size: 36px; line-height: 1;">{flag}</div>
+                <div style="flex: 1; min-width: 200px;">
+                    <div style="
+                        font-size: 18px; font-weight: 700;
+                        letter-spacing: -0.3px; margin-bottom: 3px;
+                    ">{circuit}</div>
+                    <div style="font-size: 12px; opacity: 0.55; letter-spacing: 0.5px;">
+                        {country} &nbsp;·&nbsp; Round {round_no}
+                    </div>
+                </div>
+                <div style="display:flex; gap:28px; flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                        <div style="font-size:20px;">{sess_icon}</div>
+                        <div style="font-size:11px; opacity:0.6; margin-top:2px;">{session_label}</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="
+                            font-size:13px; font-weight:600;
+                            color:var(--primary-color); white-space:nowrap;
+                        ">{date_str}</div>
+                        <div style="font-size:11px; opacity:0.6; margin-top:2px;">Event Date</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass   # Never crash the page for a cosmetic header
+
+
+_session_info_header(sess, session_type)
+
+# ── Driver Selection ──────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
