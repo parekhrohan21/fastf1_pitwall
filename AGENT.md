@@ -60,8 +60,10 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 812–937 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
 | 938–985 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button |
 | 986–1028 | Session state & landing | Loads session via `load_session()`, shows landing if not loaded |
-| 1029–1100 | Driver & lap controls | `all_drivers`, `driver1/2` selectboxes with `format_func=_fmt_driver`, `lap_selector()` |
-| 1101–1271 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
+| 1029–1058 | Driver name labels | `_build_driver_labels`, `_fmt_driver` — maps raw numbers to display names |
+| 1059–1165 | Session Info Header | `_session_info_header()` — circuit, country flag, round, session type + icon, event date |
+| 1166–1200 | Driver & lap controls | `all_drivers`, `driver1/2` selectboxes with `format_func=_fmt_driver`, `lap_selector()` |
+| 1201–end+100 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
 | 1272–1404 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
 | 1405–1577 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, stat cards |
 | 1578–1700 | Tyre Stint Timeline | `_build_stints`, `_stint_fig` |

@@ -69,10 +69,11 @@ Browser interaction
         ├─ 5. Sidebar rendered (year/GP/session selectors, load button)
         ├─ 6. Session state checked → load session if Load button pressed
         ├─ 7. Landing screen shown if session not loaded → st.stop()
-        ├─ 8. Driver & lap selectors rendered
-        ├─ 9. Telemetry fetched (session_state cache)
-        ├─ 10. Driver banner + metrics rendered
-        ├─ 11. Charts rendered in sequence (Lap History → Fuel-Adj → Stints → Telemetry → Export → Leaderboard → Gap → Map)
+        ├─ 8. Session Info Header rendered (_session_info_header)
+        ├─ 9. Driver & lap selectors rendered
+        ├─ 10. Telemetry fetched (session_state cache)
+        ├─ 11. Driver banner + metrics rendered
+        ├─ 12. Charts rendered in sequence (Lap History → Fuel-Adj → Stints → Telemetry → Export → Leaderboard → Gap → Map)
         └─ End of script
 ```
 
@@ -211,6 +212,17 @@ COMPOUND_COLOURS = {
 
 ## 7. Helper Function Reference
 
+### `_session_info_header(session, sess_type_code: str) -> None`
+Renders a slim contextual banner immediately before Driver Selection. Reads `session.event` for:
+- `Location` → circuit name (falls back to `EventName`)
+- `Country` → country name + flag emoji (27 countries mapped; `🏁` fallback)
+- `RoundNumber` → round number
+- `EventDate` → formatted as `"%-d %B %Y"` (e.g. `"27 April 2025"`)
+- `sess_type_code` → human-readable label (`R` → `Race`, `Q` → `Qualifying`, etc.) + icon
+
+Styled with team-colour left border (`var(--primary-color)`) and a subtle gradient tint.
+Wrapped in `try/except` — never crashes the page if `sess.event` fields are missing.
+
 ### `hex_to_rgb(hex_col: str) -> str`
 Converts `"#FF8700"` → `"255,135,0"`. Used for CSS `rgba()` variables.
 Falls back to `"255,135,0"` (McLaren orange) on malformed input.
@@ -333,6 +345,8 @@ A `MutationObserver` (injected via `components.html`) watches for Streamlit's `d
 After data is loaded, the script renders sections in this fixed order:
 
 ```
+_session_info_header()  ← Session banner (circuit, country, round, session type, date)
+        │
 render_summary()        ← Driver banner, metrics, tyre, weather
         │
 _lap_history_fig()      ← Lap Time History (Plotly)
@@ -638,7 +652,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 
 | Priority | Feature | Technical notes |
 |---|---|---|
-| High | **Session info header** | `sess.event["EventName"]`, `["Country"]`, `["RoundNumber"]`, `["EventDate"]` — render as a slim banner card before the driver selection |
+| ~~High~~ | ~~**Session info header**~~ | ✅ **Done** — `_session_info_header()` renders circuit, flag, round, session type + icon, and date in a team-colour-accented banner above Driver Selection. |
 | High | **Race position chart** | `sess.laps["Position"]` per lap — Plotly line chart, one trace per driver, all 20 drivers faded except selected |
 | Medium | **Pit stop summary table** | Filter `laps["PitOutTime"].notna()` per driver to get pit entry laps; compute stop duration from timing data |
 | Medium | **Sector mini-map colouring** | Divide `Distance` into S1/S2/S3 zones; colour track map segments Green (d1 faster) / Purple (d2 faster) in comparison mode |
