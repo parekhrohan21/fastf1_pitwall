@@ -87,6 +87,14 @@ The app injects raw CSS via `st.markdown(..., unsafe_allow_html=True)` to overri
 ### 3. `format_func` for all driver selectboxes
 Driver numbers (e.g. `"4"`) are the internal keys throughout. The display layer uses `_fmt_driver(num)` → `"NOR · Norris"` via `format_func=`. Never change the underlying session state / FastF1 calls to use names — always use raw numbers internally.
 
+`_fmt_driver` is applied in **every** user-visible location:
+- Driver 1 / Driver 2 `st.selectbox` — via `format_func=_fmt_driver`
+- Lap selector label and warning — `f"Lap — {_fmt_driver(driver)}"`
+- Fastest Laps Leaderboard Driver column — `_fmt_driver(drv)` in HTML table cell
+- Fuel-Adjusted Pace stat card label — `_fmt_driver(drv)` in metric card div
+
+When adding new UI that shows a driver identifier, always wrap it with `_fmt_driver(drv)`.
+
 ### 4. `@st.cache_data` + `sess_key` pattern
 All data-builder functions are cached with `@st.cache_data(ttl=3600)`. The cache key always includes `sess_key` (a string `"{year}_{gp}_{session_type}"`). Do **not** add new session-state accesses inside `@st.cache_data` functions — pass data as parameters instead.
 

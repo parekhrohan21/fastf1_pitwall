@@ -446,7 +446,17 @@ st.selectbox(..., format_func=_fmt_driver)
 `_drv_labels` is built once per session load by `_build_driver_labels(sess)`.
 **All internal logic uses raw numbers.** Only the final display layer uses names.
 
-To extend this to a new component (e.g. a new table), call `_fmt_driver(driver_num)` on the display value:
+### Coverage — every location `_fmt_driver` is applied
+
+| UI Location | How it's applied |
+|---|---|
+| Driver 1 / Driver 2 selectboxes | `format_func=_fmt_driver` on `st.selectbox` |
+| Lap selector label | `f"Lap — {_fmt_driver(driver)}"` passed as `st.selectbox` label |
+| Lap selector warning | `f"No valid laps for {_fmt_driver(driver)}."` in `st.warning` |
+| Fastest Laps Leaderboard Driver column | `_fmt_driver(drv)` in `_render_leaderboard` HTML table cell |
+| Fuel-Adjusted Pace stat card label | `_fmt_driver(drv)` in metric card `metric-label` div |
+
+To extend this to any new component, call `_fmt_driver(driver_num)` on the display value:
 
 ```python
 # Example: rendering a driver label in any HTML context
