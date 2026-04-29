@@ -1671,7 +1671,7 @@ else:
         _avg_adj   = df["FuelAdjSec"].median()
         _pc.markdown(
             f"<div class='metric-card' style='--accent:{col};'>"
-            f"<div class='metric-label'>{drv} — Fuel-Adj Pace</div>"
+            f"<div class='metric-label'>{_fmt_driver(drv)} — Fuel-Adj Pace</div>"
             f"<div class='metric-value'>{int(_best_adj//60)}:{_best_adj%60:06.3f}</div>"
             f"<div class='metric-sub'>"
             f"Best raw: {int(_best_raw//60)}:{_best_raw%60:06.3f} · "
