@@ -4,8 +4,6 @@ A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-drive
 
 Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
 
-
-updates documentation 
 ---
 
 ## 🚀 Key Features
