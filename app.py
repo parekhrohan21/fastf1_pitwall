@@ -2239,6 +2239,114 @@ else:
                 unsafe_allow_html=True,
             )
 
+
+# ── Race Position Chart ───────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Race Position</div>", unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_position_data(sess_k: str):
+    """Return a dict {driver: pd.Series(position, index=lap_number)} for all drivers."""
+    try:
+        laps = st.session_state["session"].laps.copy()
+        laps = laps.dropna(subset=["LapNumber", "Position", "Driver"])
+        laps["LapNumber"] = laps["LapNumber"].astype(int)
+        laps["Position"]  = laps["Position"].astype(int)
+        pos_dict = {}
+        for drv, grp in laps.groupby("Driver"):
+            grp = grp.sort_values("LapNumber")
+            pos_dict[str(drv)] = grp.set_index("LapNumber")["Position"]
+        return pos_dict if pos_dict else None
+    except Exception:
+        return None
+
+
+_pos_data = _build_position_data(sess_key)
+
+if _pos_data is None or not _pos_data:
+    st.info("Race position data is not available for this session type "
+            "(only Race and Sprint sessions carry lap-by-lap position data).")
+else:
+    _highlight = {driver1: colour1}
+    if compare and driver2:
+        _highlight[driver2] = colour2
+
+    _pos_fig = go.Figure()
+
+    # ── All drivers — faint grey background lines
+    for _drv, _series in _pos_data.items():
+        if _drv in _highlight:
+            continue   # drawn as highlighted traces below
+        _pos_fig.add_trace(go.Scatter(
+            x=_series.index.tolist(),
+            y=_series.tolist(),
+            mode="lines",
+            name=_fmt_driver(_drv),
+            line=dict(color="rgba(160,160,160,0.18)", width=1),
+            hovertemplate=(
+                f"<b>{_fmt_driver(_drv)}</b><br>"
+                "Lap %{x}<br>P%{y}<extra></extra>"
+            ),
+            showlegend=False,
+        ))
+
+    # ── Selected driver(s) — vivid team-coloured lines with markers
+    for _drv, _col in _highlight.items():
+        if _drv not in _pos_data:
+            continue
+        _series = _pos_data[_drv]
+        _pos_fig.add_trace(go.Scatter(
+            x=_series.index.tolist(),
+            y=_series.tolist(),
+            mode="lines+markers",
+            name=_fmt_driver(_drv),
+            line=dict(color=_col, width=2.5),
+            marker=dict(size=4, color=_col),
+            hovertemplate=(
+                f"<b>{_fmt_driver(_drv)}</b><br>"
+                "Lap %{x}<br>P%{y}<extra></extra>"
+            ),
+            showlegend=True,
+        ))
+
+    # Max lap for x range
+    _max_lap = max(
+        (s.index.max() for s in _pos_data.values() if not s.empty),
+        default=1,
+    )
+
+    _pos_fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=0, t=12, b=0),
+        height=360,
+        xaxis=dict(
+            title="Lap",
+            range=[1, _max_lap],
+            gridcolor="rgba(128,128,128,0.12)",
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Position",
+            autorange="reversed",   # P1 at top
+            tickmode="linear",
+            tick0=1,
+            dtick=1,
+            gridcolor="rgba(128,128,128,0.12)",
+            zeroline=False,
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", y=1.02,
+            xanchor="right",  x=1,
+            font=dict(size=11),
+        ),
+        font=dict(color="#888888", size=11),
+        hoverlabel=dict(bgcolor="rgba(20,20,20,0.85)", font_size=12),
+    )
+
+    st.plotly_chart(_pos_fig, width="stretch")
+
 # ── Track Map ─────────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
 
