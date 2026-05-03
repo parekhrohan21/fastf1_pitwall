@@ -72,7 +72,8 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 1871–1901 | Speed Delta | Matplotlib fill-between chart (compare mode only) |
 | 1902–2005 | Fastest Laps Leaderboard | `_build_leaderboard`, `_render_leaderboard` (HTML table) |
 | 2006–2148 | Gap to Leader | `_build_gap_data`, Plotly line chart |
-| 2149–end | Track Map & Race Replay | Plotly speed map, animated race replay with Play/Pause |
+| 2149–2355 | Race Position Chart | `_build_position_data` — all drivers faded, selected highlighted in team colour, Y-axis inverted |
+| 2356–end | Track Map & Race Replay | Plotly speed map, animated race replay with Play/Pause |
 
 ---
 

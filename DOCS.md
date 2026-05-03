@@ -365,6 +365,8 @@ _render_leaderboard()   ← Fastest Laps Leaderboard (HTML table)
         │
 Gap to Leader           ← Plotly line chart (all drivers)
         │
+Race Position           ← Plotly line chart — all drivers faded, selected highlighted (_build_position_data)
+        │
 Track Map               ← Plotly scatter (speed-coloured path)
         │
 Race Replay             ← Plotly animated scatter (all drivers)
@@ -388,6 +390,7 @@ Each chart section follows the same pattern:
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |
 | Gap to Leader | Plotly | `_build_gap_data` | inline | `sess.laps` cumulative time |
+| Race Position | Plotly | `_build_position_data` | inline | `sess.laps["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | inline | `lap.get_car_data()` |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 
@@ -650,6 +653,7 @@ Run this after any significant change:
 - [ ] Export CSV button downloads a valid file
 - [ ] Fastest Laps Leaderboard shows all drivers
 - [ ] Gap to Leader chart renders
+- [ ] Race Position chart renders (Race/Sprint sessions only)
 - [ ] Track Map renders with speed colours
 - [ ] Dark mode toggle switches all backgrounds including top bar
 - [ ] Light mode toggle reverses all backgrounds
@@ -663,7 +667,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | Priority | Feature | Technical notes |
 |---|---|---|
 | ~~High~~ | ~~**Session info header**~~ | ✅ **Done** — `_session_info_header()` renders circuit, flag, round, session type + icon, and date in a team-colour-accented banner above Driver Selection. |
-| High | **Race position chart** | `sess.laps["Position"]` per lap — Plotly line chart, one trace per driver, all 20 drivers faded except selected |
+| ~~High~~ | ~~**Race position chart**~~ | ✅ **Done** — `_build_position_data()` reads `sess.laps["Position"]`; all drivers shown as faint grey lines, selected driver(s) overlaid in team colour. Y-axis inverted (P1 at top). Gracefully hidden on non-race sessions. |
 | Medium | **Pit stop summary table** | Filter `laps["PitOutTime"].notna()` per driver to get pit entry laps; compute stop duration from timing data |
 | Medium | **Sector mini-map colouring** | Divide `Distance` into S1/S2/S3 zones; colour track map segments Green (d1 faster) / Purple (d2 faster) in comparison mode |
 | Medium | **Compound filter on lap history** | `st.multiselect` to show/hide compounds on `_lap_history_fig`; filter `laps[laps["Compound"].isin(selected)]` |
@@ -674,4 +678,4 @@ Items agreed by the project owner as desirable but not yet implemented:
 
 ---
 
-*Last updated: April 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+*Last updated: May 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
