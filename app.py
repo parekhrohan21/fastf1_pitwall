@@ -827,7 +827,7 @@ def hex_to_rgb(hex_col: str) -> str:
     except Exception:
         return "255, 135, 0"
 
-def _team_logo(team: str) -> str:
+def _team_logo(team: str, year: int = 2024) -> str:
     t = team.lower()
     mapping = {
         "red bull": "red-bull-racing-logo.png",
@@ -848,7 +848,7 @@ def _team_logo(team: str) -> str:
     }
     for k, filename in mapping.items():
         if k in t:
-            return f"https://media.formula1.com/content/dam/fom-website/teams/2024/{filename}"
+            return f"https://media.formula1.com/content/dam/fom-website/teams/{year}/{filename}"
     return ""
 
 def _team_colour(team: str) -> str:
