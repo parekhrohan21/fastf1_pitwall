@@ -1276,7 +1276,7 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
     try:
         driver_info = sess.get_driver(driver)
         raw_team    = driver_info.get("TeamName", "")
-        logo_url    = _team_logo(raw_team)
+        logo_url    = _team_logo(raw_team, year)
         headshot_url = driver_info.get("HeadshotUrl", "") or ""
     except Exception:
         raw_team     = ""
