@@ -1796,6 +1796,113 @@ else:
     st.plotly_chart(_stint_fig(_stint_data), width="stretch")
 
 
+
+
+# ── Pit Stop Summary ──────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_pit_stops(driver: str, sess_k: str) -> list[dict] | None:
+    """Return a list of pit stop dicts for one driver: lap, duration_s, old_cmp, new_cmp."""
+    try:
+        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps.sort_values("LapNumber").reset_index(drop=True)
+
+        stops = []
+        for i, row in laps.iterrows():
+            if pd.isna(row.get("PitInTime")) or pd.isna(row.get("PitOutTime")):
+                continue
+            try:
+                duration_s = (row["PitOutTime"] - row["PitInTime"]).total_seconds()
+            except Exception:
+                duration_s = None
+
+            # Compound before pit = this lap's compound
+            old_cmp = str(row.get("Compound", "?")).title()
+
+            # Compound after pit = next lap's compound
+            new_cmp = "?"
+            if i + 1 < len(laps):
+                next_cmp = laps.iloc[i + 1].get("Compound", "?")
+                if pd.notna(next_cmp):
+                    new_cmp = str(next_cmp).title()
+
+            stops.append({
+                "lap":      int(row["LapNumber"]),
+                "duration": round(duration_s, 1) if duration_s is not None else None,
+                "old_cmp":  old_cmp,
+                "new_cmp":  new_cmp,
+            })
+        return stops if stops else None
+    except Exception:
+        return None
+
+
+def _render_pit_table(stops: list[dict], colour: str, driver_label: str) -> str:
+    """Build an HTML pit stop table for one driver."""
+    def _cmp_dot(cmp: str) -> str:
+        pal = COMPOUND_COLOURS.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])
+        return (
+            f"<span style='display:inline-block; width:8px; height:8px; border-radius:50%; "
+            f"background:{pal['fill']}; margin-right:5px; vertical-align:middle;'></span>"
+        )
+
+    rows_html = ""
+    for idx, s in enumerate(stops):
+        row_bg = "rgba(255,255,255,0.03)" if idx % 2 == 0 else "transparent"
+        dur    = f"{s['duration']:.1f}s" if s["duration"] is not None else "—"
+        rows_html += (
+            f"<tr style='background:{row_bg};'>"
+            f"<td style='padding:7px 10px; color:#aaa;'>#{idx+1}</td>"
+            f"<td style='padding:7px 10px;'>Lap {s['lap']}</td>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{colour};'>{dur}</td>"
+            f"<td style='padding:7px 10px;'>{_cmp_dot(s['old_cmp'])}{s['old_cmp']}</td>"
+            f"<td style='padding:7px 10px;'>{_cmp_dot(s['new_cmp'])}{s['new_cmp']}</td>"
+            f"</tr>"
+        )
+
+    return (
+        f"<div style='margin-bottom:16px;'>"
+        f"<div style='font-size:12px; font-weight:600; color:{colour}; "
+        f"letter-spacing:0.5px; margin-bottom:6px;'>{driver_label}</div>"
+        f"<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        f"<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
+        f"font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
+        f"<th style='padding:5px 10px; text-align:left;'>Stop</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Lap</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Duration</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>From</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>To</th>"
+        f"</tr></thead>"
+        f"<tbody>{rows_html}</tbody>"
+        f"</table></div>"
+    )
+
+
+_pit_d1 = _build_pit_stops(driver1, sess_key)
+_pit_d2 = _build_pit_stops(driver2, sess_key) if compare and driver2 else None
+
+if _pit_d1 is None and _pit_d2 is None:
+    st.info("Pit stop data is not available for this session "
+            "(Race and Sprint sessions only).")
+else:
+    _pit_html = ""
+    if _pit_d1:
+        _pit_html += _render_pit_table(_pit_d1, colour1, _fmt_driver(driver1))
+    if _pit_d2:
+        _pit_html += _render_pit_table(_pit_d2, colour2, _fmt_driver(driver2))
+    if _pit_html:
+        st.markdown(
+            f"<div style='background:var(--secondary-background-color); "
+            f"border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
+            f"padding:16px 20px;'>{_pit_html}</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("No pit stops recorded for the selected driver(s).")
+
+
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
 if tel1 is None:
