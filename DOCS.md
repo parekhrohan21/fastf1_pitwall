@@ -132,16 +132,19 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 |---|---|
 | `load_schedule(year)` | `year` |
 | `load_session(year, gp, session_type)` | `year, gp, session_type` |
-| `_build_lap_history(driver, sess_k)` | `driver, sess_key` |
-| `_build_fuel_adjusted(driver, sess_k, fuel_effect)` | `driver, sess_key, fuel_effect` |
-| `_build_stints(driver, sess_k)` | `driver, sess_key` |
-| `_build_leaderboard(sess_k)` | `sess_key` |
-| `_build_gap_data(sess_k)` | `sess_key` |
+| `_build_lap_history(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
+| `_build_fuel_adjusted(driver, sess_k, fuel_effect, laps_df)` | `driver, sess_key, fuel_effect, laps_df` |
+| `_build_stints(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
+| `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
+| `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
+| `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
+| `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
 
 `sess_key` is a string formatted as `"{year}_{gp}_{session_type}"` (e.g. `"2025_British Grand Prix_R"`).
 
-> ⚠️ **Known issue:** Some `@st.cache_data` functions internally access `st.session_state["session"]`. This is a cache-isolation anti-pattern — ideally the session/laps object should be passed as a parameter. This is a future refactor task.
+**`_all_laps` pattern (cache isolation fix):**
+A single `_all_laps = sess.laps.copy()` is extracted immediately after session validation. All 7 data-builder functions receive this DataFrame as `laps_df` — Streamlit hashes it to correctly invalidate the cache when session data changes. No builder function accesses `st.session_state["session"]` internally anymore.
 
 ### Layer 3 — `st.session_state` for telemetry
 ```python
@@ -673,7 +676,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | Medium | **Compound filter on lap history** | `st.multiselect` to show/hide compounds on `_lap_history_fig`; filter `laps[laps["Compound"].isin(selected)]` |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | Low | **Fuel-corrected qualifying sim** | Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
-| Tech debt | **Fix cache isolation** | Refactor `_build_lap_history`, `_build_stints`, `_build_leaderboard`, `_build_gap_data` to receive laps DataFrame as a parameter rather than accessing `st.session_state["session"]` internally |
+| ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |
 | ~~Tech debt~~ | ~~**Consolidate compound colour dicts**~~ | ✅ **Done** — `COMPOUND_COLOURS` is now the single canonical dict. `_CMP_PALETTE`, `cmp_dot`, and `cmp_colours_map` have all been removed. |
 
 ---
