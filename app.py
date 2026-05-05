@@ -1049,6 +1049,12 @@ except Exception:
     )
     st.stop()
 
+# ── Laps snapshot — single extraction used by all cached builders ─────────────
+# Extracting here (outside @st.cache_data functions) fixes the cache isolation
+# bug: builders now receive the DataFrame as an argument so @st.cache_data can
+# hash it correctly rather than reading from st.session_state internally.
+_all_laps: pd.DataFrame = sess.laps.copy()
+
 # ── Driver name labels (built once per session) ───────────────────────────────
 _drv_labels: dict = _build_driver_labels(sess)
 
@@ -1383,10 +1389,10 @@ st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_ht
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_lap_history(driver: str, sess_k: str):
-    """Return cleaned lap DataFrame for a single driver from cached session."""
+def _build_lap_history(driver: str, sess_k: str, laps_df: pd.DataFrame):
+    """Return cleaned lap DataFrame for a single driver."""
     try:
-        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps_df.pick_drivers(driver).copy()
         laps = laps.dropna(subset=["LapTime", "LapNumber"])
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
         # filter out obvious outliers (safety car laps, pit laps > 3× median)
@@ -1536,14 +1542,15 @@ with _fuel_col:
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float):
+def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float,
+                         laps_df: pd.DataFrame):
     """
     Return DataFrame with raw LapTimeSec and FuelAdjSec columns.
     Fuel correction: subtract (total_laps - lap_number) * fuel_effect
     → normalises all laps to empty-tank pace (equivalent to a flying Q-lap).
     """
     try:
-        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps_df.pick_drivers(driver).copy()
         laps = laps.dropna(subset=["LapTime", "LapNumber"])
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
 
@@ -1553,7 +1560,7 @@ def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float):
         laps = laps.sort_values("LapNumber").reset_index(drop=True)
 
         # Total laps in the session (used to compute remaining fuel)
-        total_laps = int(st.session_state["session"].laps["LapNumber"].max())
+        total_laps = int(laps_df["LapNumber"].max())
 
         # Remaining fuel = laps left to run AFTER current lap
         laps["FuelLapsRemaining"] = (total_laps - laps["LapNumber"]).clip(lower=0)
@@ -1648,12 +1655,16 @@ def _fuel_pace_fig(drivers_data: list) -> go.Figure:
 
 
 _fuel_pairs = [
-    (driver1, colour1, _build_fuel_adjusted(driver1, sess_key, _fuel_effect))
+    (
+        driver1, colour1,
+        _build_fuel_adjusted(driver1, sess_key, _fuel_effect, _all_laps)
+    )
 ]
 if compare and driver2:
-    _fuel_pairs.append(
-        (driver2, colour2, _build_fuel_adjusted(driver2, sess_key, _fuel_effect))
-    )
+    _fuel_pairs.append((
+        driver2, colour2,
+        _build_fuel_adjusted(driver2, sess_key, _fuel_effect, _all_laps)
+    ))
 
 _fuel_all_none = all(p[2] is None or p[2].empty for p in _fuel_pairs)
 if _fuel_all_none:
@@ -1687,10 +1698,10 @@ st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_stints(driver: str, sess_k: str):
+def _build_stints(driver: str, sess_k: str, laps_df: pd.DataFrame):
     """Return a list of stint dicts: {compound, start_lap, end_lap, laps, fresh}."""
     try:
-        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps_df.pick_drivers(driver).copy()
         laps = laps.dropna(subset=["LapNumber"]).sort_values("LapNumber")
         stints, current = [], None
         for _, row in laps.iterrows():
@@ -1786,9 +1797,9 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
     return fig
 
 
-_stint_data = [(driver1, _build_stints(driver1, sess_key))]
+_stint_data = [(driver1, _build_stints(driver1, sess_key, _all_laps))]
 if compare and driver2:
-    _stint_data.append((driver2, _build_stints(driver2, sess_key)))
+    _stint_data.append((driver2, _build_stints(driver2, sess_key, _all_laps)))
 
 if all(not s for _, s in _stint_data):
     st.info("Stint data not available for this session.")
@@ -1803,10 +1814,10 @@ st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_ht
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_pit_stops(driver: str, sess_k: str) -> list[dict] | None:
+def _build_pit_stops(driver: str, sess_k: str, laps_df: pd.DataFrame) -> list[dict] | None:
     """Return a list of pit stop dicts for one driver: lap, duration_s, old_cmp, new_cmp."""
     try:
-        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        laps = laps_df.pick_drivers(driver).copy()
         laps = laps.sort_values("LapNumber").reset_index(drop=True)
 
         stops = []
@@ -1880,8 +1891,8 @@ def _render_pit_table(stops: list[dict], colour: str, driver_label: str) -> str:
     )
 
 
-_pit_d1 = _build_pit_stops(driver1, sess_key)
-_pit_d2 = _build_pit_stops(driver2, sess_key) if compare and driver2 else None
+_pit_d1 = _build_pit_stops(driver1, sess_key, _all_laps)
+_pit_d2 = _build_pit_stops(driver2, sess_key, _all_laps) if compare and driver2 else None
 
 if _pit_d1 is None and _pit_d2 is None:
     st.info("Pit stop data is not available for this session "
@@ -2108,10 +2119,10 @@ st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_leaderboard(sess_k: str):
+def _build_leaderboard(sess_k: str, laps_df: pd.DataFrame):
     """Return a ranked DataFrame of all drivers' fastest laps."""
     try:
-        laps = st.session_state["session"].laps.copy()
+        laps = laps_df.copy()
         laps = laps.dropna(subset=["LapTime", "Driver"])
         # Get each driver's fastest lap
         idx = laps.groupby("Driver")["LapTime"].idxmin()
@@ -2195,7 +2206,7 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list)
     st.markdown(table_html, unsafe_allow_html=True)
 
 
-_lb = _build_leaderboard(sess_key)
+_lb = _build_leaderboard(sess_key, _all_laps)
 if _lb is None or _lb.empty:
     st.info("Leaderboard not available for this session.")
 else:
@@ -2208,10 +2219,10 @@ st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_gap_data(sess_k: str):
+def _build_gap_data(sess_k: str, laps_df: pd.DataFrame):
     """Return a dict {driver: pd.Series(gap_seconds, index=lap_number)} for all drivers."""
     try:
-        laps = st.session_state["session"].laps.copy()
+        laps = laps_df.copy()
         # Only use valid laps with a recorded LapTime
         laps = laps.dropna(subset=["LapTime", "LapNumber", "Driver"])
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
@@ -2316,7 +2327,7 @@ def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_
     return fig
 
 # Only show for race/qualifying sessions (gap is meaningful)
-_gtl_data, _ts_data = _build_gap_data(sess_key)
+_gtl_data, _ts_data = _build_gap_data(sess_key, _all_laps)
 
 if _gtl_data is None:
     st.info("Gap to Leader data is not available for this session.")
@@ -2352,10 +2363,10 @@ st.markdown("<div class='section-title'>Race Position</div>", unsafe_allow_html=
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_position_data(sess_k: str):
+def _build_position_data(sess_k: str, laps_df: pd.DataFrame):
     """Return a dict {driver: pd.Series(position, index=lap_number)} for all drivers."""
     try:
-        laps = st.session_state["session"].laps.copy()
+        laps = laps_df.copy()
         laps = laps.dropna(subset=["LapNumber", "Position", "Driver"])
         laps["LapNumber"] = laps["LapNumber"].astype(int)
         laps["Position"]  = laps["Position"].astype(int)
@@ -2368,7 +2379,7 @@ def _build_position_data(sess_k: str):
         return None
 
 
-_pos_data = _build_position_data(sess_key)
+_pos_data = _build_position_data(sess_key, _all_laps)
 
 if _pos_data is None or not _pos_data:
     st.info("Race position data is not available for this session type "
