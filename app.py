@@ -2214,6 +2214,207 @@ else:
     _hl_colours  = [colour1] + ([colour2] if compare and driver2 else [])
     _render_leaderboard(_lb, _hl_drivers, _hl_colours)
 
+# ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_ideal_lap(sess_k: str, laps_df: pd.DataFrame) -> pd.DataFrame | None:
+    """
+    For every driver, find best S1, best S2, best S3 across all valid laps.
+    Returns a DataFrame with columns:
+        Driver, BestS1, BestS2, BestS3, TheoreticalBest,
+        ActualBest, Delta, BestS1Lap, BestS2Lap, BestS3Lap
+    sorted by TheoreticalBest ascending.
+    """
+    try:
+        laps = laps_df.copy()
+        needed = ["Driver", "LapNumber", "Sector1Time", "Sector2Time",
+                  "Sector3Time", "LapTime"]
+        laps = laps.dropna(subset=["Driver", "LapTime"])
+
+        # Check sector columns exist and have at least some data
+        for col in ["Sector1Time", "Sector2Time", "Sector3Time"]:
+            if col not in laps.columns or laps[col].dropna().empty:
+                return None
+
+        records = []
+        for drv, grp in laps.groupby("Driver"):
+            s1 = grp.dropna(subset=["Sector1Time"])
+            s2 = grp.dropna(subset=["Sector2Time"])
+            s3 = grp.dropna(subset=["Sector3Time"])
+            lt = grp.dropna(subset=["LapTime"])
+            if s1.empty or s2.empty or s3.empty or lt.empty:
+                continue
+
+            best_s1_row = s1.loc[s1["Sector1Time"].idxmin()]
+            best_s2_row = s2.loc[s2["Sector2Time"].idxmin()]
+            best_s3_row = s3.loc[s3["Sector3Time"].idxmin()]
+
+            best_s1 = best_s1_row["Sector1Time"].total_seconds()
+            best_s2 = best_s2_row["Sector2Time"].total_seconds()
+            best_s3 = best_s3_row["Sector3Time"].total_seconds()
+
+            theoretical = best_s1 + best_s2 + best_s3
+            actual_best = lt["LapTime"].min().total_seconds()
+            delta = actual_best - theoretical
+
+            records.append({
+                "Driver":          str(drv),
+                "BestS1":          best_s1,
+                "BestS2":          best_s2,
+                "BestS3":          best_s3,
+                "TheoreticalBest": theoretical,
+                "ActualBest":      actual_best,
+                "Delta":           delta,
+                "BestS1Lap":       int(best_s1_row["LapNumber"]),
+                "BestS2Lap":       int(best_s2_row["LapNumber"]),
+                "BestS3Lap":       int(best_s3_row["LapNumber"]),
+            })
+
+        if not records:
+            return None
+
+        df = pd.DataFrame(records).sort_values("TheoreticalBest").reset_index(drop=True)
+        df["Pos"] = df.index + 1
+
+        # Gap to theoretical pole (best theoretical lap overall)
+        pole_time = df["TheoreticalBest"].iloc[0]
+        df["GapToPole"] = df["TheoreticalBest"] - pole_time
+
+        return df
+    except Exception:
+        return None
+
+
+def _fmt_sec(s: float) -> str:
+    """Format seconds as M:SS.mmm lap-time string."""
+    m = int(s // 60)
+    return f"{m}:{s % 60:06.3f}"
+
+
+_ideal_df = _build_ideal_lap(sess_key, _all_laps)
+
+if _ideal_df is None or _ideal_df.empty:
+    st.info(
+        "Sector time data is not available for this session — "
+        "Ideal Lap analysis requires Sector1Time / Sector2Time / Sector3Time data."
+    )
+else:
+    # ── Per-driver delta cards for selected driver(s) ──────────────────────────
+    _card_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
+    _card_colours  = [colour1] + ([colour2] if compare and driver2 else [])
+
+    _delta_cards_html = ""
+    for _cd, _cc in zip(_card_drivers, _card_colours):
+        _row = _ideal_df[_ideal_df["Driver"] == _cd]
+        if _row.empty:
+            continue
+        _r = _row.iloc[0]
+        _sign = "+" if _r["Delta"] >= 0 else "-"
+        _delta_str = f"{_sign}{abs(_r['Delta']):.3f}s"
+        _delta_col  = "#ff6b6b" if _r["Delta"] > 0.05 else "#51cf66"
+        _delta_cards_html += (
+            f"<div style='background:var(--secondary-background-color);"
+            f" border:1px solid rgba(128,128,128,0.15); border-radius:12px;"
+            f" padding:14px 18px; flex:1; min-width:220px;'>"
+            f"<div style='font-size:11px; font-weight:600; letter-spacing:1px;"
+            f" text-transform:uppercase; color:{_cc}; margin-bottom:8px;'>"
+            f"{_fmt_driver(_cd)}</div>"
+            f"<div style='display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;"
+            f" margin-bottom:10px;'>"
+            f"<div style='font-size:11px; opacity:0.6;'>S1</div>"
+            f"<div style='font-size:11px; opacity:0.6;'>S2</div>"
+            f"<div style='font-size:11px; opacity:0.6;'>S3</div>"
+            f"<div style='font-size:13px; font-weight:600;'>{_r['BestS1']:.3f}s</div>"
+            f"<div style='font-size:13px; font-weight:600;'>{_r['BestS2']:.3f}s</div>"
+            f"<div style='font-size:13px; font-weight:600;'>{_r['BestS3']:.3f}s</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS1Lap']}</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS2Lap']}</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS3Lap']}</div>"
+            f"</div>"
+            f"<div style='border-top:1px solid rgba(128,128,128,0.15);"
+            f" padding-top:8px; display:flex; justify-content:space-between;"
+            f" align-items:center;'>"
+            f"<div><div style='font-size:10px; opacity:0.5;'>Theoretical Best</div>"
+            f"<div style='font-size:15px; font-weight:700;'>"
+            f"{_fmt_sec(_r['TheoreticalBest'])}</div></div>"
+            f"<div style='text-align:right;'>"
+            f"<div style='font-size:10px; opacity:0.5;'>Time Left on Table</div>"
+            f"<div style='font-size:15px; font-weight:700; color:{_delta_col};'>"
+            f"{_delta_str}</div></div>"
+            f"</div></div>"
+        )
+
+    if _delta_cards_html:
+        st.markdown(
+            f"<div style='display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;'>"
+            f"{_delta_cards_html}</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Full-field ideal lap table ─────────────────────────────────────────────
+    _hl_set = set([driver1] + ([driver2] if compare and driver2 else []))
+    _pole_t  = _ideal_df["TheoreticalBest"].iloc[0]
+
+    _tbl_rows = ""
+    for _, _r in _ideal_df.iterrows():
+        _is_hl  = _r["Driver"] in _hl_set
+        _hl_col = colour1 if _r["Driver"] == driver1 else (
+                  colour2 if compare and _r["Driver"] == driver2 else None)
+        _row_style = (
+            f"border-left: 3px solid {_hl_col};"
+            f" background: rgba({hex_to_rgb(_hl_col)},0.06);"
+        ) if _is_hl and _hl_col else ""
+
+        _gap_str  = "—" if _r["GapToPole"] < 0.001 else f"+{_r['GapToPole']:.3f}s"
+        _sign     = "+" if _r["Delta"] >= 0 else "-"
+        _d_str    = f"{_sign}{abs(_r['Delta']):.3f}s"
+        _d_col    = "#ff6b6b" if _r["Delta"] > 0.05 else "#51cf66"
+        _name     = _fmt_driver(_r["Driver"])
+
+        _tbl_rows += (
+            f"<tr style='{_row_style}'>"
+            f"<td style='padding:7px 10px; opacity:0.5;'>{int(_r['Pos'])}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'700' if _is_hl else '400'};'>"
+            f"{_name}</td>"
+            f"<td style='padding:7px 10px;'>{_r['BestS1']:.3f}s</td>"
+            f"<td style='padding:7px 10px;'>{_r['BestS2']:.3f}s</td>"
+            f"<td style='padding:7px 10px;'>{_r['BestS3']:.3f}s</td>"
+            f"<td style='padding:7px 10px; font-weight:600;'>"
+            f"{_fmt_sec(_r['TheoreticalBest'])}</td>"
+            f"<td style='padding:7px 10px; opacity:0.6;'>{_gap_str}</td>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{_d_col};'>{_d_str}</td>"
+            f"</tr>"
+        )
+
+    _ideal_tbl = f"""
+    <div style='background:var(--secondary-background-color);
+                border:1px solid rgba(128,128,128,0.15);
+                border-radius:12px; padding:16px 20px; overflow-x:auto;'>
+      <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+        <thead>
+          <tr style='border-bottom:1px solid rgba(128,128,128,0.2);
+                     font-size:11px; opacity:0.55; text-transform:uppercase;
+                     letter-spacing:0.5px;'>
+            <th style='padding:5px 10px; text-align:left;'>Pos</th>
+            <th style='padding:5px 10px; text-align:left;'>Driver</th>
+            <th style='padding:5px 10px; text-align:left;'>Best S1</th>
+            <th style='padding:5px 10px; text-align:left;'>Best S2</th>
+            <th style='padding:5px 10px; text-align:left;'>Best S3</th>
+            <th style='padding:5px 10px; text-align:left;'>Theoretical Best</th>
+            <th style='padding:5px 10px; text-align:left;'>Gap to Pole</th>
+            <th style='padding:5px 10px; text-align:left;'>Time on Table</th>
+          </tr>
+        </thead>
+        <tbody>{_tbl_rows}</tbody>
+      </table>
+    </div>
+    """
+    st.markdown(_ideal_tbl, unsafe_allow_html=True)
+
+
+
 # ── Gap to Leader ─────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
 
