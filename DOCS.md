@@ -137,6 +137,7 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_stints(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
+| `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
@@ -366,6 +367,8 @@ Speed Delta             ← Matplotlib fill-between (compare mode only)
         │
 _render_leaderboard()   ← Fastest Laps Leaderboard (HTML table)
         │
+_build_ideal_lap()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver, delta cards + full table
+        │
 Gap to Leader           ← Plotly line chart (all drivers)
         │
 Race Position           ← Plotly line chart — all drivers faded, selected highlighted (_build_position_data)
@@ -392,6 +395,7 @@ Each chart section follows the same pattern:
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |
+| Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | inline | `sess.laps` S1/S2/S3 min per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | inline | `sess.laps` cumulative time |
 | Race Position | Plotly | `_build_position_data` | inline | `sess.laps["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | inline | `lap.get_car_data()` |
@@ -655,6 +659,8 @@ Run this after any significant change:
 - [ ] Telemetry chart renders all 6 channels
 - [ ] Export CSV button downloads a valid file
 - [ ] Fastest Laps Leaderboard shows all drivers
+- [ ] Ideal Lap table renders with correct S1/S2/S3 and theoretical times
+- [ ] Delta card shows green (≤0.05s) or red (>0.05s) colour correctly
 - [ ] Gap to Leader chart renders
 - [ ] Race Position chart renders (Race/Sprint sessions only)
 - [ ] Track Map renders with speed colours
@@ -671,7 +677,8 @@ Items agreed by the project owner as desirable but not yet implemented:
 |---|---|---|
 | ~~High~~ | ~~**Session info header**~~ | ✅ **Done** — `_session_info_header()` renders circuit, flag, round, session type + icon, and date in a team-colour-accented banner above Driver Selection. |
 | ~~High~~ | ~~**Race position chart**~~ | ✅ **Done** — `_build_position_data()` reads `sess.laps["Position"]`; all drivers shown as faint grey lines, selected driver(s) overlaid in team colour. Y-axis inverted (P1 at top). Gracefully hidden on non-race sessions. |
-| Medium | **Pit stop summary table** | Filter `laps["PitOutTime"].notna()` per driver to get pit entry laps; compute stop duration from timing data |
+| ~~Medium~~ | ~~**Pit stop summary table**~~ | ✅ **Done** — `_build_pit_stops()` reads `PitInTime`/`PitOutTime`; renders stop #, lap, duration, From/To compound per driver. |
+| ~~Low~~ | ~~**Ideal Lap vs Actual Lap**~~ | ✅ **Done** — `_build_ideal_lap()` finds best S1+S2+S3 across all laps per driver. Per-driver delta card shows time left on table in red/green. Full-field ranked table ordered by TheoreticalBest. Gracefully hidden when sector data absent. |
 | Medium | **Sector mini-map colouring** | Divide `Distance` into S1/S2/S3 zones; colour track map segments Green (d1 faster) / Purple (d2 faster) in comparison mode |
 | Medium | **Compound filter on lap history** | `st.multiselect` to show/hide compounds on `_lap_history_fig`; filter `laps[laps["Compound"].isin(selected)]` |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
