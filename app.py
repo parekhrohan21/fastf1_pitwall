@@ -1505,17 +1505,47 @@ def _lap_history_fig(drivers_data: list, highlight_laps: list) -> go.Figure:
     return fig
 
 
-_hist_pairs = [(driver1, colour1, _build_lap_history(driver1, sess_key))]
+_hist_pairs = [(driver1, colour1, _build_lap_history(driver1, sess_key, _all_laps))]
 _hist_laps  = [lap1]
 if compare and driver2:
-    _hist_pairs.append((driver2, colour2, _build_lap_history(driver2, sess_key)))
+    _hist_pairs.append((driver2, colour2, _build_lap_history(driver2, sess_key, _all_laps)))
     _hist_laps.append(lap2)
 
 _all_none = all(p[2] is None or p[2].empty for p in _hist_pairs)
 if _all_none:
     st.info("Lap time history not available for this session.")
 else:
-    st.plotly_chart(_lap_history_fig(_hist_pairs, _hist_laps), width="stretch")
+    # ── Compound filter ───────────────────────────────────────────────────────
+    _all_compounds = sorted({
+        str(c).upper()
+        for _, _, _ldf in _hist_pairs if _ldf is not None and not _ldf.empty
+        for c in _ldf["Compound"].dropna().unique()
+        if str(c).upper() not in ("NAN", "NONE", "")
+    })
+    if _all_compounds:
+        _selected_compounds = st.multiselect(
+            "Filter by compound",
+            options=_all_compounds,
+            default=_all_compounds,
+            format_func=lambda c: COMPOUND_COLOURS.get(c, {}).get("letter", c[0]) + f"  {c.title()}",
+            key="lap_hist_compound_filter",
+            label_visibility="collapsed",
+        )
+    else:
+        _selected_compounds = _all_compounds
+
+    # Apply compound filter to each driver's laps before plotting
+    if _selected_compounds:
+        _hist_pairs_filtered = [
+            (drv, col,
+             ldf[ldf["Compound"].str.upper().isin(_selected_compounds)].copy()
+             if ldf is not None else None)
+            for drv, col, ldf in _hist_pairs
+        ]
+    else:
+        _hist_pairs_filtered = _hist_pairs
+
+    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps), width="stretch")
 
 # ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
 st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
