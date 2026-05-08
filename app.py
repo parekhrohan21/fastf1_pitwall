@@ -2059,7 +2059,8 @@ with st.expander("⬇️  Export Telemetry Data", expanded=False):
     st.markdown(
         "<div style='font-size:12px; opacity:0.65; margin-bottom:10px;'>"
         "Download the raw telemetry for the selected lap(s) as a CSV file. "
-        "Includes Distance, Speed, Throttle, Brake, RPM, Gear, DRS, and lap metadata."
+        "Includes Distance, Speed, Throttle, Brake, RPM, Gear, DRS, "
+        "Sector 1/2/3 times, and lap metadata."
         "</div>",
         unsafe_allow_html=True,
     )
@@ -2080,6 +2081,18 @@ with st.expander("⬇️  Export Telemetry Data", expanded=False):
         df.insert(1, "LapNumber", int(lap_obj.get("LapNumber", 0)) if lap_obj is not None else "")
         df.insert(2, "LapTime",   format_laptime(lap_obj.get("LapTime")) if lap_obj is not None else "")
         df.insert(3, "Compound",  str(lap_obj.get("Compound", "?")).title() if lap_obj is not None else "")
+        # Sector times — formatted as seconds (3 dp) for readability
+        for _scol, _slabel in [
+            ("Sector1Time", "Sector1Time_s"),
+            ("Sector2Time", "Sector2Time_s"),
+            ("Sector3Time", "Sector3Time_s"),
+        ]:
+            _sval = lap_obj.get(_scol) if lap_obj is not None else None
+            try:
+                _ssec = round(_sval.total_seconds(), 3) if _sval is not None and pd.notna(_sval) else ""
+            except Exception:
+                _ssec = ""
+            df.insert(4, _slabel, _ssec)
         return df.to_csv(index=False).encode("utf-8")
 
     # ── Driver 1 download
