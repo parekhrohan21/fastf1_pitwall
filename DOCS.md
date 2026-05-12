@@ -359,6 +359,8 @@ _fuel_pace_fig()        ← Fuel-Adjusted Pace (Plotly, dual traces)
         │
 _stint_fig()            ← Tyre Stint Timeline (Plotly Gantt bars)
         │
+_render_pit_stops()     ← Pit Stop Summary (HTML table)
+        │
 build_chart()           ← 6-channel Telemetry (Matplotlib)
         │
 _build_export_csv()     ← Export panel (st.expander + st.download_button)
@@ -392,6 +394,7 @@ Each chart section follows the same pattern:
 | Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
+| Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_stops` | `PitInTime`, `PitOutTime` |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |

@@ -63,18 +63,19 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 1029–1058 | Driver name labels | `_build_driver_labels`, `_fmt_driver` — maps raw numbers to display names |
 | 1059–1165 | Session Info Header | `_session_info_header()` — circuit, country flag, round, session type + icon, event date |
 | 1166–1200 | Driver & lap controls | `all_drivers`, `driver1/2` selectboxes with `format_func=_fmt_driver`, `lap_selector()` |
-| 1201–end+100 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
-| 1272–1404 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
-| 1405–1577 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, stat cards |
-| 1578–1700 | Tyre Stint Timeline | `_build_stints`, `_stint_fig` |
-| 1701–1811 | Telemetry charts | Matplotlib overlapping / separate chart via `build_chart` |
-| 1812–1870 | Export Telemetry | CSV download via `_build_export_csv` + `st.download_button` |
-| 1871–1901 | Speed Delta | Matplotlib fill-between chart (compare mode only) |
-| 1902–2005 | Fastest Laps Leaderboard | `_build_leaderboard`, `_render_leaderboard` (HTML table) |
-| 2006–2215 | Ideal Lap vs Actual Lap | `_build_ideal_lap` — best S1+S2+S3, delta cards per selected driver, full-field ranked table |
-| 2216–2355 | Gap to Leader | `_build_gap_data`, Plotly line chart |
-| 2149–2355 | Race Position Chart | `_build_position_data` — all drivers faded, selected highlighted in team colour, Y-axis inverted |
-| 2356–end | Track Map & Race Replay | Plotly speed map, animated race replay with Play/Pause |
+| 1229–1389 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
+| 1390–1554 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
+| 1555–1728 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, stat cards |
+| 1729–1846 | Tyre Stint Timeline | `_build_stints`, `_stint_fig` |
+| 1847–2024 | Pit Stop Summary | HTML table via `_build_pit_stops` and `_render_pit_stops` |
+| 2025–2061 | Telemetry charts | Matplotlib overlapping / separate chart via `build_chart` |
+| 2062–2133 | Export Telemetry | CSV download via `_build_export_csv` + `st.download_button` |
+| 2134–2164 | Speed Delta | Matplotlib fill-between chart (compare mode only) |
+| 2165–2264 | Fastest Laps Leaderboard | `_build_leaderboard`, `_render_leaderboard` (HTML table) |
+| 2265–2465 | Ideal Lap vs Actual Lap | `_build_ideal_lap` — best S1+S2+S3, delta cards per selected driver, full-field ranked table |
+| 2466–2609 | Gap to Leader | `_build_gap_data`, Plotly line chart |
+| 2610–2716 | Race Position Chart | `_build_position_data` — all drivers faded, selected highlighted in team colour, Y-axis inverted |
+| 2717–end | Track Map & Race Replay | Plotly speed map, animated race replay with Play/Pause |
 
 ---
 
