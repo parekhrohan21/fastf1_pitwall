@@ -1053,7 +1053,10 @@ except Exception:
 # Extracting here (outside @st.cache_data functions) fixes the cache isolation
 # bug: builders now receive the DataFrame as an argument so @st.cache_data can
 # hash it correctly rather than reading from st.session_state internally.
-_all_laps: pd.DataFrame = sess.laps.copy()
+# Cast to plain pd.DataFrame so @st.cache_data can hash it.
+# fastf1.core.Laps is a subclass with custom internal state that Streamlit's
+# hasher cannot serialise, causing UnhashableParamError.
+_all_laps: pd.DataFrame = pd.DataFrame(sess.laps.copy())
 
 # ── Driver name labels (built once per session) ───────────────────────────────
 _drv_labels: dict = _build_driver_labels(sess)
@@ -1392,7 +1395,9 @@ st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_ht
 def _build_lap_history(driver: str, sess_k: str, laps_df: pd.DataFrame):
     """Return cleaned lap DataFrame for a single driver."""
     try:
-        laps = laps_df.pick_drivers(driver).copy()
+        # laps_df is a plain pd.DataFrame (not fastf1.core.Laps), so we
+        # filter by the Driver column instead of using .pick_drivers().
+        laps = laps_df[laps_df["Driver"] == driver].copy()
         laps = laps.dropna(subset=["LapTime", "LapNumber"])
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
         # filter out obvious outliers (safety car laps, pit laps > 3× median)
@@ -1580,7 +1585,7 @@ def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float,
     → normalises all laps to empty-tank pace (equivalent to a flying Q-lap).
     """
     try:
-        laps = laps_df.pick_drivers(driver).copy()
+        laps = laps_df[laps_df["Driver"] == driver].copy()
         laps = laps.dropna(subset=["LapTime", "LapNumber"])
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
 
@@ -1731,7 +1736,7 @@ st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow
 def _build_stints(driver: str, sess_k: str, laps_df: pd.DataFrame):
     """Return a list of stint dicts: {compound, start_lap, end_lap, laps, fresh}."""
     try:
-        laps = laps_df.pick_drivers(driver).copy()
+        laps = laps_df[laps_df["Driver"] == driver].copy()
         laps = laps.dropna(subset=["LapNumber"]).sort_values("LapNumber")
         stints, current = [], None
         for _, row in laps.iterrows():
@@ -1847,7 +1852,7 @@ st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_ht
 def _build_pit_stops(driver: str, sess_k: str, laps_df: pd.DataFrame) -> list[dict] | None:
     """Return a list of pit stop dicts for one driver: lap, duration_s, old_cmp, new_cmp."""
     try:
-        laps = laps_df.pick_drivers(driver).copy()
+        laps = laps_df[laps_df["Driver"] == driver].copy()
         laps = laps.sort_values("LapNumber").reset_index(drop=True)
 
         stops = []
