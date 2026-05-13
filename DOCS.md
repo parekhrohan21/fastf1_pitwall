@@ -353,7 +353,7 @@ _session_info_header()  ← Session banner (circuit, country, round, session typ
         │
 render_summary()        ← Driver banner, metrics, tyre, weather
         │
-_lap_history_fig()      ← Lap Time History (Plotly)
+_lap_history_fig()      ← Lap Time History (Plotly) + compound multiselect filter
         │
 _fuel_pace_fig()        ← Fuel-Adjusted Pace (Plotly, dual traces)
         │
@@ -363,7 +363,7 @@ _render_pit_stops()     ← Pit Stop Summary (HTML table)
         │
 build_chart()           ← 6-channel Telemetry (Matplotlib)
         │
-_build_export_csv()     ← Export panel (st.expander + st.download_button)
+_build_export_csv()     ← Export panel — Distance, Speed, Throttle, Brake, RPM, Gear, DRS, Sector1/2/3 times, lap metadata
         │
 Speed Delta             ← Matplotlib fill-between (compare mode only)
         │
@@ -391,11 +391,12 @@ Each chart section follows the same pattern:
 
 | Chart | Library | Builder function | Figure function | Key data source |
 |---|---|---|---|---|
-| Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` |
+| Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_stops` | `PitInTime`, `PitOutTime` |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
+| Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | inline | `sess.laps` S1/S2/S3 min per driver |
@@ -657,10 +658,11 @@ Run this after any significant change:
 - [ ] Driver 1 selectbox shows formatted names (`NOR · Norris`)
 - [ ] Driver banner shows headshot, team logo, and metrics
 - [ ] Lap Time History chart renders with compound markers
+- [ ] Compound multiselect filter shows/hides laps correctly
 - [ ] Fuel-Adjusted Pace slider updates the chart
 - [ ] Tyre Stint Timeline shows coloured bars
 - [ ] Telemetry chart renders all 6 channels
-- [ ] Export CSV button downloads a valid file
+- [ ] Export CSV button downloads a valid file with Sector1/2/3 columns
 - [ ] Fastest Laps Leaderboard shows all drivers
 - [ ] Ideal Lap table renders with correct S1/S2/S3 and theoretical times
 - [ ] Delta card shows green (≤0.05s) or red (>0.05s) colour correctly
@@ -683,7 +685,8 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Pit stop summary table**~~ | ✅ **Done** — `_build_pit_stops()` reads `PitInTime`/`PitOutTime`; renders stop #, lap, duration, From/To compound per driver. |
 | ~~Low~~ | ~~**Ideal Lap vs Actual Lap**~~ | ✅ **Done** — `_build_ideal_lap()` finds best S1+S2+S3 across all laps per driver. Per-driver delta card shows time left on table in red/green. Full-field ranked table ordered by TheoreticalBest. Gracefully hidden when sector data absent. |
 | Medium | **Sector mini-map colouring** | Divide `Distance` into S1/S2/S3 zones; colour track map segments Green (d1 faster) / Purple (d2 faster) in comparison mode |
-| Medium | **Compound filter on lap history** | `st.multiselect` to show/hide compounds on `_lap_history_fig`; filter `laps[laps["Compound"].isin(selected)]` |
+| ~~Medium~~ | ~~**Compound filter on lap history**~~ | ✅ **Done** — `st.multiselect` above `_lap_history_fig` filters by compound. Options derived live from session data. All compounds selected by default; uses `COMPOUND_COLOURS` letter badges in labels. |
+| ~~Minor~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | Low | **Fuel-corrected qualifying sim** | Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |

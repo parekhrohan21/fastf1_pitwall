@@ -69,7 +69,7 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 1729–1846 | Tyre Stint Timeline | `_build_stints`, `_stint_fig` |
 | 1847–2024 | Pit Stop Summary | HTML table via `_build_pit_stops` and `_render_pit_stops` |
 | 2025–2061 | Telemetry charts | Matplotlib overlapping / separate chart via `build_chart` |
-| 2062–2133 | Export Telemetry | CSV download via `_build_export_csv` + `st.download_button` |
+| 2062–2133 | Export Telemetry | CSV download via `_build_export_csv` — includes Distance, Speed, Throttle, Brake, RPM, Gear, DRS, Sector1/2/3 times (seconds), lap metadata |
 | 2134–2164 | Speed Delta | Matplotlib fill-between chart (compare mode only) |
 | 2165–2264 | Fastest Laps Leaderboard | `_build_leaderboard`, `_render_leaderboard` (HTML table) |
 | 2265–2465 | Ideal Lap vs Actual Lap | `_build_ideal_lap` — best S1+S2+S3, delta cards per selected driver, full-field ranked table |
