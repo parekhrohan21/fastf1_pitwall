@@ -186,7 +186,7 @@ The app is healthy when:
 | **Comments** | Section headers with `# ── Name ──────` (80-char line) |
 | **`plt.close()`** | Always call `plt.close(fig)` immediately after `st.pyplot(fig)` |
 | **Error handling** | Wrap FastF1 data access in `try/except Exception`; never let a chart crash the whole page |
-| **`_all_laps` pattern** | Never access `st.session_state["session"].laps` inside a `@st.cache_data` function. Extract `_all_laps = sess.laps.copy()` outside and pass as `laps_df: pd.DataFrame` argument |
+| **`_all_laps` pattern** | Extract as `_all_laps: pd.DataFrame = pd.DataFrame(sess.laps.copy())`. The `pd.DataFrame()` cast is **required** — `fastf1.core.Laps` is a subclass that raises `UnhashableParamError` in `@st.cache_data`. Inside builders, filter by `laps_df[laps_df["Driver"] == driver].copy()` — **never** `.pick_drivers()` on a plain DataFrame |
 
 ---
 
@@ -215,7 +215,8 @@ When upgrading any dependency:
 |---|---|
 | Very recent sessions | FastF1 may not have timing data for sessions less than ~24h old. Show a clear `st.error` message. |
 | Safety Car / Red Flag laps | Filtered out of Lap Time History and Fuel-Adjusted Pace using `> 2.5× median` outlier removal. |
-| ~~`@st.cache_data` + `session_state`~~ | ✅ **Resolved** — All 7 data-builder functions now receive `laps_df` as an explicit parameter. `_all_laps = sess.laps.copy()` is extracted once after session load. No cached function accesses `st.session_state["session"]` internally. |
+| ~~`@st.cache_data` + `session_state`~~ | ✅ **Resolved** — All 7 data-builder functions now receive `laps_df` as an explicit parameter. `_all_laps` extracted once after session load. No cached function accesses `st.session_state["session"]` internally. |
+| `fastf1.core.Laps` hashing | `sess.laps` is a pandas subclass with custom state. Streamlit's `@st.cache_data` hasher raises `UnhashableParamError` on it. Always cast: `pd.DataFrame(sess.laps.copy())`. Inside builders use `laps_df[laps_df["Driver"] == driver]` not `.pick_drivers()`. |
 | Headshot availability | Older sessions (pre-2021) may not have `HeadshotUrl` in FastF1. The `onerror` JS attribute hides broken images silently. |
 | Theme toggle first-click | Due to Streamlit's execution order, the first theme toggle click may not visually update the top bar. A second click always works. |
 

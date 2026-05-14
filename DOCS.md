@@ -145,7 +145,24 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 `sess_key` is a string formatted as `"{year}_{gp}_{session_type}"` (e.g. `"2025_British Grand Prix_R"`).
 
 **`_all_laps` pattern (cache isolation fix):**
-A single `_all_laps = sess.laps.copy()` is extracted immediately after session validation. All 7 data-builder functions receive this DataFrame as `laps_df` — Streamlit hashes it to correctly invalidate the cache when session data changes. No builder function accesses `st.session_state["session"]` internally anymore.
+`_all_laps` is extracted immediately after session validation and passed to every data-builder as `laps_df: pd.DataFrame`.
+
+**Critical implementation detail — always cast to plain `pd.DataFrame`:**
+```python
+_all_laps: pd.DataFrame = pd.DataFrame(sess.laps.copy())
+```
+`sess.laps` is a `fastf1.core.Laps` object (a pandas subclass with custom internal state). Streamlit's `@st.cache_data` hasher cannot serialise it and raises `UnhashableParamError`. Wrapping in `pd.DataFrame()` strips the subclass identity and produces a hashable, standard DataFrame.
+
+**Consequence — no `.pick_drivers()` inside builders:**
+Because `laps_df` is now a plain `pd.DataFrame`, the FastF1 `.pick_drivers(driver)` method is unavailable. All 4 per-driver builders filter using standard pandas:
+```python
+# ✅ correct — plain DataFrame filter
+laps = laps_df[laps_df["Driver"] == driver].copy()
+
+# ❌ wrong — pick_drivers() is a fastf1.core.Laps method only
+laps = laps_df.pick_drivers(driver)
+```
+Functions affected: `_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`.
 
 ### Layer 3 — `st.session_state` for telemetry
 ```python
