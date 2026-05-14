@@ -863,7 +863,7 @@ def load_schedule(year: int) -> pd.DataFrame:
     return fastf1.get_event_schedule(year, include_testing=False)
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_resource(show_spinner=False, ttl=3600)
 def load_session(year: int, gp: str, session_type: str = "R"):
     sess = fastf1.get_session(year, gp, session_type)
     sess.load(telemetry=True, laps=True, weather=True, messages=True)
