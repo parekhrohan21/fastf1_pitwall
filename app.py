@@ -1387,6 +1387,85 @@ if compare and lap2 is not None:
 else:
     render_summary(lap1, driver1, colour1)
 
+# ── Session Statistics ────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Session Statistics</div>", unsafe_allow_html=True)
+
+def render_session_stats(driver: str, colour: str):
+    try:
+        drv_info = sess.get_driver(driver)
+        grid = drv_info.get("GridPosition", "N/A")
+        pos = drv_info.get("Position", "N/A")
+        status = str(drv_info.get("Status", "N/A"))
+        try:
+            grid_str = f"P{int(grid)}" if pd.notna(grid) else "N/A"
+        except Exception:
+            grid_str = str(grid)
+        try:
+            pos_str = f"P{int(pos)}" if pd.notna(pos) else "N/A"
+        except Exception:
+            pos_str = str(pos)
+
+        dlaps = _all_laps[_all_laps["Driver"] == driver].copy()
+        
+        # Best Lap
+        if not dlaps.empty and "LapTime" in dlaps.columns:
+            best_lap = format_laptime(dlaps["LapTime"].min())
+        else:
+            best_lap = "N/A"
+            
+        # Top Speed
+        if not dlaps.empty and "SpeedST" in dlaps.columns:
+            max_speed = dlaps["SpeedST"].max()
+            speed_str = f"{max_speed:.0f} km/h" if pd.notna(max_speed) else "N/A"
+        else:
+            speed_str = "N/A"
+            
+        # Avg Pace (Median of valid laps)
+        if not dlaps.empty and "LapTime" in dlaps.columns:
+            valid_laps = dlaps.dropna(subset=["LapTime"])
+            if not valid_laps.empty:
+                min_t = valid_laps["LapTime"].dt.total_seconds().min()
+                valid_secs = valid_laps["LapTime"].dt.total_seconds()
+                valid_secs = valid_secs[valid_secs < min_t * 1.07]
+                avg_pace = pd.to_timedelta(valid_secs.median(), unit="s")
+                avg_pace_str = format_laptime(avg_pace)
+            else:
+                avg_pace_str = "N/A"
+        else:
+            avg_pace_str = "N/A"
+
+        c1, c2, c3 = st.columns(3)
+        c4, c5, c6 = st.columns(3)
+
+        def mc(col_obj, label, value):
+            col_obj.markdown(
+                f"<div class='metric-card' style='--accent:{colour}; margin-bottom: 14px;'>"
+                f"<div class='metric-label'>{label}</div>"
+                f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{value}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        mc(c1, "Grid Position", grid_str)
+        mc(c2, "Finish Position", pos_str)
+        mc(c3, "Status", status)
+        mc(c4, "Best Lap", best_lap)
+        mc(c5, "Race Pace (Avg)", avg_pace_str)
+        mc(c6, "Top Speed (ST)", speed_str)
+    except Exception as e:
+        st.warning(f"Session data unavailable for {driver}.")
+
+if compare and driver2:
+    s1, s2 = st.columns(2)
+    with s1:
+        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour1}; margin-bottom: 14px;'>{_fmt_driver(driver1)}</div>", unsafe_allow_html=True)
+        render_session_stats(driver1, colour1)
+    with s2:
+        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour2}; margin-bottom: 14px;'>{_fmt_driver(driver2)}</div>", unsafe_allow_html=True)
+        render_session_stats(driver2, colour2)
+else:
+    render_session_stats(driver1, colour1)
+
 # ── Lap Time History ──────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_html=True)
 
