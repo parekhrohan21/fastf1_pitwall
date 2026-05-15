@@ -777,11 +777,30 @@ else:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 TEAM_COLOURS = {
-    "Red Bull Racing": "#3671C6", "Ferrari": "#E8002D",
-    "Mercedes": "#27F4D2", "McLaren": "#FF8000",
-    "Aston Martin": "#229971", "Alpine": "#FF87BC",
-    "Williams": "#64C4FF", "RB": "#6692FF",
-    "Kick Sauber": "#52E252", "Haas F1 Team": "#B6BABD",
+    # ── 2024–2025 active grid ─────────────────────────────────────────────────
+    "Red Bull Racing": "#3671C6",
+    "Ferrari":         "#E8002D",
+    "Mercedes":        "#27F4D2",
+    "McLaren":         "#FF8000",
+    "Aston Martin":    "#229971",
+    "Alpine":          "#FF87BC",
+    "Williams":        "#64C4FF",
+    "RB":              "#6692FF",
+    "Kick Sauber":     "#52E252",
+    "Haas F1 Team":    "#B6BABD",
+
+    # ── 2020–2023 predecessor names ───────────────────────────────────────────
+    "AlphaTauri":      "#4E7C9B",  # navy blue (2020-2023)
+    "Alfa Romeo":      "#B12039",  # dark crimson (2018-2023)
+    "Alfa Romeo Racing": "#B12039",
+    "Racing Point":    "#F596C8",  # bubblegum pink (2019-2020)
+
+    # ── 2018–2019 era teams ───────────────────────────────────────────────────
+    "Renault":         "#FFF500",  # bright Renault yellow
+    "Force India":     "#F596C8",  # magenta / pink (same livery family as Racing Point)
+    "Toro Rosso":      "#469BFF",  # powder blue (pre-AlphaTauri)
+    "Haas":            "#B6BABD",  # same grey as "Haas F1 Team"
+    "Sauber":          "#B12039",  # Sauber red (pre-Alfa Romeo branding)
 }
 
 # Single source of truth for compound colours.
