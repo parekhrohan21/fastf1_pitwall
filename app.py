@@ -778,30 +778,51 @@ else:
 # ── Constants ─────────────────────────────────────────────────────────────────
 TEAM_COLOURS = {
     # ── 2024–2025 active grid ─────────────────────────────────────────────────
-    "Red Bull Racing": "#3671C6",
-    "Ferrari":         "#E8002D",
-    "Mercedes":        "#27F4D2",
-    "McLaren":         "#FF8000",
-    "Aston Martin":    "#229971",
-    "Alpine":          "#FF87BC",
-    "Williams":        "#64C4FF",
-    "RB":              "#6692FF",
-    "Kick Sauber":     "#52E252",
-    "Haas F1 Team":    "#B6BABD",
+    "Red Bull Racing":   "#3671C6",   # RB blue
+    "Ferrari":           "#E8002D",   # Scuderia red
+    "Mercedes":          "#27F4D2",   # silver-teal
+    "McLaren":           "#FF8000",   # papaya orange
+    "Aston Martin":      "#229971",   # British racing green
+    "Alpine":            "#FF87BC",   # French blue/pink
+    "Williams":          "#64C4FF",   # navy-sky blue
+    "RB":                "#6692FF",   # 2024 AlphaTauri rebrand (VCARB)
+    "Kick Sauber":       "#52E252",   # lime green (2024 Sauber rebrand)
+    "Haas F1 Team":      "#B6BABD",   # silver-grey
 
     # ── 2020–2023 predecessor names ───────────────────────────────────────────
-    "AlphaTauri":      "#4E7C9B",  # navy blue (2020-2023)
-    "Alfa Romeo":      "#B12039",  # dark crimson (2018-2023)
-    "Alfa Romeo Racing": "#B12039",
-    "Racing Point":    "#F596C8",  # bubblegum pink (2019-2020)
+    "AlphaTauri":        "#4E7C9B",   # navy blue (2020–2023)
+    "Alfa Romeo":        "#B12039",   # dark crimson (2019–2023)
+    "Alfa Romeo Racing": "#B12039",   # alternate FastF1 name (2019–2020)
+    "Racing Point":      "#F596C8",   # bubblegum pink (2019–2020)
 
-    # ── 2018–2019 era teams ───────────────────────────────────────────────────
-    "Renault":         "#FFF500",  # bright Renault yellow
-    "Force India":     "#F596C8",  # magenta / pink (same livery family as Racing Point)
-    "Toro Rosso":      "#469BFF",  # powder blue (pre-AlphaTauri)
-    "Haas":            "#B6BABD",  # same grey as "Haas F1 Team"
-    "Sauber":          "#B12039",  # Sauber red (pre-Alfa Romeo branding)
+    # ── 2018–2019 era ─────────────────────────────────────────────────────────
+    "Renault":           "#FFF500",   # bright Renault yellow (2016–2020)
+    "Force India":       "#F596C8",   # magenta pink (2008–2018)
+    "Toro Rosso":        "#469BFF",   # powder blue (2006–2019)
+    "Haas":              "#B6BABD",   # alternate short name for Haas
+    "Sauber":            "#B12039",   # Sauber red (2010–2018 pre-Alfa livery)
+
+    # ── 2015–2017 era ─────────────────────────────────────────────────────────
+    "Manor Racing":      "#E8002D",   # inherited red from Marussia/Ferrari customer
+    "Manor Marussia":    "#E8002D",   # 2015 transition name
+    "Lotus F1 Team":     "#FFB800",   # black & gold (2012–2015)
+    "Lotus":             "#FFB800",   # short-form used by FastF1
+    "Red Bull":          "#3671C6",   # alternate short name FastF1 sometimes returns
+
+    # ── 2014–2016 era ─────────────────────────────────────────────────────────
+    "Marussia":          "#AE1B28",   # deep maroon red (2012–2014)
+    "Caterham":          "#00A550",   # Caterham green (2012–2014)
+    "HRT":               "#C0C0C0",   # silver-grey (Hispania Racing, 2010–2012)
+
+    # ── Fallback aliases (FastF1 occasionally uses shortened names) ────────────
+    "Mercedes AMG":      "#27F4D2",
+    "Red Bull Racing Honda": "#3671C6",
+    "Scuderia Ferrari":  "#E8002D",
+    "McLaren Honda":     "#FF8000",
+    "McLaren Renault":   "#FF8000",
+    "Racing Bulls":      "#6692FF",   # 2024 mid-season rename of VCARB / RB
 }
+
 
 # Single source of truth for compound colours.
 # Keys are UPPER-CASE compound names.
