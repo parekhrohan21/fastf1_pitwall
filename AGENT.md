@@ -222,6 +222,78 @@ When upgrading any dependency:
 
 ---
 
+## GitHub Workflow
+
+This section defines the standard git procedure for all changes to this repository. Follow these steps on every change — no exceptions.
+
+### Step-by-step procedure
+
+```
+1. Pull latest changes from remote
+   git pull
+
+2. Make your code changes in app.py (and docs if needed)
+
+3. Syntax-check before staging
+   python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"
+
+4. Stage all changes
+   git add .
+
+5. Commit with a descriptive message
+   git commit -m "<type>: <short summary>"
+
+6. Push to remote
+   git push
+```
+
+---
+
+### Commit message convention
+
+| Prefix | When to use | Example |
+|---|---|---|
+| `feat:` | New user-visible feature added | `feat: add Ideal Lap vs Actual Lap section` |
+| `fix:` | Bug or runtime error corrected | `fix: _all_laps cast to plain DataFrame to avoid UnhashableParamError` |
+| `refactor:` | Internal code restructure, no behaviour change | `refactor: fix cache isolation — pass laps_df to all builder functions` |
+| `docs:` | Documentation-only change | `docs: update DOCS.md caching table and AGENT.md roadmap` |
+| `chore:` | Dependency update, config tweak | `chore: pin fastf1==3.4.1 in requirements.txt` |
+| `style:` | CSS or UI-only visual change | `style: update leaderboard table row highlight colour` |
+
+Keep the summary under 72 characters. Add a body after a blank line for complex changes.
+
+---
+
+### What must be committed together
+
+| Change made | Must also commit |
+|---|---|
+| New feature in `app.py` | `README.md` (feature bullet) + `DOCS.md` (pipeline, chart inventory, roadmap) + `AGENT.md` (architecture map if lines shifted) |
+| Bug fix in `app.py` | `DOCS.md` and `AGENT.md` if the fix changes documented behaviour or known limitations |
+| Architecture change (e.g. caching pattern) | `DOCS.md` §5 caching section + `AGENT.md` coding standards + known limitations |
+| `requirements.txt` update | Rebuild Docker image locally; note version change in commit message |
+| Docs-only update | No code commit required |
+
+> **Never commit `cache/`** — it is gitignored. Never force-add it.
+
+---
+
+### Syncing with remote (daily start-of-session)
+
+Always pull before starting any work session:
+```bash
+git pull
+```
+If there are conflicts in `app.py`, resolve manually. The file is a linear script — conflicts are usually in disjoint sections and can be resolved without context loss.
+
+---
+
+### Branch policy
+
+This project uses a **single `main` branch**. All changes go directly to `main`. Feature branches are not required unless the project owner explicitly requests one.
+
+---
+
 ## Escalation & Out-of-Scope Rules
 
 The agent must **not** autonomously:
