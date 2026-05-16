@@ -294,6 +294,127 @@ This project uses a **single `main` branch**. All changes go directly to `main`.
 
 ---
 
+### Issues
+
+GitHub Issues track bugs, feature requests, and technical debt items.
+
+**When to raise an issue:**
+
+| Situation | Type | Label |
+|---|---|---|
+| Chart crashes or shows wrong data | Bug report | `bug` |
+| New analytical feature request | Feature request | `enhancement` |
+| FastF1 API deprecation / breaking change | Maintenance | `chore` |
+| Slow load or cache problems | Performance | `performance` |
+| Documentation gap or error | Docs | `documentation` |
+
+**Issue body template:**
+
+```
+## Description
+What is happening / what is needed?
+
+## Steps to reproduce (bugs only)
+1. Load session: [year, GP, session type]
+2. Select driver: [driver number]
+3. Observe: [what went wrong]
+
+## Expected behaviour
+[what should happen]
+
+## Environment
+- Python: 3.11.x  |  Streamlit: x.x.x  |  FastF1: x.x.x  |  OS: macOS / Linux
+```
+
+**Auto-closing via commit message:**
+```
+fix: correct lap outlier filter for sprint sessions
+
+Closes #12
+```
+
+---
+
+### Pull Requests
+
+Opening a PR before merging significant changes creates a reviewable diff and documents intent — recommended even for solo work.
+
+**Open a PR for:**
+- Any change adding more than ~50 lines to `app.py`
+- New sections in the rendering pipeline
+- Architectural changes (caching, state, helper functions)
+- Changes touching more than one file
+
+**Direct push to `main` is acceptable for:**
+- One-line bug fixes
+- Documentation-only changes
+- Trivial copy / wording updates
+
+**PR title** — same format as commit messages:
+```
+feat: add Sector Heatmap section
+fix: resolve UnhashableParamError on fastf1.core.Laps
+docs: sync DOCS.md with Ideal Lap implementation
+```
+
+**PR body template:**
+
+```markdown
+## What changed
+Brief description of what was added / changed / fixed.
+
+## Why
+Motivation or context for the change.
+
+## Files changed
+- `app.py` — [describe changes]
+- `README.md` — [if applicable]
+- `DOCS.md` — [if applicable]
+
+## Testing done
+- [ ] Syntax check passes
+- [ ] App starts without error
+- [ ] Affected section renders correctly
+- [ ] Compare mode tested (if applicable)
+- [ ] Dark mode and light mode verified
+
+## Related issues
+Closes #[issue number]
+```
+
+---
+
+### Code Review
+
+Run this checklist before merging any PR or pushing a significant change directly to `main`:
+
+**Correctness**
+- [ ] No `st.session_state["session"].laps` accessed inside a `@st.cache_data` function
+- [ ] `laps_df` passed as `pd.DataFrame(sess.laps.copy())` — not raw `fastf1.core.Laps`
+- [ ] Driver filtering uses `laps_df[laps_df["Driver"] == driver]` — not `.pick_drivers()`
+- [ ] All new `@st.cache_data` functions include `sess_k: str` in their signature
+- [ ] All new UI showing driver identifiers wraps them in `_fmt_driver(drv)`
+- [ ] No new inline compound colour dicts — `COMPOUND_COLOURS` is the only source of truth
+
+**Code quality**
+- [ ] Type hints on all new functions
+- [ ] One-line docstring on all new `@st.cache_data` and data-builder functions
+- [ ] Section headers follow `# ── Name ────────────────────────────` format
+- [ ] `plt.close(fig)` called immediately after every `st.pyplot(fig)`
+- [ ] All FastF1 data access wrapped in `try/except Exception`
+
+**Documentation**
+- [ ] `README.md` updated if user-visible behaviour changed
+- [ ] `DOCS.md` rendering pipeline updated if a new section was added
+- [ ] `DOCS.md` chart inventory updated if a new chart was added
+- [ ] `AGENT.md` architecture map line ranges updated if sections shifted
+- [ ] `DOCS.md` roadmap item marked ✅ Done if it was implemented
+
+**Syntax**
+- [ ] `python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"` passes
+
+---
+
 ## Escalation & Out-of-Scope Rules
 
 The agent must **not** autonomously:
