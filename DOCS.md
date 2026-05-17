@@ -370,6 +370,8 @@ _session_info_header()  ← Session banner (circuit, country, round, session typ
         │
 render_summary()        ← Driver banner, metrics, tyre, weather
         │
+render_session_stats()  ← Session Statistics (Grid, Finish, Pace, Speed)
+        │
 _lap_history_fig()      ← Lap Time History (Plotly) + compound multiselect filter
         │
 _fuel_pace_fig()        ← Fuel-Adjusted Pace (Plotly, dual traces)
@@ -408,6 +410,7 @@ Each chart section follows the same pattern:
 
 | Chart | Library | Builder function | Figure function | Key data source |
 |---|---|---|---|---|
+| Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `sess.laps` |
 | Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
