@@ -12,6 +12,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **6-Channel Telemetry**: View combined or separate traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS.
 - **Head-to-Head Comparison**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart showing where time is gained/lost.
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays.
+- **Driver Input Track Map**: A dedicated map mode visualizing driver foot pedal telemetry (Green for 100% Throttle, Red for Braking, Yellow for Coasting).
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualizations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
 - **Driver Headshot in Banner**: The driver summary banner automatically fetches and renders the official F1 headshot photo (from FastF1's `HeadshotUrl` field) as a circular portrait with a team-coloured ring border. Falls back silently if the image is unavailable.
