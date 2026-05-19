@@ -2836,7 +2836,7 @@ else:
 # ── Track Map ─────────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
 
-map_tab1, map_tab2 = st.tabs(["🎨  Speed Map", "🎬  Race Replay"])
+map_tab1, map_tab2, map_tab3 = st.tabs(["🎨  Track Map", "🕹️  Driver Inputs", "🎬  Race Replay"])
 
 # ────────────────────────────────────────────────────────────────────────────
 # TAB 1 — Static speed-coloured track map
@@ -2862,16 +2862,58 @@ with map_tab1:
 
         fig = go.Figure()
 
-        # ── Track outline (thick dark grey line)
-        fig.add_trace(go.Scatter(
-            x=tel["X"], y=tel["Y"],
-            mode="lines",
-            line=dict(color="gray", width=16),
-            showlegend=False, hoverinfo="skip",
-        ))
-
-        # ── Driver 2 path (solid team colour, lower opacity)
         if lap2 is not None and driver2:
+            # ── Compare mode: Sector dominance map
+            def get_winner(sec_key):
+                try:
+                    t1 = lap.get(sec_key)
+                    t2 = lap2.get(sec_key)
+                    if pd.isna(t1) or pd.isna(t2):
+                        return "gray"
+                    return colour if t1 < t2 else colour2
+                except Exception:
+                    return "gray"
+
+            c_s1 = get_winner("Sector1Time")
+            c_s2 = get_winner("Sector2Time")
+            c_s3 = get_winner("Sector3Time")
+
+            def get_driver_name(col):
+                if col == colour: return driver
+                if col == colour2: return driver2
+                return "Unknown"
+
+            if "SessionTime" in tel.columns and "Sector1SessionTime" in lap and pd.notna(lap["Sector1SessionTime"]):
+                s1_time = lap["Sector1SessionTime"]
+                s2_time = lap["Sector2SessionTime"]
+                
+                s1_mask = tel["SessionTime"] <= s1_time
+                s2_mask = (tel["SessionTime"] > s1_time) & (tel["SessionTime"] <= s2_time)
+                s3_mask = tel["SessionTime"] > s2_time
+
+                def add_sector(mask, col, name):
+                    if not mask.any(): return
+                    seg = tel[mask]
+                    fastest = get_driver_name(col)
+                    fig.add_trace(go.Scatter(
+                        x=seg["X"], y=seg["Y"],
+                        mode="lines",
+                        line=dict(color=col, width=16),
+                        name=name,
+                        hovertemplate=f"<b>{name}</b><br>Fastest: {fastest}<extra></extra>"
+                    ))
+
+                add_sector(s1_mask, c_s1, "Sector 1")
+                add_sector(s2_mask, c_s2, "Sector 2")
+                add_sector(s3_mask, c_s3, "Sector 3")
+            else:
+                # Fallback to gray if session time missing
+                fig.add_trace(go.Scatter(
+                    x=tel["X"], y=tel["Y"], mode="lines",
+                    line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
+                ))
+
+            # Driver 2 path overlay
             tel2 = _get_telemetry_for_map(lap2, driver2, sess_key)
             if tel2 is not None and needed.issubset(tel2.columns):
                 fig.add_trace(go.Scatter(
@@ -2882,36 +2924,28 @@ with map_tab1:
                     hoverinfo="skip",
                 ))
 
-        # ── Driver 1 speed-coloured scatter
-        fig.add_trace(go.Scatter(
-            x=tel["X"], y=tel["Y"],
-            mode="markers",
-            marker=dict(
-                color=tel["Speed"],
-                colorscale=[
-                    [0.0,  "#1a1aff"],
-                    [0.35, "#00c8ff"],
-                    [0.65, "#00e400"],
-                    [0.85, "#ffd700"],
-                    [1.0,  "#ff2200"],
-                ],
-                size=4,
-                colorbar=dict(
-                    title=dict(text="Speed (km/h)"),
-                    thickness=10, len=0.7,
-                    bgcolor="rgba(0,0,0,0)",
-                    x=1.02,
+        else:
+            # ── Single driver mode: Speed map
+            # Track outline
+            fig.add_trace(go.Scatter(
+                x=tel["X"], y=tel["Y"], mode="lines",
+                line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
+            ))
+
+            # Driver 1 speed-coloured scatter
+            fig.add_trace(go.Scatter(
+                x=tel["X"], y=tel["Y"],
+                mode="markers",
+                marker=dict(
+                    color=tel["Speed"],
+                    colorscale=[[0.0, "#1a1aff"], [0.35, "#00c8ff"], [0.65, "#00e400"], [0.85, "#ffd700"], [1.0, "#ff2200"]],
+                    size=4,
+                    colorbar=dict(title=dict(text="Speed (km/h)"), thickness=10, len=0.7, bgcolor="rgba(0,0,0,0)", x=1.02),
+                    showscale=True,
                 ),
-                showscale=True,
-            ),
-            name=driver,
-            hovertemplate=(
-                f"<b>{driver}</b><br>"
-                "Speed: %{marker.color:.0f} km/h<br>"
-                "X: %{x:.0f}  Y: %{y:.0f}"
-                "<extra></extra>"
-            ),
-        ))
+                name=driver,
+                hovertemplate=f"<b>{driver}</b><br>Speed: %{{marker.color:.0f}} km/h<br>X: %{{x:.0f}}  Y: %{{y:.0f}}<extra></extra>"
+            ))
 
         # ── Start / finish marker
         fig.add_trace(go.Scatter(
@@ -2948,9 +2982,114 @@ with map_tab1:
         st.info("Load a session and select a lap to view the speed map.")
 
 # ────────────────────────────────────────────────────────────────────────────
-# TAB 2 — Animated race replay with all cars
+# TAB 2 — Driver Inputs Map
 # ────────────────────────────────────────────────────────────────────────────
 with map_tab2:
+    def _input_map_fig(lap, driver: str, colour: str):
+        tel = _get_telemetry_for_map(lap, driver, sess_key)
+        if tel is None or tel.empty:
+            return None
+
+        # Need X, Y, Throttle, Brake
+        needed = {"X", "Y", "Throttle", "Brake"}
+        if not needed.issubset(tel.columns):
+            return None
+
+        fig = go.Figure()
+
+        # Track outline
+        fig.add_trace(go.Scatter(
+            x=tel["X"], y=tel["Y"], mode="lines",
+            line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
+        ))
+
+        def get_input_color(row):
+            if row["Brake"] > 0:
+                return "#ff2200"  # Red for braking
+            elif row["Throttle"] >= 99:
+                return "#00e400"  # Green for full throttle
+            else:
+                return "#ffd700"  # Yellow for coasting/modulating
+
+        colors = tel.apply(get_input_color, axis=1)
+
+        fig.add_trace(go.Scatter(
+            x=tel["X"], y=tel["Y"],
+            mode="markers",
+            marker=dict(color=colors, size=4),
+            name=driver,
+            hovertemplate=(
+                f"<b>{driver}</b><br>"
+                "Throttle: %{customdata[0]:.0f}%<br>"
+                "Brake: %{customdata[1]}<br>"
+                "<extra></extra>"
+            ),
+            customdata=np.stack((tel["Throttle"], tel["Brake"]), axis=-1),
+            showlegend=False
+        ))
+
+        # Start / finish marker
+        fig.add_trace(go.Scatter(
+            x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
+            mode="markers",
+            marker=dict(symbol="circle", size=14, color=colour, line=dict(color="white", width=2)),
+            name="Start / Finish", hovertemplate="Start / Finish<extra></extra>",
+            showlegend=False
+        ))
+
+        # Dummy traces for legend
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#00e400", size=10), name="Full Throttle"))
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ff2200", size=10), name="Braking"))
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ffd700", size=10), name="Coasting"))
+
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=True,
+            xaxis=dict(visible=False, scaleanchor="y", scaleratio=1), yaxis=dict(visible=False),
+            height=520, margin=dict(l=0, r=80, t=10, b=10),
+        )
+        return fig
+
+    if lap1 is not None:
+        if compare and driver2:
+            if lap2 is not None:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(
+                        f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
+                        f"color:{colour1};'>{_fmt_driver(driver1)}</div>",
+                        unsafe_allow_html=True
+                    )
+                    input_fig1 = _input_map_fig(lap1, driver1, colour1)
+                    if input_fig1:
+                        st.plotly_chart(input_fig1, width="stretch")
+                    else:
+                        st.info(f"Input telemetry not available for {_fmt_driver(driver1)}.")
+                with col2:
+                    st.markdown(
+                        f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
+                        f"color:{colour2};'>{_fmt_driver(driver2)}</div>",
+                        unsafe_allow_html=True
+                    )
+                    input_fig2 = _input_map_fig(lap2, driver2, colour2)
+                    if input_fig2:
+                        st.plotly_chart(input_fig2, width="stretch")
+                    else:
+                        st.info(f"Input telemetry not available for {_fmt_driver(driver2)}.")
+            else:
+                st.info(f"Please select a valid lap for {_fmt_driver(driver2)} to compare inputs.")
+        else:
+            input_fig = _input_map_fig(lap1, driver1, colour1)
+            if input_fig:
+                st.plotly_chart(input_fig, width="stretch")
+            else:
+                st.info("Input telemetry (Throttle/Brake) not available for this lap.")
+    else:
+        st.info("Load a session and select a lap to view driver inputs.")
+
+# ────────────────────────────────────────────────────────────────────────────
+# TAB 3 — Animated race replay with all cars
+# ────────────────────────────────────────────────────────────────────────────
+with map_tab3:
     replay_key = f"replay_{sess_key}"
     if replay_key not in st.session_state:
         st.session_state[replay_key] = None

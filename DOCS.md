@@ -370,6 +370,8 @@ _session_info_header()  ← Session banner (circuit, country, round, session typ
         │
 render_summary()        ← Driver banner, metrics, tyre, weather
         │
+render_session_stats()  ← Session Statistics (Grid, Finish, Pace, Speed)
+        │
 _lap_history_fig()      ← Lap Time History (Plotly) + compound multiselect filter
         │
 _fuel_pace_fig()        ← Fuel-Adjusted Pace (Plotly, dual traces)
@@ -408,6 +410,7 @@ Each chart section follows the same pattern:
 
 | Chart | Library | Builder function | Figure function | Key data source |
 |---|---|---|---|---|
+| Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `sess.laps` |
 | Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
@@ -419,7 +422,8 @@ Each chart section follows the same pattern:
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | inline | `sess.laps` S1/S2/S3 min per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | inline | `sess.laps` cumulative time |
 | Race Position | Plotly | `_build_position_data` | inline | `sess.laps["Position"]` per driver |
-| Track Speed Map | Plotly | `_get_telemetry_for_map` | inline | `lap.get_car_data()` |
+| Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colors sectors by dominance. |
+| Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colors markers by Throttle/Brake state. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 
 ---
@@ -701,9 +705,10 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Race position chart**~~ | ✅ **Done** — `_build_position_data()` reads `sess.laps["Position"]`; all drivers shown as faint grey lines, selected driver(s) overlaid in team colour. Y-axis inverted (P1 at top). Gracefully hidden on non-race sessions. |
 | ~~Medium~~ | ~~**Pit stop summary table**~~ | ✅ **Done** — `_build_pit_stops()` reads `PitInTime`/`PitOutTime`; renders stop #, lap, duration, From/To compound per driver. |
 | ~~Low~~ | ~~**Ideal Lap vs Actual Lap**~~ | ✅ **Done** — `_build_ideal_lap()` finds best S1+S2+S3 across all laps per driver. Per-driver delta card shows time left on table in red/green. Full-field ranked table ordered by TheoreticalBest. Gracefully hidden when sector data absent. |
-| Medium | **Sector mini-map colouring** | Divide `Distance` into S1/S2/S3 zones; colour track map segments Green (d1 faster) / Purple (d2 faster) in comparison mode |
+| ~~Medium~~ | ~~**Sector mini-map colouring**~~ | ✅ **Done** — Track map converted to Sector Dominance Map in Compare Mode. Track is divided into 3 zones based on `Sector1SessionTime` and `Sector2SessionTime`. Coloured automatically using the team colour of the driver who was fastest in each sector. |
 | ~~Medium~~ | ~~**Compound filter on lap history**~~ | ✅ **Done** — `st.multiselect` above `_lap_history_fig` filters by compound. Options derived live from session data. All compounds selected by default; uses `COMPOUND_COLOURS` letter badges in labels. |
-| ~~Minor~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
+| ~~Low~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
+| ~~Medium~~ | ~~**Driver Input Track Map**~~ | ✅ **Done** — `_input_map_fig()` visualizes throttle/brake/coasting telemetry as colored markers on the track path. Supports side-by-side comparison. |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | Low | **Fuel-corrected qualifying sim** | Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |
