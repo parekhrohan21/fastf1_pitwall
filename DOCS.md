@@ -423,6 +423,7 @@ Each chart section follows the same pattern:
 | Gap to Leader | Plotly | `_build_gap_data` | inline | `sess.laps` cumulative time |
 | Race Position | Plotly | `_build_position_data` | inline | `sess.laps["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | inline | `lap.get_car_data()` |
+| Driver Inputs Map | Plotly | `_get_telemetry_for_map` | inline | `lap.get_car_data()` |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 
 ---

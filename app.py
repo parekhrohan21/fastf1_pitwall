@@ -3050,11 +3050,39 @@ with map_tab2:
         return fig
 
     if lap1 is not None:
-        input_fig = _input_map_fig(lap1, driver1, colour1)
-        if input_fig:
-            st.plotly_chart(input_fig, width="stretch")
+        if compare and driver2:
+            if lap2 is not None:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(
+                        f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
+                        f"color:{colour1};'>{_fmt_driver(driver1)}</div>",
+                        unsafe_allow_html=True
+                    )
+                    input_fig1 = _input_map_fig(lap1, driver1, colour1)
+                    if input_fig1:
+                        st.plotly_chart(input_fig1, width="stretch")
+                    else:
+                        st.info(f"Input telemetry not available for {_fmt_driver(driver1)}.")
+                with col2:
+                    st.markdown(
+                        f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
+                        f"color:{colour2};'>{_fmt_driver(driver2)}</div>",
+                        unsafe_allow_html=True
+                    )
+                    input_fig2 = _input_map_fig(lap2, driver2, colour2)
+                    if input_fig2:
+                        st.plotly_chart(input_fig2, width="stretch")
+                    else:
+                        st.info(f"Input telemetry not available for {_fmt_driver(driver2)}.")
+            else:
+                st.info(f"Please select a valid lap for {_fmt_driver(driver2)} to compare inputs.")
         else:
-            st.info("Input telemetry (Throttle/Brake) not available for this lap.")
+            input_fig = _input_map_fig(lap1, driver1, colour1)
+            if input_fig:
+                st.plotly_chart(input_fig, width="stretch")
+            else:
+                st.info("Input telemetry (Throttle/Brake) not available for this lap.")
     else:
         st.info("Load a session and select a lap to view driver inputs.")
 
