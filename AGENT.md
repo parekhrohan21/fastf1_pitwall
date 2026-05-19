@@ -76,7 +76,9 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 2384–2584 | Ideal Lap vs Actual Lap | `_build_ideal_lap` — best S1+S2+S3, delta cards per selected driver, full-field ranked table |
 | 2585–2728 | Gap to Leader | `_build_gap_data`, Plotly line chart |
 | 2729–2835 | Race Position Chart | `_build_position_data` — all drivers faded, selected highlighted in team colour, Y-axis inverted |
-| 2836–end | Track Map & Race Replay | Plotly speed map, animated race replay with Play/Pause |
+| 2836–2984 | Track Map | Plotly speed map with sector dominance in compare mode |
+| 2985–3087 | Driver Inputs Map | Visualizes throttle, brake, and coasting telemetry on the track path |
+| 3088–end | Race Replay | Animated race replay with Play/Pause and scrubbable timeline |
 
 ---
 
