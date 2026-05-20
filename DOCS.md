@@ -134,6 +134,7 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `load_session(year, gp, session_type)` | `year, gp, session_type` |
 | `_build_lap_history(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_fuel_adjusted(driver, sess_k, fuel_effect, laps_df)` | `driver, sess_key, fuel_effect, laps_df` |
+| `_build_fuel_sim_leaderboard(sess_k, fuel_effect, laps_df)` | `sess_key, fuel_effect, laps_df` |
 | `_build_stints(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
@@ -711,7 +712,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Low~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
 | ~~Medium~~ | ~~**Driver Input Track Map**~~ | ✅ **Done** — `_input_map_fig()` visualizes throttle/brake/coasting telemetry as colored markers on the track path. Supports side-by-side comparison. |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
-| Low | **Fuel-corrected qualifying sim** | Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
+| ~~Low~~ | ~~**Fuel-corrected qualifying sim**~~ | ✅ **Done** — Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |
 | ~~Tech debt~~ | ~~**Consolidate compound colour dicts**~~ | ✅ **Done** — `COMPOUND_COLOURS` is now the single canonical dict. `_CMP_PALETTE`, `cmp_dot`, and `cmp_colours_map` have all been removed. |
 
