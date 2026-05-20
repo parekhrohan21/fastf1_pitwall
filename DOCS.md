@@ -413,6 +413,7 @@ Each chart section follows the same pattern:
 | Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `sess.laps` |
 | Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
+| Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `sess.laps` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_stops` | `PitInTime`, `PitOutTime` |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |

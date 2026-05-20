@@ -1727,6 +1727,115 @@ def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float,
         return None
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_fuel_sim_leaderboard(sess_k: str, fuel_effect: float, laps_df: pd.DataFrame):
+    """
+    Simulate qualifying order by calculating the median fuel-adjusted pace
+    for each driver in the session.
+    """
+    try:
+        results = []
+        all_drvs = laps_df["Driver"].unique()
+        total_laps = int(laps_df["LapNumber"].max())
+        
+        for drv in all_drvs:
+            drv_laps = laps_df[laps_df["Driver"] == drv].copy()
+            drv_laps = drv_laps.dropna(subset=["LapTime", "LapNumber"])
+            if drv_laps.empty:
+                continue
+                
+            drv_laps["LapTimeSec"] = drv_laps["LapTime"].dt.total_seconds()
+            
+            # Outlier filter
+            median_t = drv_laps["LapTimeSec"].median()
+            drv_laps = drv_laps[drv_laps["LapTimeSec"] < median_t * 2.5].copy()
+            if drv_laps.empty:
+                continue
+                
+            drv_laps = drv_laps.sort_values("LapNumber").reset_index(drop=True)
+            drv_laps["FuelLapsRemaining"] = (total_laps - drv_laps["LapNumber"]).clip(lower=0)
+            drv_laps["FuelCorrection"]    = drv_laps["FuelLapsRemaining"] * fuel_effect
+            drv_laps["FuelAdjSec"]        = drv_laps["LapTimeSec"] - drv_laps["FuelCorrection"]
+            
+            median_adj = drv_laps["FuelAdjSec"].median()
+            best_adj   = drv_laps["FuelAdjSec"].min()
+            laps_count = len(drv_laps)
+            
+            results.append({
+                "Driver": drv,
+                "MedianAdjSec": median_adj,
+                "BestAdjSec": best_adj,
+                "Laps": laps_count
+            })
+            
+        if not results:
+            return None
+            
+        df = pd.DataFrame(results)
+        df = df.sort_values("MedianAdjSec").reset_index(drop=True)
+        df["Pos"] = df.index + 1
+        
+        p1_median = df.loc[0, "MedianAdjSec"]
+        df["GapToLeader"] = df["MedianAdjSec"] - p1_median
+        
+        return df
+    except Exception:
+        return None
+
+
+def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colours: list):
+    """Render fuel-corrected simulated qualifying leaderboard as a styled HTML table."""
+    colour_map = dict(zip(highlight_drivers, highlight_colours))
+    rows_html = ""
+    for _, row in sim_df.iterrows():
+        drv        = str(row["Driver"])
+        is_hl      = drv in colour_map
+        accent     = colour_map.get(drv, "transparent")
+        row_bg     = f"{accent}18" if is_hl else "transparent"
+        border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
+        pos_col    = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
+        
+        med_time = row["MedianAdjSec"]
+        med_time_str = f"{int(med_time//60)}:{med_time%60:06.3f}"
+        
+        best_time = row["BestAdjSec"]
+        best_time_str = f"{int(best_time//60)}:{best_time%60:06.3f}"
+        
+        gap = row["GapToLeader"]
+        gap_str = "—" if row["Pos"] == 1 else f"+{gap:.3f}s"
+        
+        rows_html += (
+            f"<tr style='background:{row_bg}; {border_css}'>"
+            f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{_fmt_driver(drv)}</td>"
+            f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{med_time_str}</td>"
+            f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{gap_str}</td>"
+            f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{best_time_str}</td>"
+            f"<td style='padding:7px 10px; text-align:center;'>{row['Laps']}</td>"
+            "</tr>"
+        )
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:8px 10px;'>Pos</th>
+          <th style='padding:8px 10px; text-align:left;'>Driver</th>
+          <th style='padding:8px 10px; text-align:left;'>Median Fuel-Adj Time</th>
+          <th style='padding:8px 10px; text-align:left;'>Gap</th>
+          <th style='padding:8px 10px; text-align:left;'>Best Fuel-Adj Lap</th>
+          <th style='padding:8px 10px;'>Laps Run</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 def _fuel_pace_fig(drivers_data: list) -> go.Figure:
     """
     drivers_data: list of (driver, colour, df_with_raw_and_adj)
@@ -1844,6 +1953,24 @@ else:
             f"</div></div>",
             unsafe_allow_html=True,
         )
+
+    # ── Simulated Qualifying Leaderboard
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+    with st.expander("📋 View Simulated Qualifying Leaderboard (Fuel-Corrected)", expanded=False):
+        st.markdown(
+            "<div style='font-size:13px; margin-bottom:12px; opacity:0.8;'>"
+            "This table simulates the overall qualification/race-pace order by ranking all drivers based on their "
+            "<strong>median fuel-corrected pace</strong>. All laps are normalized to empty-tank equivalent pace."
+            "</div>",
+            unsafe_allow_html=True
+        )
+        _sim_df = _build_fuel_sim_leaderboard(sess_key, _fuel_effect, _all_laps)
+        if _sim_df is None or _sim_df.empty:
+            st.info("No data available to simulate fuel-corrected qualifying order.")
+        else:
+            _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
+            _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
+            _render_fuel_sim_leaderboard(_sim_df, _hl_drivers, _hl_colours)
 
 # ── Tyre Stint Timeline ───────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
