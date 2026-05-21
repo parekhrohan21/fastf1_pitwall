@@ -682,6 +682,38 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         .tyre-badge    { font-size: 11px; }
         .section-title { font-size: 10px; letter-spacing: 2px; }
     }
+
+    /* ── Back to Home Link ── */
+    [data-testid="stSidebar"] a.back-home-link {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        padding: 6px 14px !important;
+        background: rgba(128, 128, 128, 0.08) !important;
+        border: 1px solid rgba(128, 128, 128, 0.2) !important;
+        border-radius: 20px !important;
+        color: var(--primary-color) !important;
+        font-family: "Inter", sans-serif !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        text-decoration: none !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    }
+    [data-testid="stSidebar"] a.back-home-link:hover {
+        background: rgba(128, 128, 128, 0.15) !important;
+        border-color: var(--primary-color) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        text-decoration: none !important;
+    }
+    [data-testid="stSidebar"] a.back-home-link span {
+        color: var(--primary-color) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1065,6 +1097,13 @@ def style_ax(ax, ylabel: str, special: str = ""):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.markdown(
+        "<a href='http://rohanparekh.uk' target='_self' class='back-home-link'>"
+        "<span>👈</span>"
+        "<span>rohanparekh.uk</span>"
+        "</a>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<div style='padding: 4px 0 16px'>"
         "<div style='font-size:22px; font-weight:800; letter-spacing:-0.5px;'>🏎 Pit Wall</div>"
