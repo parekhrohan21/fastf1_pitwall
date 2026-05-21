@@ -1098,7 +1098,7 @@ def style_ax(ax, ylabel: str, special: str = ""):
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
-        "<a href='http://rohanparekh.uk' target='_self' class='back-home-link'>"
+        "<a href='http://rohanparekh.uk' target='_top' class='back-home-link'>"
         "<span>👈</span>"
         "<span>rohanparekh.uk</span>"
         "</a>",
