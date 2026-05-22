@@ -293,7 +293,7 @@ If there are conflicts in `app.py`, resolve manually. The file is a linear scrip
 
 ### Branch policy
 
-This project uses a **single `main` branch**. All changes go directly to `main`. Feature branches are not required unless the project owner explicitly requests one.
+This project uses a **single `main` branch**. All changes go directly to `main`. Feature branches are not required unless the project owner explicitly requests one. However, if a separate branch is created, it must always be merged using a Pull Request (PR) to ensure all verification steps are completed before code hits `main`.
 
 ---
 
@@ -348,7 +348,7 @@ Closes #12
 
 ### Pull Requests
 
-Opening a PR before merging significant changes creates a reviewable diff and documents intent — recommended even for solo work.
+Opening a PR before merging significant changes creates a reviewable diff and documents intent — recommended even for solo work. Whenever there is a separate branch merging into the main branch, follow the pull request steps to make sure everything is stable and working correctly.
 
 **Open a PR for:**
 - Any change adding more than ~50 lines to `app.py`
