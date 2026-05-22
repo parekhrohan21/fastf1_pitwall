@@ -1821,10 +1821,21 @@ def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float,
     Return DataFrame with raw LapTimeSec and FuelAdjSec columns.
     Fuel correction: subtract (total_laps - lap_number) * fuel_effect
     → normalises all laps to empty-tank pace (equivalent to a flying Q-lap).
+    Filters out in-laps and out-laps for accurate analysis.
     """
     try:
         laps = laps_df[laps_df["Driver"] == driver].copy()
         laps = laps.dropna(subset=["LapTime", "LapNumber"])
+        
+        # Exclude in-laps and out-laps to focus on flying/pace laps
+        if "PitOutTime" in laps.columns:
+            laps = laps[laps["PitOutTime"].isna()]
+        if "PitInTime" in laps.columns:
+            laps = laps[laps["PitInTime"].isna()]
+            
+        if laps.empty:
+            return None
+            
         laps["LapTimeSec"] = laps["LapTime"].dt.total_seconds()
 
         # Outlier filter — same as lap history (>2.5× median removed)
@@ -1850,7 +1861,7 @@ def _build_fuel_adjusted(driver: str, sess_k: str, fuel_effect: float,
 def _build_fuel_sim_leaderboard(sess_k: str, fuel_effect: float, laps_df: pd.DataFrame):
     """
     Simulate qualifying order by calculating the median fuel-adjusted pace
-    for each driver in the session.
+    for each driver in the session. Filters out in-laps and out-laps.
     """
     try:
         results = []
@@ -1860,6 +1871,15 @@ def _build_fuel_sim_leaderboard(sess_k: str, fuel_effect: float, laps_df: pd.Dat
         for drv in all_drvs:
             drv_laps = laps_df[laps_df["Driver"] == drv].copy()
             drv_laps = drv_laps.dropna(subset=["LapTime", "LapNumber"])
+            if drv_laps.empty:
+                continue
+                
+            # Exclude in-laps and out-laps to get true representative pace
+            if "PitOutTime" in drv_laps.columns:
+                drv_laps = drv_laps[drv_laps["PitOutTime"].isna()]
+            if "PitInTime" in drv_laps.columns:
+                drv_laps = drv_laps[drv_laps["PitInTime"].isna()]
+                
             if drv_laps.empty:
                 continue
                 
@@ -1880,10 +1900,17 @@ def _build_fuel_sim_leaderboard(sess_k: str, fuel_effect: float, laps_df: pd.Dat
             best_adj   = drv_laps["FuelAdjSec"].min()
             laps_count = len(drv_laps)
             
+            # Extract tyre compound used on the best fuel-adjusted lap
+            best_idx = drv_laps["FuelAdjSec"].idxmin()
+            best_compound = str(drv_laps.loc[best_idx, "Compound"]).upper() if "Compound" in drv_laps.columns else "UNKNOWN"
+            if best_compound in ("NAN", "NONE", ""):
+                best_compound = "UNKNOWN"
+            
             results.append({
                 "Driver": drv,
                 "MedianAdjSec": median_adj,
                 "BestAdjSec": best_adj,
+                "BestCompound": best_compound,
                 "Laps": laps_count
             })
             
@@ -1923,6 +1950,15 @@ def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colo
         gap = row["GapToLeader"]
         gap_str = "—" if row["Pos"] == 1 else f"+{gap:.3f}s"
         
+        # Compound color dot helper for best lap compound
+        best_comp = str(row.get("BestCompound", "UNKNOWN")).upper()
+        dot_col = COMPOUND_COLOURS.get(best_comp, COMPOUND_COLOURS["UNKNOWN"])["fill"]
+        cmp_html = (
+            f"<span style='display:inline-block; width:8px; height:8px; "
+            f"border-radius:50%; background:{dot_col}; margin-right:5px; vertical-align:middle;'></span>"
+            f"{best_comp.title()}"
+        )
+        
         rows_html += (
             f"<tr style='background:{row_bg}; {border_css}'>"
             f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
@@ -1930,6 +1966,7 @@ def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colo
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{med_time_str}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{gap_str}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{best_time_str}</td>"
+            f"<td style='padding:7px 10px;'>{cmp_html}</td>"
             f"<td style='padding:7px 10px; text-align:center;'>{row['Laps']}</td>"
             "</tr>"
         )
@@ -1945,6 +1982,7 @@ def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colo
           <th style='padding:8px 10px; text-align:left;'>Median Fuel-Adj Time</th>
           <th style='padding:8px 10px; text-align:left;'>Gap</th>
           <th style='padding:8px 10px; text-align:left;'>Best Fuel-Adj Lap</th>
+          <th style='padding:8px 10px; text-align:left;'>Tyre (Best)</th>
           <th style='padding:8px 10px;'>Laps Run</th>
         </tr>
       </thead>
