@@ -672,19 +672,8 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         letter-spacing: 0.3px;
     }
 
-    /* ═══════════════════════════════════════════════════════════
-       RESPONSIVE
-    ═══════════════════════════════════════════════════════════ */
-    @media (max-width: 768px) {
-        .driver-code   { font-size: 20px; }
-        .metric-value  { font-size: 14px; }
-        .weather-strip { gap: 10px; font-size: 11px; }
-        .tyre-badge    { font-size: 11px; }
-        .section-title { font-size: 10px; letter-spacing: 2px; }
-    }
-
     /* ── Back to Home Link ── */
-    [data-testid="stSidebar"] a.back-home-link {
+    a.back-home-link {
         display: inline-flex !important;
         align-items: center !important;
         gap: 8px !important;
@@ -702,17 +691,123 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
         margin-bottom: 20px !important;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
     }
-    [data-testid="stSidebar"] a.back-home-link:hover {
+    a.back-home-link:hover {
         background: rgba(128, 128, 128, 0.15) !important;
         border-color: var(--primary-color) !important;
         transform: translateY(-1px) !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
         text-decoration: none !important;
     }
-    [data-testid="stSidebar"] a.back-home-link span {
+    a.back-home-link span {
         color: var(--primary-color) !important;
         display: inline-flex !important;
         align-items: center !important;
+    }
+
+    .main-back-home {
+        display: none !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+        .main-back-home {
+            display: inline-flex !important;
+            margin-bottom: 16px !important;
+        }
+        [data-testid="stSidebar"] a.back-home-link {
+            display: none !important;
+        }
+
+        .landing-container {
+            margin: 20px auto !important;
+            padding: 0 10px !important;
+        }
+
+        .driver-code   { font-size: 20px !important; }
+        .metric-value  { font-size: 14px !important; }
+        .tyre-badge    { font-size: 11px !important; }
+        .section-title { font-size: 10px !important; letter-spacing: 2px !important; }
+
+        .driver-banner {
+            padding: 14px !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+            gap: 12px !important;
+        }
+        .team-badge {
+            position: static !important;
+            transform: none !important;
+            align-items: center !important;
+            margin-top: 8px !important;
+        }
+        .team-name-label {
+            text-align: center !important;
+        }
+        .driver-banner:hover .team-badge {
+            transform: none !important;
+        }
+
+        .weather-strip {
+            gap: 8px 12px !important;
+            font-size: 11px !important;
+            justify-content: center !important;
+            padding: 10px 14px !important;
+            border-radius: 14px !important;
+        }
+
+        /* Force standard columns to stack vertically on mobile */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+            gap: 12px !important;
+        }
+
+        /* Keep metric cards as 2x2 grid on mobile */
+        [data-testid="stHorizontalBlock"]:has(.metric-card) {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.metric-card) > [data-testid="column"] {
+            width: calc(50% - 6px) !important;
+            min-width: calc(50% - 6px) !important;
+            flex: 1 1 calc(50% - 6px) !important;
+        }
+
+        /* Matplotlib scroll container - allows panning on mobile instead of shrinking */
+        div.element-container:has([data-testid="stImage"]) {
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 16px;
+            border: 1px solid rgba(128,128,128,0.15);
+            background: var(--secondary-background-color);
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+        div.element-container [data-testid="stImage"] {
+            min-width: 900px !important;
+            width: 900px !important;
+        }
+
+        /* Compact tables on mobile screen sizes */
+        table td, table th {
+            padding: 4px 6px !important;
+            font-size: 11px !important;
+        }
+
+        .session-info-header {
+            padding: 12px 16px !important;
+            gap: 16px !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+        }
+        .session-info-header div {
+            text-align: center !important;
+            justify-content: center !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1172,6 +1267,13 @@ sess = st.session_state.get("session")
 # ── Landing ───────────────────────────────────────────────────────────────────
 if sess is None:
     st.markdown(
+        "<a href='http://rohanparekh.uk' target='_top' class='back-home-link main-back-home'>"
+        "<span>👈</span>"
+        "<span>rohanparekh.uk</span>"
+        "</a>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
         "<div style='max-width:560px; margin:80px auto; text-align:center;'>"
         "<div style='font-size:64px; margin-bottom:16px;'>🏎</div>"
         "<h1 style='font-size:36px; font-weight:800; color:var(--text-color); margin-bottom:8px;'>Pit Wall</h1>"
@@ -1275,7 +1377,7 @@ def _session_info_header(session, sess_type_code: str) -> None:
 
         st.markdown(
             f"""
-            <div style="
+            <div class="session-info-header" style="
                 background: linear-gradient(135deg,
                     rgba(var(--primary-rgb), 0.08) 0%,
                     var(--secondary-background-color) 60%);
@@ -1320,6 +1422,13 @@ def _session_info_header(session, sess_type_code: str) -> None:
         pass   # Never crash the page for a cosmetic header
 
 
+st.markdown(
+    "<a href='http://rohanparekh.uk' target='_top' class='back-home-link main-back-home'>"
+    "<span>👈</span>"
+    "<span>rohanparekh.uk</span>"
+    "</a>",
+    unsafe_allow_html=True,
+)
 _session_info_header(sess, session_type)
 
 # ── Driver Selection ──────────────────────────────────────────────────────────
