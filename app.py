@@ -1229,13 +1229,37 @@ with st.sidebar:
     session_label = st.selectbox("Session", list(session_map.keys()))
     session_type = session_map[session_label]
 
+    # --- Session 2 Selector ---
+    compare_sessions = st.checkbox("Compare with another session", value=False, key="compare_sessions_chk")
+    year2 = None
+    gp2 = None
+    session_type2 = None
+    session_label2 = None
+
+    if compare_sessions:
+        st.markdown("<hr style='margin:12px 0 8px; border-style: dashed; opacity:0.5;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:11px; font-weight:700; text-transform:uppercase; margin-bottom:8px; opacity:0.8;'>Session 2 Selection</div>", unsafe_allow_html=True)
+        year2 = st.selectbox("Season 2", _years, index=_years.index(2025) if 2025 in _years else 0, key="year2")
+        with st.spinner("Loading calendar 2…"):
+            try:
+                schedule2 = load_schedule(year2)
+                gp_names2 = schedule2["EventName"].tolist()
+            except Exception as e:
+                st.error(f"Could not load {year2} schedule: {e}")
+                st.stop()
+        _def_gp_idx2 = gp_names2.index("British Grand Prix") if "British Grand Prix" in gp_names2 else min(4, len(gp_names2) - 1)
+        gp2 = st.selectbox("Grand Prix 2", gp_names2, index=_def_gp_idx2, key="gp2")
+        
+        session_label2 = st.selectbox("Session 2", list(session_map.keys()), key="session2")
+        session_type2 = session_map[session_label2]
+
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
     mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
     st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, width="stretch")
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
-    load_btn = st.button("⬇️  Load Session", width="stretch")
+    load_btn = st.button("⬇️  Load Session(s)", width="stretch")
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
@@ -1249,20 +1273,49 @@ with st.sidebar:
 if "session" not in st.session_state:
     st.session_state["session"] = None
     st.session_state["sess_key"] = None
+if "session2" not in st.session_state:
+    st.session_state["session2"] = None
+    st.session_state["sess_key2"] = None
+if "year1" not in st.session_state:
+    st.session_state["year1"] = 2025
+if "year2" not in st.session_state:
+    st.session_state["year2"] = 2025
 
 sess_key = f"{year}_{gp}_{session_type}"
+sess_key2 = f"{year2}_{gp2}_{session_type2}" if compare_sessions else None
 
 if load_btn:
-    with st.spinner(f"Loading {gp} {year} {session_label}…  (first load ~30 s)"):
+    with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~30 s)"):
         try:
             sess = load_session(year, gp, session_type)
             st.session_state["session"] = sess
             st.session_state["sess_key"] = sess_key
+            st.session_state["year1"] = year
         except Exception as e:
-            st.error(f"❌ {e}")
+            st.error(f"❌ Session 1: {e}")
             st.stop()
 
+    if compare_sessions:
+        with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~30 s)"):
+            try:
+                sess2 = load_session(year2, gp2, session_type2)
+                st.session_state["session2"] = sess2
+                st.session_state["sess_key2"] = sess_key2
+                st.session_state["year2"] = year2
+            except Exception as e:
+                st.error(f"❌ Session 2: {e}")
+                st.stop()
+    else:
+        st.session_state["session2"] = None
+        st.session_state["sess_key2"] = None
+        st.session_state["year2"] = None
+
 sess = st.session_state.get("session")
+sess2 = st.session_state.get("session2")
+sess_key = st.session_state.get("sess_key")
+sess_key2 = st.session_state.get("sess_key2")
+year1 = st.session_state.get("year1")
+year2 = st.session_state.get("year2")
 
 # ── Landing ───────────────────────────────────────────────────────────────────
 if sess is None:
@@ -1297,34 +1350,43 @@ if sess is None:
 
 # ── Driver & lap controls ──────────────────────────────────────────────────────
 try:
-    all_drivers = sorted(sess.laps["Driver"].dropna().unique().tolist())
-    if not all_drivers:
-        raise ValueError("Empty drivers list")
-except Exception:
+    all_drivers1 = sorted(sess.laps["Driver"].dropna().unique().tolist())
+    if not all_drivers1:
+        raise ValueError("Empty drivers list for Session 1")
+    
+    if sess2 is not None:
+        all_drivers2 = sorted(sess2.laps["Driver"].dropna().unique().tolist())
+        if not all_drivers2:
+            raise ValueError("Empty drivers list for Session 2")
+    else:
+        all_drivers2 = None
+except Exception as e:
     st.markdown("<br>", unsafe_allow_html=True)
     st.error(
-        "**Session Data Unavailable**\n\n"
-        "FastF1 could not load the lap data for this session. This usually happens if "
+        f"**Session Data Unavailable**\n\n"
+        f"FastF1 could not load the lap data: {e}. This usually happens if "
         "the session is very recent and official telemetry hasn't been published yet, "
         "or if the session was cancelled."
     )
     st.stop()
 
-# ── Laps snapshot — single extraction used by all cached builders ─────────────
-# Extracting here (outside @st.cache_data functions) fixes the cache isolation
-# bug: builders now receive the DataFrame as an argument so @st.cache_data can
-# hash it correctly rather than reading from st.session_state internally.
-# Cast to plain pd.DataFrame so @st.cache_data can hash it.
-# fastf1.core.Laps is a subclass with custom internal state that Streamlit's
-# hasher cannot serialise, causing UnhashableParamError.
-_all_laps: pd.DataFrame = pd.DataFrame(sess.laps.copy())
+# ── Laps snapshot ─────────────────────────────────────────────────────────────
+_all_laps1: pd.DataFrame = pd.DataFrame(sess.laps.copy())
+_all_laps2: pd.DataFrame = pd.DataFrame(sess2.laps.copy()) if sess2 is not None else None
 
 # ── Driver name labels (built once per session) ───────────────────────────────
-_drv_labels: dict = _build_driver_labels(sess)
+_drv_labels1: dict = _build_driver_labels(sess)
+_drv_labels2: dict = _build_driver_labels(sess2) if sess2 is not None else None
 
-def _fmt_driver(num: str) -> str:
-    """Format function for st.selectbox — shows 'ABR · Last Name' instead of raw number."""
-    return _drv_labels.get(str(num), str(num))
+def _fmt_driver1(num: str) -> str:
+    """Format function for selectbox — shows 'ABR · Last Name' for Session 1."""
+    return _drv_labels1.get(str(num), str(num))
+
+def _fmt_driver2(num: str) -> str:
+    """Format function for selectbox — shows 'ABR · Last Name' for Session 2."""
+    if _drv_labels2 is not None:
+        return _drv_labels2.get(str(num), str(num))
+    return _drv_labels1.get(str(num), str(num))
 
 
 # ── Session Info Header ───────────────────────────────────────────────────────
@@ -1429,37 +1491,55 @@ st.markdown(
     "</a>",
     unsafe_allow_html=True,
 )
-_session_info_header(sess, session_type)
+
+if sess2 is not None:
+    col_hdr1, col_hdr2 = st.columns(2)
+    with col_hdr1:
+        st.caption("Session 1")
+        _session_info_header(sess, session_type)
+    with col_hdr2:
+        st.caption("Session 2")
+        _session_info_header(sess2, session_type2)
+else:
+    _session_info_header(sess, session_type)
 
 # ── Driver Selection ──────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
-    _def_d1_idx = all_drivers.index("4") if "4" in all_drivers else 0
+    _def_d1_idx = all_drivers1.index("4") if "4" in all_drivers1 else 0
     driver1 = st.selectbox(
-        "Driver 1", all_drivers, index=_def_d1_idx, key="d1",
-        format_func=_fmt_driver,
+        "Driver 1", all_drivers1, index=_def_d1_idx, key="d1",
+        format_func=_fmt_driver1,
     )
 with col_b:
-    compare = st.checkbox("Compare with Driver 2", value=False)
-    driver2 = None
-    if compare:
-        remaining = [d for d in all_drivers if d != driver1]
+    if sess2 is not None:
+        compare = True
+        _def_d2_idx = all_drivers2.index(driver1) if driver1 in all_drivers2 else 0
         driver2 = st.selectbox(
-            "Driver 2", remaining, key="d2",
-            format_func=_fmt_driver,
+            "Driver 2 (Session 2)", all_drivers2, index=_def_d2_idx, key="d2",
+            format_func=_fmt_driver2,
         )
+    else:
+        compare = st.checkbox("Compare with Driver 2", value=False)
+        driver2 = None
+        if compare:
+            remaining = [d for d in all_drivers1 if d != driver1]
+            driver2 = st.selectbox(
+                "Driver 2", remaining, key="d2",
+                format_func=_fmt_driver1,
+            )
 
 
-def lap_selector(driver: str, suffix: str = ""):
-    dlaps = sess.laps.pick_drivers(driver).pick_quicklaps().reset_index(drop=True)
+def lap_selector(session_obj, driver: str, suffix: str = "", fmt_func=None):
+    dlaps = session_obj.laps.pick_drivers(driver).pick_quicklaps().reset_index(drop=True)
     if dlaps.empty:
-        dlaps = sess.laps.pick_drivers(driver).dropna(subset=["LapTime"]).reset_index(drop=True)
+        dlaps = session_obj.laps.pick_drivers(driver).dropna(subset=["LapTime"]).reset_index(drop=True)
     if dlaps.empty:
-        st.warning(f"No valid laps for {_fmt_driver(driver)}.")
+        st.warning(f"No valid laps for {fmt_func(driver) if fmt_func else driver}.")
         return None, None
     opts   = ["Fastest"] + [str(int(ln)) for ln in dlaps["LapNumber"].tolist()]
-    choice = st.selectbox(f"Lap — {_fmt_driver(driver)}", opts, key=f"lap_{driver}{suffix}")
+    choice = st.selectbox(f"Lap — {fmt_func(driver) if fmt_func else driver}", opts, key=f"lap_{driver}{suffix}")
     lap    = dlaps.loc[dlaps["LapTime"].idxmin()] if choice == "Fastest" \
         else dlaps[dlaps["LapNumber"] == int(choice)].iloc[0]
     return lap, dlaps
@@ -1467,10 +1547,13 @@ def lap_selector(driver: str, suffix: str = ""):
 
 col_c, col_d = st.columns([1, 1] if compare else [1, 2])
 with col_c:
-    lap1, laps1 = lap_selector(driver1, "_1")
+    lap1, laps1 = lap_selector(sess, driver1, "_1", _fmt_driver1)
 with col_d:
     if compare and driver2:
-        lap2, laps2 = lap_selector(driver2, "_2")
+        if sess2 is not None:
+            lap2, laps2 = lap_selector(sess2, driver2, "_2", _fmt_driver2)
+        else:
+            lap2, laps2 = lap_selector(sess, driver2, "_2", _fmt_driver1)
     else:
         lap2 = laps2 = None
 
@@ -1484,13 +1567,11 @@ if compare and driver2:
 
 # ── Telemetry ─────────────────────────────────────────────────────────────────
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
-tel2 = get_telemetry_cached(driver2, lap2, sess_key) if (compare and driver2 and lap2 is not None) else None
+tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
 
 colour1 = driver_colour(sess, driver1)
-
-# Dynamically override the entire app theme to match the Driver's constructor colour
 st.markdown(f"<style>:root {{ --primary-color: {colour1}; --primary-rgb: {hex_to_rgb(colour1)}; }}</style>", unsafe_allow_html=True)
-colour2 = driver_colour(sess, driver2) if driver2 else "#27F4D2"
+colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver2 else "#27F4D2"
 
 matplotlib.rcParams.update(MATPLOTLIB_THEME)
 
@@ -1542,7 +1623,7 @@ def weather_strip_html(lap) -> str:
         return ""
 
 
-def render_summary(lap, driver: str, colour: str = "#FF8700"):
+def render_summary(lap, driver: str, colour: str = "#FF8700", session_obj=None, session_year=None):
     if lap is None:
         return
     try:
@@ -1550,10 +1631,13 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
     except Exception:
         lap_num_str = ""
 
+    active_sess = session_obj if session_obj is not None else sess
+    active_year = session_year if session_year is not None else year
+
     try:
-        driver_info = sess.get_driver(driver)
+        driver_info = active_sess.get_driver(driver)
         raw_team    = driver_info.get("TeamName", "")
-        logo_url    = _team_logo(raw_team, year)
+        logo_url    = _team_logo(raw_team, active_year)
         headshot_url = driver_info.get("HeadshotUrl", "") or ""
     except Exception:
         raw_team     = ""
@@ -1649,18 +1733,21 @@ def render_summary(lap, driver: str, colour: str = "#FF8700"):
 if compare and lap2 is not None:
     s1, s2 = st.columns(2)
     with s1:
-        render_summary(lap1, driver1, colour1)
+        render_summary(lap1, driver1, colour1, sess, year1)
     with s2:
-        render_summary(lap2, driver2, colour2)
+        render_summary(lap2, driver2, colour2, sess2 if sess2 is not None else sess, year2 if year2 is not None else year1)
 else:
-    render_summary(lap1, driver1, colour1)
+    render_summary(lap1, driver1, colour1, sess, year1)
 
 # ── Session Statistics ────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Session Statistics</div>", unsafe_allow_html=True)
 
-def render_session_stats(driver: str, colour: str):
+def render_session_stats(driver: str, colour: str, session_obj=None, all_laps=None):
     try:
-        drv_info = sess.get_driver(driver)
+        active_sess = session_obj if session_obj is not None else sess
+        active_laps = all_laps if all_laps is not None else _all_laps1
+        
+        drv_info = active_sess.get_driver(driver)
         grid = drv_info.get("GridPosition", "N/A")
         pos = drv_info.get("Position", "N/A")
         status = str(drv_info.get("Status", "N/A"))
@@ -1673,7 +1760,7 @@ def render_session_stats(driver: str, colour: str):
         except Exception:
             pos_str = str(pos)
 
-        dlaps = _all_laps[_all_laps["Driver"] == driver].copy()
+        dlaps = active_laps[active_laps["Driver"] == driver].copy()
         
         # Best Lap
         if not dlaps.empty and "LapTime" in dlaps.columns:
@@ -1726,13 +1813,13 @@ def render_session_stats(driver: str, colour: str):
 if compare and driver2:
     s1, s2 = st.columns(2)
     with s1:
-        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour1}; margin-bottom: 14px;'>{_fmt_driver(driver1)}</div>", unsafe_allow_html=True)
-        render_session_stats(driver1, colour1)
+        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour1}; margin-bottom: 14px;'>{_fmt_driver1(driver1)}</div>", unsafe_allow_html=True)
+        render_session_stats(driver1, colour1, sess, _all_laps1)
     with s2:
-        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour2}; margin-bottom: 14px;'>{_fmt_driver(driver2)}</div>", unsafe_allow_html=True)
-        render_session_stats(driver2, colour2)
+        st.markdown(f"<div style='text-align: center; font-size: 14px; font-weight: 600; letter-spacing: 1px; color: {colour2}; margin-bottom: 14px;'>{_fmt_driver2(driver2)}</div>", unsafe_allow_html=True)
+        render_session_stats(driver2, colour2, sess2 if sess2 is not None else sess, _all_laps2 if _all_laps2 is not None else _all_laps1)
 else:
-    render_session_stats(driver1, colour1)
+    render_session_stats(driver1, colour1, sess, _all_laps1)
 
 # ── Lap Time History ──────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_html=True)
@@ -1857,10 +1944,17 @@ def _lap_history_fig(drivers_data: list, highlight_laps: list) -> go.Figure:
     return fig
 
 
-_hist_pairs = [(driver1, colour1, _build_lap_history(driver1, sess_key, _all_laps))]
+if sess2 is not None:
+    label1 = f"{driver1} ({year1})"
+    label2 = f"{driver2} ({year2})"
+else:
+    label1 = driver1
+    label2 = driver2
+
+_hist_pairs = [(label1, colour1, _build_lap_history(driver1, sess_key, _all_laps1))]
 _hist_laps  = [lap1]
 if compare and driver2:
-    _hist_pairs.append((driver2, colour2, _build_lap_history(driver2, sess_key, _all_laps)))
+    _hist_pairs.append((label2, colour2, _build_lap_history(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1)))
     _hist_laps.append(lap2)
 
 _all_none = all(p[2] is None or p[2].empty for p in _hist_pairs)
@@ -2038,7 +2132,7 @@ def _build_fuel_sim_leaderboard(sess_k: str, fuel_effect: float, laps_df: pd.Dat
         return None
 
 
-def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colours: list):
+def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
     """Render fuel-corrected simulated qualifying leaderboard as a styled HTML table."""
     colour_map = dict(zip(highlight_drivers, highlight_colours))
     rows_html = ""
@@ -2071,7 +2165,7 @@ def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colo
         rows_html += (
             f"<tr style='background:{row_bg}; {border_css}'>"
             f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
-            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{_fmt_driver(drv)}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{med_time_str}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{gap_str}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{best_time_str}</td>"
@@ -2185,14 +2279,14 @@ def _fuel_pace_fig(drivers_data: list) -> go.Figure:
 
 _fuel_pairs = [
     (
-        driver1, colour1,
-        _build_fuel_adjusted(driver1, sess_key, _fuel_effect, _all_laps)
+        label1, colour1,
+        _build_fuel_adjusted(driver1, sess_key, _fuel_effect, _all_laps1)
     )
 ]
 if compare and driver2:
     _fuel_pairs.append((
-        driver2, colour2,
-        _build_fuel_adjusted(driver2, sess_key, _fuel_effect, _all_laps)
+        label2, colour2,
+        _build_fuel_adjusted(driver2, sess_key2 if sess_key2 else sess_key, _fuel_effect, _all_laps2 if _all_laps2 is not None else _all_laps1)
     ))
 
 _fuel_all_none = all(p[2] is None or p[2].empty for p in _fuel_pairs)
@@ -2211,7 +2305,7 @@ else:
         _avg_adj   = df["FuelAdjSec"].median()
         _pc.markdown(
             f"<div class='metric-card' style='--accent:{col};'>"
-            f"<div class='metric-label'>{_fmt_driver(drv)} — Fuel-Adj Pace</div>"
+            f"<div class='metric-label'>{drv} — Fuel-Adj Pace</div>"
             f"<div class='metric-value'>{int(_best_adj//60)}:{_best_adj%60:06.3f}</div>"
             f"<div class='metric-sub'>"
             f"Best raw: {int(_best_raw//60)}:{_best_raw%60:06.3f} · "
@@ -2230,13 +2324,28 @@ else:
             "</div>",
             unsafe_allow_html=True
         )
-        _sim_df = _build_fuel_sim_leaderboard(sess_key, _fuel_effect, _all_laps)
-        if _sim_df is None or _sim_df.empty:
-            st.info("No data available to simulate fuel-corrected qualifying order.")
+        if sess2 is not None:
+            tab_l1, tab_l2 = st.tabs([f"Session 1 Leaderboard ({year1})", f"Session 2 Leaderboard ({year2})"])
+            with tab_l1:
+                _sim_df1 = _build_fuel_sim_leaderboard(sess_key, _fuel_effect, _all_laps1)
+                if _sim_df1 is None or _sim_df1.empty:
+                    st.info("No data available for Session 1.")
+                else:
+                    _render_fuel_sim_leaderboard(_sim_df1, [driver1], [colour1], _fmt_driver1)
+            with tab_l2:
+                _sim_df2 = _build_fuel_sim_leaderboard(sess_key2, _fuel_effect, _all_laps2)
+                if _sim_df2 is None or _sim_df2.empty:
+                    st.info("No data available for Session 2.")
+                else:
+                    _render_fuel_sim_leaderboard(_sim_df2, [driver2], [colour2], _fmt_driver2)
         else:
-            _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
-            _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
-            _render_fuel_sim_leaderboard(_sim_df, _hl_drivers, _hl_colours)
+            _sim_df = _build_fuel_sim_leaderboard(sess_key, _fuel_effect, _all_laps1)
+            if _sim_df is None or _sim_df.empty:
+                st.info("No data available to simulate fuel-corrected qualifying order.")
+            else:
+                _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
+                _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
+                _render_fuel_sim_leaderboard(_sim_df, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Tyre Stint Timeline ───────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
@@ -2344,9 +2453,9 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
     return fig
 
 
-_stint_data = [(driver1, _build_stints(driver1, sess_key, _all_laps))]
+_stint_data = [(label1, _build_stints(driver1, sess_key, _all_laps1))]
 if compare and driver2:
-    _stint_data.append((driver2, _build_stints(driver2, sess_key, _all_laps)))
+    _stint_data.append((label2, _build_stints(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1)))
 
 if all(not s for _, s in _stint_data):
     st.info("Stint data not available for this session.")
@@ -2438,8 +2547,8 @@ def _render_pit_table(stops: list[dict], colour: str, driver_label: str) -> str:
     )
 
 
-_pit_d1 = _build_pit_stops(driver1, sess_key, _all_laps)
-_pit_d2 = _build_pit_stops(driver2, sess_key, _all_laps) if compare and driver2 else None
+_pit_d1 = _build_pit_stops(driver1, sess_key, _all_laps1)
+_pit_d2 = _build_pit_stops(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1) if compare and driver2 else None
 
 if _pit_d1 is None and _pit_d2 is None:
     st.info("Pit stop data is not available for this session "
@@ -2447,9 +2556,9 @@ if _pit_d1 is None and _pit_d2 is None:
 else:
     _pit_html = ""
     if _pit_d1:
-        _pit_html += _render_pit_table(_pit_d1, colour1, _fmt_driver(driver1))
+        _pit_html += _render_pit_table(_pit_d1, colour1, label1)
     if _pit_d2:
-        _pit_html += _render_pit_table(_pit_d2, colour2, _fmt_driver(driver2))
+        _pit_html += _render_pit_table(_pit_d2, colour2, label2)
     if _pit_html:
         st.markdown(
             f"<div style='background:var(--secondary-background-color); "
@@ -2536,15 +2645,18 @@ def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
 
 # ── Overlapping ───────────────────────────────────────────────────────────────
 if chart_mode == "Overlapping" or not compare:
-    drv_list = [(driver1, colour1, tel1)]
+    drv_list = [(label1, colour1, tel1)]
     if compare and tel2 is not None:
-        drv_list.append((driver2, colour2, tel2))
+        drv_list.append((label2, colour2, tel2))
 
-    title = f"{gp} {year}  ·  {session_label}"
-    if compare and driver2:
-        title += f"  ·  {driver1} vs {driver2}"
+    if sess2 is not None:
+        title = f"{year1} {gp} {session_label} ({driver1}) vs {year2} {gp2} {session_label2} ({driver2})"
     else:
-        title += f"  ·  {driver1}"
+        title = f"{gp} {year}  ·  {session_label}"
+        if compare and driver2:
+            title += f"  ·  {driver1} vs {driver2}"
+        else:
+            title += f"  ·  {driver1}"
 
     fig = build_chart(drv_list, title)
     st.pyplot(fig, width="stretch")
@@ -2553,20 +2665,20 @@ if chart_mode == "Overlapping" or not compare:
 # ── Separate ──────────────────────────────────────────────────────────────────
 else:
     lc, rc = st.columns(2)
-    for col_ctx, driver, tel, colour, lap_obj in [
-        (lc, driver1, tel1, colour1, lap1),
-        (rc, driver2, tel2, colour2, lap2),
+    for col_ctx, drv_lbl, driver, tel, colour, lap_obj in [
+        (lc, label1, driver1, tel1, colour1, lap1),
+        (rc, label2, driver2, tel2, colour2, lap2),
     ]:
         with col_ctx:
             if tel is None:
-                st.warning(f"No telemetry for {driver}")
+                st.warning(f"No telemetry for {drv_lbl}")
                 continue
             try:
                 lt = format_laptime(lap_obj.get("LapTime"))
             except Exception:
                 lt = ""
-            title = f"{driver}  ·  {lt}"
-            fig = build_chart([(driver, colour, tel)], title, fig_width=7)
+            title = f"{drv_lbl}  ·  {lt}"
+            fig = build_chart([(drv_lbl, colour, tel)], title, fig_width=7)
             st.pyplot(fig, width="stretch")
             plt.close(fig)
 
@@ -2657,10 +2769,10 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         ax_d.axhline(0, color="gray", alpha=0.5, linewidth=0.8)
         ax_d.fill_between(tel1["Distance"], delta,
                           where=(delta >= 0), color=colour1, alpha=0.6,
-                          label=f"{driver1} faster", interpolate=True)
+                          label=f"{label1} faster", interpolate=True)
         ax_d.fill_between(tel1["Distance"], delta,
                           where=(delta < 0),  color=colour2, alpha=0.6,
-                          label=f"{driver2} faster", interpolate=True)
+                          label=f"{label2} faster", interpolate=True)
         ax_d.set_ylabel("Δ Speed (km/h)", fontsize=11)
         ax_d.set_xlabel("Distance (m)", fontsize=11)
         ax_d.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
@@ -2711,7 +2823,7 @@ def _build_leaderboard(sess_k: str, laps_df: pd.DataFrame):
         return None
 
 
-def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list):
+def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
     """Render leaderboard as a styled HTML table."""
     colour_map = dict(zip(highlight_drivers, highlight_colours))
     rows_html = ""
@@ -2735,7 +2847,7 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list)
         rows_html += (
             f"<tr style='background:{row_bg}; {border_css}'>"
             f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
-            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{_fmt_driver(drv)}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{row['Time']}</td>"
             f"<td style='padding:7px 10px; font-family:monospace; font-size:12px; opacity:0.7;'>{row['Gap']}</td>"
             f"<td style='padding:7px 10px;'>{cmp_html}</td>"
@@ -2766,13 +2878,28 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list)
     st.markdown(table_html, unsafe_allow_html=True)
 
 
-_lb = _build_leaderboard(sess_key, _all_laps)
-if _lb is None or _lb.empty:
-    st.info("Leaderboard not available for this session.")
+if sess2 is not None:
+    tab_lb1, tab_lb2 = st.tabs([f"Session 1 Leaderboard ({year1})", f"Session 2 Leaderboard ({year2})"])
+    with tab_lb1:
+        _lb1 = _build_leaderboard(sess_key, _all_laps1)
+        if _lb1 is None or _lb1.empty:
+            st.info("Leaderboard not available for Session 1.")
+        else:
+            _render_leaderboard(_lb1, [driver1], [colour1], _fmt_driver1)
+    with tab_lb2:
+        _lb2 = _build_leaderboard(sess_key2, _all_laps2)
+        if _lb2 is None or _lb2.empty:
+            st.info("Leaderboard not available for Session 2.")
+        else:
+            _render_leaderboard(_lb2, [driver2], [colour2], _fmt_driver2)
 else:
-    _hl_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
-    _hl_colours  = [colour1] + ([colour2] if compare and driver2 else [])
-    _render_leaderboard(_lb, _hl_drivers, _hl_colours)
+    _lb = _build_leaderboard(sess_key, _all_laps1)
+    if _lb is None or _lb.empty:
+        st.info("Leaderboard not available for this session.")
+    else:
+        _hl_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
+        _hl_colours  = [colour1] + ([colour2] if compare and driver2 else [])
+        _render_leaderboard(_lb, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_allow_html=True)
@@ -2853,21 +2980,14 @@ def _fmt_sec(s: float) -> str:
     return f"{m}:{s % 60:06.3f}"
 
 
-_ideal_df = _build_ideal_lap(sess_key, _all_laps)
-
-if _ideal_df is None or _ideal_df.empty:
-    st.info(
-        "Sector time data is not available for this session — "
-        "Ideal Lap analysis requires Sector1Time / Sector2Time / Sector3Time data."
-    )
-else:
-    # ── Per-driver delta cards for selected driver(s) ──────────────────────────
-    _card_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
-    _card_colours  = [colour1] + ([colour2] if compare and driver2 else [])
+def _render_ideal_lap_section(ideal_df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
+    if ideal_df is None or ideal_df.empty:
+        st.info("Ideal lap analysis not available for this session.")
+        return
 
     _delta_cards_html = ""
-    for _cd, _cc in zip(_card_drivers, _card_colours):
-        _row = _ideal_df[_ideal_df["Driver"] == _cd]
+    for _cd, _cc in zip(highlight_drivers, highlight_colours):
+        _row = ideal_df[ideal_df["Driver"] == _cd]
         if _row.empty:
             continue
         _r = _row.iloc[0]
@@ -2880,7 +3000,7 @@ else:
             f" padding:14px 18px; flex:1; min-width:220px;'>"
             f"<div style='font-size:11px; font-weight:600; letter-spacing:1px;"
             f" text-transform:uppercase; color:{_cc}; margin-bottom:8px;'>"
-            f"{_fmt_driver(_cd)}</div>"
+            f"{fmt_func(_cd) if fmt_func else _cd}</div>"
             f"<div style='display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;"
             f" margin-bottom:10px;'>"
             f"<div style='font-size:11px; opacity:0.6;'>S1</div>"
@@ -2889,9 +3009,9 @@ else:
             f"<div style='font-size:13px; font-weight:600;'>{_r['BestS1']:.3f}s</div>"
             f"<div style='font-size:13px; font-weight:600;'>{_r['BestS2']:.3f}s</div>"
             f"<div style='font-size:13px; font-weight:600;'>{_r['BestS3']:.3f}s</div>"
-            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS1Lap']}</div>"
-            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS2Lap']}</div>"
-            f"<div style='font-size:10px; opacity:0.45;'>Lap {_r['BestS3Lap']}</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {int(_r['BestS1Lap'])}</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {int(_r['BestS2Lap'])}</div>"
+            f"<div style='font-size:10px; opacity:0.45;'>Lap {int(_r['BestS3Lap'])}</div>"
             f"</div>"
             f"<div style='border-top:1px solid rgba(128,128,128,0.15);"
             f" padding-top:8px; display:flex; justify-content:space-between;"
@@ -2914,24 +3034,21 @@ else:
         )
 
     # ── Full-field ideal lap table ─────────────────────────────────────────────
-    _hl_set = set([driver1] + ([driver2] if compare and driver2 else []))
-    _pole_t  = _ideal_df["TheoreticalBest"].iloc[0]
-
+    _hl_set = set(highlight_drivers)
     _tbl_rows = ""
-    for _, _r in _ideal_df.iterrows():
+    for _, _r in ideal_df.iterrows():
         _is_hl  = _r["Driver"] in _hl_set
-        _hl_col = colour1 if _r["Driver"] == driver1 else (
-                  colour2 if compare and _r["Driver"] == driver2 else None)
+        _hl_col = highlight_colours[highlight_drivers.index(_r["Driver"])] if _is_hl else None
         _row_style = (
             f"border-left: 3px solid {_hl_col};"
-            f" background: rgba({hex_to_rgb(_hl_col)},0.06);"
+            f" background: rgba({hex_to_rgb(_hl_col) if _hl_col else '0,0,0'},0.06);"
         ) if _is_hl and _hl_col else ""
 
         _gap_str  = "—" if _r["GapToPole"] < 0.001 else f"+{_r['GapToPole']:.3f}s"
         _sign     = "+" if _r["Delta"] >= 0 else "-"
         _d_str    = f"{_sign}{abs(_r['Delta']):.3f}s"
         _d_col    = "#ff6b6b" if _r["Delta"] > 0.05 else "#51cf66"
-        _name     = _fmt_driver(_r["Driver"])
+        _name     = fmt_func(_r["Driver"]) if fmt_func else _r["Driver"]
 
         _tbl_rows += (
             f"<tr style='{_row_style}'>"
@@ -2974,13 +3091,27 @@ else:
     st.markdown(_ideal_tbl, unsafe_allow_html=True)
 
 
+if sess2 is not None:
+    tab_id1, tab_id2 = st.tabs([f"Session 1 Ideal Laps ({year1})", f"Session 2 Ideal Laps ({year2})"])
+    with tab_id1:
+        _ideal_df1 = _build_ideal_lap(sess_key, _all_laps1)
+        _render_ideal_lap_section(_ideal_df1, [driver1], [colour1], _fmt_driver1)
+    with tab_id2:
+        _ideal_df2 = _build_ideal_lap(sess_key2, _all_laps2)
+        _render_ideal_lap_section(_ideal_df2, [driver2], [colour2], _fmt_driver2)
+else:
+    _ideal_df = _build_ideal_lap(sess_key, _all_laps1)
+    _render_ideal_lap_section(_ideal_df, [driver1] + ([driver2] if compare and driver2 else []),
+                              [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
+
+
 
 # ── Gap to Leader ─────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_gap_data(sess_k: str, laps_df: pd.DataFrame):
+def _build_gap_data(sess_k: str, laps_df: pd.DataFrame, session_obj=None):
     """Return a dict {driver: pd.Series(gap_seconds, index=lap_number)} for all drivers."""
     try:
         laps = laps_df.copy()
@@ -3010,8 +3141,9 @@ def _build_gap_data(sess_k: str, laps_df: pd.DataFrame):
             gap_to_leader[drv] = gap
         # Also return track status by lap for shading
         try:
-            ts = st.session_state["session"].track_status.copy()
-            ts["LapNumber"] = ts.index
+            ts = session_obj.track_status.copy() if session_obj is not None else None
+            if ts is not None:
+                ts["LapNumber"] = ts.index
         except Exception:
             ts = None
         return gap_to_leader, ts
@@ -3087,36 +3219,45 @@ def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_
     )
     return fig
 
-# Only show for race/qualifying sessions (gap is meaningful)
-_gtl_data, _ts_data = _build_gap_data(sess_key, _all_laps)
+def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_drivers, highlight_colours, fmt_func=None):
+    gtl_data, ts_data = _build_gap_data(sess_k, laps_df, session_obj)
+    if gtl_data is None:
+        st.info("Gap to Leader data is not available for this session.")
+        return
 
-if _gtl_data is None:
-    st.info("Gap to Leader data is not available for this session.")
-else:
-    _highlight = [driver1]
-    _colours   = [colour1]
-    if compare and driver2 and driver2 in _gtl_data:
-        _highlight.append(driver2)
-        _colours.append(colour2)
+    # Check highlight drivers are actually in the dataset
+    highlight = [d for d in highlight_drivers if d in gtl_data]
+    colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
-    _gtl_fig = _gap_chart_fig(_gtl_data, _highlight, _colours, sess.laps)
-    st.plotly_chart(_gtl_fig, width="stretch")
+    gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps)
+    st.plotly_chart(gtl_fig, width="stretch")
 
     # Show quick stats below the chart
-    _stat_cols = st.columns(len(_highlight))
-    for _col, _drv, _col_colour in zip(_stat_cols, _highlight, _colours):
-        if _drv in _gtl_data:
-            _gap_s = _gtl_data[_drv]
-            _final_gap = _gap_s.iloc[-1]
-            _max_gap   = _gap_s.max()
-            _col.markdown(
-                f"<div class='metric-card'>"
-                f"<div class='metric-label'>{_drv} — Final Gap</div>"
-                f"<div class='metric-value' style='color:{_col_colour};'>+{_final_gap:.1f}s</div>"
-                f"<div class='metric-sub'>Peak: +{_max_gap:.1f} s behind leader</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+    stat_cols = st.columns(len(highlight))
+    for col, drv, col_colour in zip(stat_cols, highlight, colours):
+        gap_s = gtl_data[drv]
+        final_gap = gap_s.iloc[-1]
+        max_gap   = gap_s.max()
+        drv_lbl = fmt_func(drv) if fmt_func else drv
+        col.markdown(
+            f"<div class='metric-card'>"
+            f"<div class='metric-label'>{drv_lbl} — Final Gap</div>"
+            f"<div class='metric-value' style='color:{col_colour};'>+{final_gap:.1f}s</div>"
+            f"<div class='metric-sub'>Peak: +{max_gap:.1f} s behind leader</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+if sess2 is not None:
+    tab_g1, tab_g2 = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
+    with tab_g1:
+        _render_gap_to_leader_section(sess_key, _all_laps1, sess, [driver1], [colour1], _fmt_driver1)
+    with tab_g2:
+        _render_gap_to_leader_section(sess_key2, _all_laps2, sess2, [driver2], [colour2], _fmt_driver2)
+else:
+    _render_gap_to_leader_section(sess_key, _all_laps1, sess,
+                                  [driver1] + ([driver2] if compare and driver2 else []),
+                                  [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
 
 
 # ── Race Position Chart ───────────────────────────────────────────────────────
@@ -3140,49 +3281,52 @@ def _build_position_data(sess_k: str, laps_df: pd.DataFrame):
         return None
 
 
-_pos_data = _build_position_data(sess_key, _all_laps)
+def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colours, fmt_func=None):
+    pos_data = _build_position_data(sess_k, laps_df)
+    if pos_data is None or not pos_data:
+        st.info("Race position data is not available for this session type "
+                "(only Race and Sprint sessions carry lap-by-lap position data).")
+        return
 
-if _pos_data is None or not _pos_data:
-    st.info("Race position data is not available for this session type "
-            "(only Race and Sprint sessions carry lap-by-lap position data).")
-else:
-    _highlight = {driver1: colour1}
-    if compare and driver2:
-        _highlight[driver2] = colour2
+    highlight = {}
+    for drv, col in zip(highlight_drivers, highlight_colours):
+        highlight[drv] = col
 
-    _pos_fig = go.Figure()
+    pos_fig = go.Figure()
 
     # ── All drivers — faint grey background lines
-    for _drv, _series in _pos_data.items():
-        if _drv in _highlight:
+    for _drv, _series in pos_data.items():
+        if _drv in highlight:
             continue   # drawn as highlighted traces below
-        _pos_fig.add_trace(go.Scatter(
+        drv_lbl = fmt_func(_drv) if fmt_func else _drv
+        pos_fig.add_trace(go.Scatter(
             x=_series.index.tolist(),
             y=_series.tolist(),
             mode="lines",
-            name=_fmt_driver(_drv),
+            name=drv_lbl,
             line=dict(color="rgba(160,160,160,0.18)", width=1),
             hovertemplate=(
-                f"<b>{_fmt_driver(_drv)}</b><br>"
+                f"<b>{drv_lbl}</b><br>"
                 "Lap %{x}<br>P%{y}<extra></extra>"
             ),
             showlegend=False,
         ))
 
     # ── Selected driver(s) — vivid team-coloured lines with markers
-    for _drv, _col in _highlight.items():
-        if _drv not in _pos_data:
+    for _drv, _col in highlight.items():
+        if _drv not in pos_data:
             continue
-        _series = _pos_data[_drv]
-        _pos_fig.add_trace(go.Scatter(
+        _series = pos_data[_drv]
+        drv_lbl = fmt_func(_drv) if fmt_func else _drv
+        pos_fig.add_trace(go.Scatter(
             x=_series.index.tolist(),
             y=_series.tolist(),
             mode="lines+markers",
-            name=_fmt_driver(_drv),
+            name=drv_lbl,
             line=dict(color=_col, width=2.5),
             marker=dict(size=4, color=_col),
             hovertemplate=(
-                f"<b>{_fmt_driver(_drv)}</b><br>"
+                f"<b>{drv_lbl}</b><br>"
                 "Lap %{x}<br>P%{y}<extra></extra>"
             ),
             showlegend=True,
@@ -3190,11 +3334,11 @@ else:
 
     # Max lap for x range
     _max_lap = max(
-        (s.index.max() for s in _pos_data.values() if not s.empty),
+        (s.index.max() for s in pos_data.values() if not s.empty),
         default=1,
     )
 
-    _pos_fig.update_layout(
+    pos_fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=0, t=12, b=0),
@@ -3224,405 +3368,381 @@ else:
         hoverlabel=dict(bgcolor="rgba(20,20,20,0.85)", font_size=12),
     )
 
-    st.plotly_chart(_pos_fig, width="stretch")
+    st.plotly_chart(pos_fig, width="stretch")
+
+
+if sess2 is not None:
+    tab_p1, tab_p2 = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
+    with tab_p1:
+        _render_position_section(sess_key, _all_laps1, [driver1], [colour1], _fmt_driver1)
+    with tab_p2:
+        _render_position_section(sess_key2, _all_laps2, [driver2], [colour2], _fmt_driver2)
+else:
+    _render_position_section(sess_key, _all_laps1,
+                             [driver1] + ([driver2] if compare and driver2 else []),
+                             [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
 
 # ── Track Map ─────────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
 
-map_tab1, map_tab2, map_tab3 = st.tabs(["🎨  Track Map", "🕹️  Driver Inputs", "🎬  Race Replay"])
+@st.cache_data(show_spinner=False, ttl=600)
+def _get_telemetry_for_map(_lap, driver: str, sess_k: str):
+    """Return merged position + car telemetry for a lap."""
+    try:
+        return _lap.get_telemetry()
+    except Exception:
+        return None
 
-# ────────────────────────────────────────────────────────────────────────────
-# TAB 1 — Static speed-coloured track map
-# ────────────────────────────────────────────────────────────────────────────
-with map_tab1:
-    @st.cache_data(show_spinner=False, ttl=600)
-    def _get_telemetry_for_map(_lap, driver: str, sess_k: str):
-        """Return merged position + car telemetry for a lap."""
-        try:
-            return _lap.get_telemetry()
-        except Exception:
-            return None
+def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, other_driver=None, other_colour=None, other_lap=None, fmt_func=None):
+    map_tab1, map_tab2, map_tab3 = st.tabs(["🎨  Track Map", "🕹️  Driver Inputs", "🎬  Race Replay"])
 
-    def _speed_map_fig(lap, driver: str, colour: str, lap2=None, driver2=None, colour2=None):
-        tel = _get_telemetry_for_map(lap, driver, sess_key)
-        if tel is None or tel.empty:
-            return None
+    # ────────────────────────────────────────────────────────────────────────────
+    # TAB 1 — Static speed-coloured track map
+    # ────────────────────────────────────────────────────────────────────────────
+    with map_tab1:
+        def _speed_map_fig(l_obj, drv: str, col: str, l_obj2=None, drv2=None, col2=None):
+            tel = _get_telemetry_for_map(l_obj, drv, sess_k)
+            if tel is None or tel.empty:
+                return None
 
-        # Need X, Y and Speed columns
-        needed = {"X", "Y", "Speed"}
-        if not needed.issubset(tel.columns):
-            return None
+            # Need X, Y and Speed columns
+            needed = {"X", "Y", "Speed"}
+            if not needed.issubset(tel.columns):
+                return None
 
-        fig = go.Figure()
+            fig = go.Figure()
 
-        if lap2 is not None and driver2:
-            # ── Compare mode: Sector dominance map
-            def get_winner(sec_key):
-                try:
-                    t1 = lap.get(sec_key)
-                    t2 = lap2.get(sec_key)
-                    if pd.isna(t1) or pd.isna(t2):
+            if l_obj2 is not None and drv2:
+                # ── Compare mode: Sector dominance map
+                def get_winner(sec_key):
+                    try:
+                        t1 = l_obj.get(sec_key)
+                        t2 = l_obj2.get(sec_key)
+                        if pd.isna(t1) or pd.isna(t2):
+                            return "gray"
+                        return col if t1 < t2 else col2
+                    except Exception:
                         return "gray"
-                    return colour if t1 < t2 else colour2
-                except Exception:
-                    return "gray"
 
-            c_s1 = get_winner("Sector1Time")
-            c_s2 = get_winner("Sector2Time")
-            c_s3 = get_winner("Sector3Time")
+                c_s1 = get_winner("Sector1Time")
+                c_s2 = get_winner("Sector2Time")
+                c_s3 = get_winner("Sector3Time")
 
-            def get_driver_name(col):
-                if col == colour: return driver
-                if col == colour2: return driver2
-                return "Unknown"
+                def get_driver_name(c):
+                    if c == col: return drv
+                    if c == col2: return drv2
+                    return "Unknown"
 
-            if "SessionTime" in tel.columns and "Sector1SessionTime" in lap and pd.notna(lap["Sector1SessionTime"]):
-                s1_time = lap["Sector1SessionTime"]
-                s2_time = lap["Sector2SessionTime"]
-                
-                s1_mask = tel["SessionTime"] <= s1_time
-                s2_mask = (tel["SessionTime"] > s1_time) & (tel["SessionTime"] <= s2_time)
-                s3_mask = tel["SessionTime"] > s2_time
+                if "SessionTime" in tel.columns and "Sector1SessionTime" in l_obj and pd.notna(l_obj["Sector1SessionTime"]):
+                    s1_time = l_obj["Sector1SessionTime"]
+                    s2_time = l_obj["Sector2SessionTime"]
+                    
+                    s1_mask = tel["SessionTime"] <= s1_time
+                    s2_mask = (tel["SessionTime"] > s1_time) & (tel["SessionTime"] <= s2_time)
+                    s3_mask = tel["SessionTime"] > s2_time
 
-                def add_sector(mask, col, name):
-                    if not mask.any(): return
-                    seg = tel[mask]
-                    fastest = get_driver_name(col)
+                    def add_sector(mask, sector_col, sector_name):
+                        if not mask.any(): return
+                        seg = tel[mask]
+                        fastest = get_driver_name(sector_col)
+                        fig.add_trace(go.Scatter(
+                            x=seg["X"], y=seg["Y"],
+                            mode="lines",
+                            line=dict(color=sector_col, width=16),
+                            name=sector_name,
+                            hovertemplate=f"<b>{sector_name}</b><br>Fastest: {fastest}<extra></extra>"
+                        ))
+
+                    add_sector(s1_mask, c_s1, "Sector 1")
+                    add_sector(s2_mask, c_s2, "Sector 2")
+                    add_sector(s3_mask, c_s3, "Sector 3")
+                else:
+                    # Fallback to gray if session time missing
                     fig.add_trace(go.Scatter(
-                        x=seg["X"], y=seg["Y"],
-                        mode="lines",
-                        line=dict(color=col, width=16),
-                        name=name,
-                        hovertemplate=f"<b>{name}</b><br>Fastest: {fastest}<extra></extra>"
+                        x=tel["X"], y=tel["Y"], mode="lines",
+                        line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
                     ))
 
-                add_sector(s1_mask, c_s1, "Sector 1")
-                add_sector(s2_mask, c_s2, "Sector 2")
-                add_sector(s3_mask, c_s3, "Sector 3")
+                # Driver 2 path overlay
+                tel2 = _get_telemetry_for_map(l_obj2, drv2, sess_k)
+                if tel2 is not None and needed.issubset(tel2.columns):
+                    fig.add_trace(go.Scatter(
+                        x=tel2["X"], y=tel2["Y"],
+                        mode="markers",
+                        marker=dict(color=col2, size=3, opacity=0.45),
+                        name=f"{drv2} path",
+                        hoverinfo="skip",
+                    ))
+
             else:
-                # Fallback to gray if session time missing
+                # ── Single driver mode: Speed map
+                # Track outline
                 fig.add_trace(go.Scatter(
                     x=tel["X"], y=tel["Y"], mode="lines",
                     line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
                 ))
 
-            # Driver 2 path overlay
-            tel2 = _get_telemetry_for_map(lap2, driver2, sess_key)
-            if tel2 is not None and needed.issubset(tel2.columns):
+                # Driver 1 speed-coloured scatter
                 fig.add_trace(go.Scatter(
-                    x=tel2["X"], y=tel2["Y"],
+                    x=tel["X"], y=tel["Y"],
                     mode="markers",
-                    marker=dict(color=colour2, size=3, opacity=0.45),
-                    name=f"{driver2} path",
-                    hoverinfo="skip",
+                    marker=dict(
+                        color=tel["Speed"],
+                        colorscale=[[0.0, "#1a1aff"], [0.35, "#00c8ff"], [0.65, "#00e400"], [0.85, "#ffd700"], [1.0, "#ff2200"]],
+                        size=4,
+                        colorbar=dict(title=dict(text="Speed (km/h)"), thickness=10, len=0.7, bgcolor="rgba(0,0,0,0)", x=1.02),
+                        showscale=True,
+                    ),
+                    name=drv,
+                    hovertemplate=f"<b>{drv}</b><br>Speed: %{{marker.color:.0f}} km/h<br>X: %{{x:.0f}}  Y: %{{y:.0f}}<extra></extra>"
                 ))
 
+            # ── Start / finish marker
+            fig.add_trace(go.Scatter(
+                x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
+                mode="markers",
+                marker=dict(symbol="circle", size=14, color=col,
+                            line=dict(color="white", width=2)),
+                name="Start / Finish",
+                hovertemplate="Start / Finish<extra></extra>",
+            ))
+
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                showlegend=True,
+                xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
+                yaxis=dict(visible=False),
+                height=520,
+                margin=dict(l=0, r=80, t=10, b=10),
+            )
+            return fig
+
+        if lap is not None:
+            sm_fig = _speed_map_fig(
+                lap, driver, colour,
+                l_obj2=other_lap,
+                drv2=other_driver,
+                col2=other_colour,
+            )
+            if sm_fig:
+                st.plotly_chart(sm_fig, width="stretch")
+            else:
+                st.info("Position data not available for this lap.")
         else:
-            # ── Single driver mode: Speed map
+            st.info("Load a session and select a lap to view the speed map.")
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # TAB 2 — Driver Inputs Map
+    # ────────────────────────────────────────────────────────────────────────────
+    with map_tab2:
+        def _input_map_fig(l_obj, drv: str, col: str):
+            tel = _get_telemetry_for_map(l_obj, drv, sess_k)
+            if tel is None or tel.empty:
+                return None
+
+            # Need X, Y, Throttle, Brake
+            needed = {"X", "Y", "Throttle", "Brake"}
+            if not needed.issubset(tel.columns):
+                return None
+
+            fig = go.Figure()
+
             # Track outline
             fig.add_trace(go.Scatter(
                 x=tel["X"], y=tel["Y"], mode="lines",
                 line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
             ))
 
-            # Driver 1 speed-coloured scatter
+            def get_input_color(row):
+                if row["Brake"] > 0:
+                    return "#ff2200"  # Red for braking
+                elif row["Throttle"] >= 99:
+                    return "#00e400"  # Green for full throttle
+                else:
+                    return "#ffd700"  # Yellow for coasting/modulating
+
+            colors = tel.apply(get_input_color, axis=1)
+
             fig.add_trace(go.Scatter(
                 x=tel["X"], y=tel["Y"],
                 mode="markers",
-                marker=dict(
-                    color=tel["Speed"],
-                    colorscale=[[0.0, "#1a1aff"], [0.35, "#00c8ff"], [0.65, "#00e400"], [0.85, "#ffd700"], [1.0, "#ff2200"]],
-                    size=4,
-                    colorbar=dict(title=dict(text="Speed (km/h)"), thickness=10, len=0.7, bgcolor="rgba(0,0,0,0)", x=1.02),
-                    showscale=True,
+                marker=dict(color=colors, size=4),
+                name=drv,
+                hovertemplate=(
+                    f"<b>{drv}</b><br>"
+                    "Throttle: %{customdata[0]:.0f}%<br>"
+                    "Brake: %{customdata[1]}<br>"
+                    "<extra></extra>"
                 ),
-                name=driver,
-                hovertemplate=f"<b>{driver}</b><br>Speed: %{{marker.color:.0f}} km/h<br>X: %{{x:.0f}}  Y: %{{y:.0f}}<extra></extra>"
+                customdata=np.stack((tel["Throttle"], tel["Brake"]), axis=-1),
+                showlegend=False
             ))
 
-        # ── Start / finish marker
-        fig.add_trace(go.Scatter(
-            x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
-            mode="markers",
-            marker=dict(symbol="circle", size=14, color=colour,
-                        line=dict(color="white", width=2)),
-            name="Start / Finish",
-            hovertemplate="Start / Finish<extra></extra>",
-        ))
+            # Start / finish marker
+            fig.add_trace(go.Scatter(
+                x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
+                mode="markers",
+                marker=dict(symbol="circle", size=14, color=col, line=dict(color="white", width=2)),
+                name="Start / Finish", hovertemplate="Start / Finish<extra></extra>",
+                showlegend=False
+            ))
 
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            showlegend=True,
-            xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
-            yaxis=dict(visible=False),
-            height=520,
-            margin=dict(l=0, r=80, t=10, b=10),
-        )
-        return fig
+            # Dummy traces for legend
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#00e400", size=10), name="Full Throttle"))
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ff2200", size=10), name="Braking"))
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ffd700", size=10), name="Coasting"))
 
-    if lap1 is not None:
-        sm_fig = _speed_map_fig(
-            lap1, driver1, colour1,
-            lap2=(lap2 if compare else None),
-            driver2=(driver2 if compare else None),
-            colour2=colour2,
-        )
-        if sm_fig:
-            st.plotly_chart(sm_fig, width="stretch")
-        else:
-            st.info("Position data not available for this lap.")
-    else:
-        st.info("Load a session and select a lap to view the speed map.")
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=True,
+                xaxis=dict(visible=False, scaleanchor="y", scaleratio=1), yaxis=dict(visible=False),
+                height=520, margin=dict(l=0, r=80, t=10, b=10),
+            )
+            return fig
 
-# ────────────────────────────────────────────────────────────────────────────
-# TAB 2 — Driver Inputs Map
-# ────────────────────────────────────────────────────────────────────────────
-with map_tab2:
-    def _input_map_fig(lap, driver: str, colour: str):
-        tel = _get_telemetry_for_map(lap, driver, sess_key)
-        if tel is None or tel.empty:
-            return None
-
-        # Need X, Y, Throttle, Brake
-        needed = {"X", "Y", "Throttle", "Brake"}
-        if not needed.issubset(tel.columns):
-            return None
-
-        fig = go.Figure()
-
-        # Track outline
-        fig.add_trace(go.Scatter(
-            x=tel["X"], y=tel["Y"], mode="lines",
-            line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
-        ))
-
-        def get_input_color(row):
-            if row["Brake"] > 0:
-                return "#ff2200"  # Red for braking
-            elif row["Throttle"] >= 99:
-                return "#00e400"  # Green for full throttle
-            else:
-                return "#ffd700"  # Yellow for coasting/modulating
-
-        colors = tel.apply(get_input_color, axis=1)
-
-        fig.add_trace(go.Scatter(
-            x=tel["X"], y=tel["Y"],
-            mode="markers",
-            marker=dict(color=colors, size=4),
-            name=driver,
-            hovertemplate=(
-                f"<b>{driver}</b><br>"
-                "Throttle: %{customdata[0]:.0f}%<br>"
-                "Brake: %{customdata[1]}<br>"
-                "<extra></extra>"
-            ),
-            customdata=np.stack((tel["Throttle"], tel["Brake"]), axis=-1),
-            showlegend=False
-        ))
-
-        # Start / finish marker
-        fig.add_trace(go.Scatter(
-            x=[tel["X"].iloc[0]], y=[tel["Y"].iloc[0]],
-            mode="markers",
-            marker=dict(symbol="circle", size=14, color=colour, line=dict(color="white", width=2)),
-            name="Start / Finish", hovertemplate="Start / Finish<extra></extra>",
-            showlegend=False
-        ))
-
-        # Dummy traces for legend
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#00e400", size=10), name="Full Throttle"))
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ff2200", size=10), name="Braking"))
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#ffd700", size=10), name="Coasting"))
-
-        fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=True,
-            xaxis=dict(visible=False, scaleanchor="y", scaleratio=1), yaxis=dict(visible=False),
-            height=520, margin=dict(l=0, r=80, t=10, b=10),
-        )
-        return fig
-
-    if lap1 is not None:
-        if compare and driver2:
-            if lap2 is not None:
+        if lap is not None:
+            if other_driver and other_lap is not None:
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(
                         f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
-                        f"color:{colour1};'>{_fmt_driver(driver1)}</div>",
+                        f"color:{colour};'>{fmt_func(driver) if fmt_func else driver}</div>",
                         unsafe_allow_html=True
                     )
-                    input_fig1 = _input_map_fig(lap1, driver1, colour1)
+                    input_fig1 = _input_map_fig(lap, driver, colour)
                     if input_fig1:
                         st.plotly_chart(input_fig1, width="stretch")
                     else:
-                        st.info(f"Input telemetry not available for {_fmt_driver(driver1)}.")
+                        st.info(f"Input telemetry not available for {fmt_func(driver) if fmt_func else driver}.")
                 with col2:
                     st.markdown(
                         f"<div style='text-align:center; font-weight:bold; margin-bottom:8px; "
-                        f"color:{colour2};'>{_fmt_driver(driver2)}</div>",
+                        f"color:{other_colour};'>{fmt_func(other_driver) if fmt_func else other_driver}</div>",
                         unsafe_allow_html=True
                     )
-                    input_fig2 = _input_map_fig(lap2, driver2, colour2)
+                    input_fig2 = _input_map_fig(other_lap, other_driver, other_colour)
                     if input_fig2:
                         st.plotly_chart(input_fig2, width="stretch")
                     else:
-                        st.info(f"Input telemetry not available for {_fmt_driver(driver2)}.")
+                        st.info(f"Input telemetry not available for {fmt_func(other_driver) if fmt_func else other_driver}.")
             else:
-                st.info(f"Please select a valid lap for {_fmt_driver(driver2)} to compare inputs.")
+                input_fig = _input_map_fig(lap, driver, colour)
+                if input_fig:
+                    st.plotly_chart(input_fig, width="stretch")
+                else:
+                    st.info("Input telemetry (Throttle/Brake) not available for this lap.")
         else:
-            input_fig = _input_map_fig(lap1, driver1, colour1)
-            if input_fig:
-                st.plotly_chart(input_fig, width="stretch")
-            else:
-                st.info("Input telemetry (Throttle/Brake) not available for this lap.")
-    else:
-        st.info("Load a session and select a lap to view driver inputs.")
+            st.info("Load a session and select a lap to view driver inputs.")
 
-# ────────────────────────────────────────────────────────────────────────────
-# TAB 3 — Animated race replay with all cars
-# ────────────────────────────────────────────────────────────────────────────
-with map_tab3:
-    replay_key = f"replay_{sess_key}"
-    if replay_key not in st.session_state:
-        st.session_state[replay_key] = None
+    # ────────────────────────────────────────────────────────────────────────────
+    # TAB 3 — Animated race replay with all cars
+    # ────────────────────────────────────────────────────────────────────────────
+    with map_tab3:
+        replay_key = f"replay_{sess_k}"
+        if replay_key not in st.session_state:
+            st.session_state[replay_key] = None
 
-    # ── Placeholder / button
-    if st.session_state[replay_key] is None:
-        st.markdown(
-            "<div style='text-align:center; padding:56px 24px; border:1px dashed var(--text-color); "
-            "border-radius:12px; margin:8px 0;'>"
-            "<div style='font-size:52px; margin-bottom:14px;'>🎬</div>"
-            "<div style='font-size:14px;'>Animated replay of all cars on track.</div>"
-            "<div style='font-size:12px; margin-top:6px;'>"
-            "Samples every 5 s · up to 500 frames · ~20 s to build"
-            "</div></div>",
-            unsafe_allow_html=True,
-        )
+        # ── Placeholder / button
+        if st.session_state[replay_key] is None:
+            st.markdown(
+                "<div style='text-align:center; padding:56px 24px; border:1px dashed var(--text-color); "
+                "border-radius:12px; margin:8px 0;'>"
+                "<div style='font-size:52px; margin-bottom:14px;'>🎬</div>"
+                "<div style='font-size:14px;'>Animated replay of all cars on track.</div>"
+                "<div style='font-size:12px; margin-top:6px;'>"
+                "Samples every 5 s · up to 500 frames · ~20 s to build"
+                "</div></div>",
+                unsafe_allow_html=True,
+            )
 
-    gen_col, _ = st.columns([1, 3])
-    with gen_col:
-        gen_btn = st.button("🎬  Generate Race Replay", key="gen_replay",
-                            width="stretch")
+        gen_col, _ = st.columns([1, 3])
+        with gen_col:
+            gen_btn = st.button("🎬  Generate Race Replay", key=f"gen_replay_{key_suffix}",
+                                width="stretch")
 
-    if gen_btn:
-        st.session_state[replay_key] = None   # reset so we rebuild
-        with st.spinner("Building animation — sampling all car positions…"):
-            try:
-                # ── Build driver number → abbr + colour map
-                drv_meta = {}
-                for drv_num in sess.drivers:
-                    try:
-                        info = sess.get_driver(drv_num)
-                        abbr   = info.get("Abbreviation", drv_num)
-                        colour = _team_colour(info.get("TeamName", ""))
-                        drv_meta[drv_num] = {"abbr": abbr, "colour": colour}
-                    except Exception:
-                        drv_meta[drv_num] = {"abbr": drv_num, "colour": "#888"}
+        if gen_btn:
+            st.session_state[replay_key] = None   # reset so we rebuild
+            with st.spinner("Building animation — sampling all car positions…"):
+                try:
+                    # ── Build driver number → abbr + colour map
+                    drv_meta = {}
+                    for drv_num in session_obj.drivers:
+                        try:
+                            info = session_obj.get_driver(drv_num)
+                            abbr   = info.get("Abbreviation", drv_num)
+                            colour_val = _team_colour(info.get("TeamName", ""))
+                            drv_meta[drv_num] = {"abbr": abbr, "colour": colour_val}
+                        except Exception:
+                            drv_meta[drv_num] = {"abbr": drv_num, "colour": "#888"}
 
-                # ── Extract position time series for each driver
-                T_STEP   = 5          # seconds between animation frames
-                MAX_SECS = 7200       # cap at 2 hours
-                MAX_FRAMES = 500
+                    # ── Extract position time series for each driver
+                    T_STEP   = 5          # seconds between animation frames
+                    MAX_SECS = 7200       # cap at 2 hours
+                    MAX_FRAMES = 500
 
-                all_data = {}         # drv_num -> {t, x, y}
-                for drv_num in sess.drivers:
-                    try:
-                        pdf = sess.pos_data[drv_num]
-                        if pdf is None or pdf.empty:
+                    all_data = {}         # drv_num -> {t, x, y}
+                    for drv_num in session_obj.drivers:
+                        try:
+                            pdf = session_obj.pos_data[drv_num]
+                            if pdf is None or pdf.empty:
+                                continue
+                            t_s = pdf["SessionTime"].dt.total_seconds().values
+                            all_data[drv_num] = {
+                                "t": t_s,
+                                "x": pdf["X"].values,
+                                "y": pdf["Y"].values,
+                            }
+                        except Exception:
+                            pass
+
+                    if not all_data:
+                        st.warning("No position data available for this session.")
+                        st.stop()
+
+                    # ── Build common time grid
+                    t_min = min(d["t"][0]  for d in all_data.values())
+                    t_max = min(max(d["t"][-1] for d in all_data.values()), t_min + MAX_SECS)
+                    t_grid = np.arange(t_min, t_max, T_STEP)
+                    if len(t_grid) > MAX_FRAMES:
+                        t_grid = t_grid[:MAX_FRAMES]
+
+                    # ── Pre-interpolate positions for every driver onto t_grid
+                    grids = {}
+                    valid_drvs = []
+                    for drv_num, d in all_data.items():
+                        if len(d["t"]) < 10:
                             continue
-                        t_s = pdf["SessionTime"].dt.total_seconds().values
-                        all_data[drv_num] = {
-                            "t": t_s,
-                            "x": pdf["X"].values,
-                            "y": pdf["Y"].values,
-                        }
-                    except Exception:
-                        pass
+                        xi = np.interp(t_grid, d["t"], d["x"],
+                                       left=np.nan, right=np.nan)
+                        yi = np.interp(t_grid, d["t"], d["y"],
+                                       left=np.nan, right=np.nan)
+                        # Mark frames where driver has retired as NaN
+                        retired_at = d["t"][-1]
+                        xi[t_grid > retired_at + T_STEP] = np.nan
+                        yi[t_grid > retired_at + T_STEP] = np.nan
+                        grids[drv_num] = (xi, yi)
+                        valid_drvs.append(drv_num)
 
-                if not all_data:
-                    st.warning("No position data available for this session.")
-                    st.stop()
+                    if not valid_drvs:
+                        st.warning("Insufficient position data for animation.")
+                        st.stop()
 
-                # ── Build common time grid
-                t_min = min(d["t"][0]  for d in all_data.values())
-                t_max = min(max(d["t"][-1] for d in all_data.values()), t_min + MAX_SECS)
-                t_grid = np.arange(t_min, t_max, T_STEP)
-                if len(t_grid) > MAX_FRAMES:
-                    t_grid = t_grid[:MAX_FRAMES]
+                    # ── Track outline from the driver with most data points
+                    longest = max(all_data, key=lambda k: len(all_data[k]["t"]))
+                    track_x = all_data[longest]["x"]
+                    track_y = all_data[longest]["y"]
 
-                # ── Pre-interpolate positions for every driver onto t_grid
-                grids = {}
-                valid_drvs = []
-                for drv_num, d in all_data.items():
-                    if len(d["t"]) < 10:
-                        continue
-                    xi = np.interp(t_grid, d["t"], d["x"],
-                                   left=np.nan, right=np.nan)
-                    yi = np.interp(t_grid, d["t"], d["y"],
-                                   left=np.nan, right=np.nan)
-                    # Mark frames where driver has retired as NaN
-                    retired_at = d["t"][-1]
-                    xi[t_grid > retired_at + T_STEP] = np.nan
-                    yi[t_grid > retired_at + T_STEP] = np.nan
-                    grids[drv_num] = (xi, yi)
-                    valid_drvs.append(drv_num)
+                    # Thin track to ~1000 pts for display
+                    thin = max(1, len(track_x) // 1000)
+                    track_x = track_x[::thin]
+                    track_y = track_y[::thin]
 
-                if not valid_drvs:
-                    st.warning("Insufficient position data for animation.")
-                    st.stop()
+                    # ── Helper: format seconds as MM:SS
+                    def _fmt(sec: float) -> str:
+                        m, s = int(sec // 60), int(sec % 60)
+                        return f"{m:02d}:{s:02d}"
 
-                # ── Track outline from the driver with most data points
-                longest = max(all_data, key=lambda k: len(all_data[k]["t"]))
-                track_x = all_data[longest]["x"]
-                track_y = all_data[longest]["y"]
-
-                # Thin track to ~1000 pts for display
-                thin = max(1, len(track_x) // 1000)
-                track_x = track_x[::thin]
-                track_y = track_y[::thin]
-
-                # ── Helper: format seconds as MM:SS
-                def _fmt(sec: float) -> str:
-                    m, s = int(sec // 60), int(sec % 60)
-                    return f"{m:02d}:{s:02d}"
-
-                # ── Build initial traces
-                init_traces = [
-                    go.Scatter(
-                        x=track_x, y=track_y, mode="lines",
-                        line=dict(color="gray", width=14),
-                        showlegend=False, hoverinfo="skip",
-                    )
-                ]
-                for drv_num in valid_drvs:
-                    meta  = drv_meta.get(drv_num, {"abbr": drv_num, "colour": "#888"})
-                    xi, yi = grids[drv_num]
-                    x0 = [xi[0]] if not np.isnan(xi[0]) else []
-                    y0 = [yi[0]] if not np.isnan(yi[0]) else []
-                    init_traces.append(go.Scatter(
-                        x=x0, y=y0,
-                        mode="markers+text",
-                        marker=dict(
-                            color=meta["colour"], size=14,
-                            line=dict(color="black", width=1.5),
-                        ),
-                        text=[meta["abbr"]],
-                        textposition="top center",
-                        textfont=dict(size=8, color=meta["colour"]),
-                        name=meta["abbr"],
-                        hovertemplate=f"<b>{meta['abbr']}</b><extra></extra>",
-                        showlegend=True,
-                    ))
-
-                # ── Build animation frames
-                frames = []
-                slider_steps = []
-                n_drvs = len(valid_drvs)
-
-                for f_i, t_sec in enumerate(t_grid):
-                    label = _fmt(t_sec)
-                    fdata = [
+                    # ── Build initial traces
+                    init_traces = [
                         go.Scatter(
                             x=track_x, y=track_y, mode="lines",
                             line=dict(color="gray", width=14),
@@ -3632,10 +3752,10 @@ with map_tab3:
                     for drv_num in valid_drvs:
                         meta  = drv_meta.get(drv_num, {"abbr": drv_num, "colour": "#888"})
                         xi, yi = grids[drv_num]
-                        px, py = xi[f_i], yi[f_i]
-                        fdata.append(go.Scatter(
-                            x=[px] if not np.isnan(px) else [],
-                            y=[py] if not np.isnan(py) else [],
+                        x0 = [xi[0]] if not np.isnan(xi[0]) else []
+                        y0 = [yi[0]] if not np.isnan(yi[0]) else []
+                        init_traces.append(go.Scatter(
+                            x=x0, y=y0,
                             mode="markers+text",
                             marker=dict(
                                 color=meta["colour"], size=14,
@@ -3646,95 +3766,141 @@ with map_tab3:
                             textfont=dict(size=8, color=meta["colour"]),
                             name=meta["abbr"],
                             hovertemplate=f"<b>{meta['abbr']}</b><extra></extra>",
+                            showlegend=True,
                         ))
 
-                    frames.append(go.Frame(data=fdata, name=label))
-                    # Add slider step only every ~5 frames to reduce clutter
-                    slider_steps.append(dict(
-                        args=[[label], dict(
-                            frame=dict(duration=150, redraw=False),
-                            transition=dict(duration=0),
-                            mode="immediate",
-                        )],
-                        label=label if f_i % 12 == 0 else "",
-                        method="animate",
-                    ))
+                    # ── Build animation frames
+                    frames = []
+                    slider_steps = []
 
-                # ── Compose layout
-                layout = go.Layout(
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    showlegend=True,
-                    legend=dict(
-                        bordercolor="gray", borderwidth=0.5,
-                        orientation="v", x=1.01, y=0.5,
-                        yanchor="middle",
-                        itemsizing="constant",
-                    ),
-                    xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
-                    yaxis=dict(visible=False),
-                    height=560,
-                    margin=dict(l=0, r=130, t=20, b=70),
-                    hoverlabel=dict(bgcolor="#111", font_color="#eee",
-                                   bordercolor="#333"),
-                    updatemenus=[dict(
-                        type="buttons", showactive=False,
-                        x=0.04, y=-0.10, xanchor="left",
-                        buttons=[
-                            dict(
-                                label="▶  Play",
-                                method="animate",
-                                args=[None, dict(
-                                    frame=dict(duration=150, redraw=False),
-                                    transition=dict(duration=0),
-                                    fromcurrent=True, mode="immediate",
-                                )],
-                            ),
-                            dict(
-                                label="⏸  Pause",
-                                method="animate",
-                                args=[[None], dict(
-                                    frame=dict(duration=0, redraw=False),
-                                    transition=dict(duration=0),
-                                    mode="immediate",
-                                )],
-                            ),
-                        ],
-                        font=dict(color="#ccc", size=12),
-                        bgcolor="#1a1a1a", bordercolor="#333",
-                        pad=dict(r=10, t=8),
-                    )],
-                    sliders=[dict(
-                        active=0,
-                        steps=slider_steps,
-                        currentvalue=dict(
-                            prefix="Session time  ",
-                            font=dict(color="#777", size=11),
-                            visible=True, xanchor="center",
+                    for f_i, t_sec in enumerate(t_grid):
+                        label = _fmt(t_sec)
+                        fdata = [
+                            go.Scatter(
+                                x=track_x, y=track_y, mode="lines",
+                                line=dict(color="gray", width=14),
+                                showlegend=False, hoverinfo="skip",
+                            )
+                        ]
+                        for drv_num in valid_drvs:
+                            meta  = drv_meta.get(drv_num, {"abbr": drv_num, "colour": "#888"})
+                            xi, yi = grids[drv_num]
+                            px, py = xi[f_i], yi[f_i]
+                            fdata.append(go.Scatter(
+                                x=[px] if not np.isnan(px) else [],
+                                y=[py] if not np.isnan(py) else [],
+                                mode="markers+text",
+                                marker=dict(
+                                    color=meta["colour"], size=14,
+                                    line=dict(color="black", width=1.5),
+                                ),
+                                text=[meta["abbr"]],
+                                textposition="top center",
+                                textfont=dict(size=8, color=meta["colour"]),
+                                name=meta["abbr"],
+                                hovertemplate=f"<b>{meta['abbr']}</b><extra></extra>",
+                            ))
+
+                        frames.append(go.Frame(data=fdata, name=label))
+                        # Add slider step only every ~12 frames to reduce clutter
+                        slider_steps.append(dict(
+                            args=[[label], dict(
+                                frame=dict(duration=150, redraw=False),
+                                transition=dict(duration=0),
+                                mode="immediate",
+                            )],
+                            label=label if f_i % 12 == 0 else "",
+                            method="animate",
+                        ))
+
+                    # ── Compose layout
+                    layout = go.Layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        showlegend=True,
+                        legend=dict(
+                            bordercolor="gray", borderwidth=0.5,
+                            orientation="v", x=1.01, y=0.5,
+                            yanchor="middle",
+                            itemsizing="constant",
                         ),
-                        pad=dict(t=45, b=8),
-                        font=dict(color="#444", size=8),
-                        bgcolor="#111", bordercolor="#1e1e1e",
-                        tickcolor="#2a2a2a",
-                        len=0.88, x=0.06,
-                    )],
-                )
+                        xaxis=dict(visible=False, scaleanchor="y", scaleratio=1),
+                        yaxis=dict(visible=False),
+                        height=560,
+                        margin=dict(l=0, r=130, t=20, b=70),
+                        hoverlabel=dict(bgcolor="#111", font_color="#eee",
+                                       bordercolor="#333"),
+                        updatemenus=[dict(
+                            type="buttons", showactive=False,
+                            x=0.04, y=-0.10, xanchor="left",
+                            buttons=[
+                                dict(
+                                    label="▶  Play",
+                                    method="animate",
+                                    args=[None, dict(
+                                        frame=dict(duration=150, redraw=False),
+                                        transition=dict(duration=0),
+                                        fromcurrent=True, mode="immediate",
+                                    )],
+                                ),
+                                dict(
+                                    label="⏸  Pause",
+                                    method="animate",
+                                    args=[[None], dict(
+                                        frame=dict(duration=0, redraw=False),
+                                        transition=dict(duration=0),
+                                        mode="immediate",
+                                    )],
+                                ),
+                            ],
+                            font=dict(color="#ccc", size=12),
+                            bgcolor="#1a1a1a", bordercolor="#333",
+                            pad=dict(r=10, t=8),
+                        )],
+                        sliders=[dict(
+                            active=0,
+                            steps=slider_steps,
+                            currentvalue=dict(
+                                prefix="Session time  ",
+                                font=dict(color="#777", size=11),
+                                visible=True, xanchor="center",
+                            ),
+                            pad=dict(t=45, b=8),
+                            font=dict(color="#444", size=8),
+                            bgcolor="#111", bordercolor="#1e1e1e",
+                            tickcolor="#2a2a2a",
+                            len=0.88, x=0.06,
+                        )],
+                    )
 
-                replay_fig = go.Figure(
-                    data=init_traces, layout=layout, frames=frames
-                )
-                st.session_state[replay_key] = replay_fig
+                    replay_fig = go.Figure(
+                        data=init_traces, layout=layout, frames=frames
+                    )
+                    st.session_state[replay_key] = replay_fig
 
-            except Exception as exc:
-                import traceback
-                st.error(f"Could not build replay: {exc}")
-                with st.expander("Full traceback"):
-                    st.code(traceback.format_exc())
+                except Exception as exc:
+                    import traceback
+                    st.error(f"Could not build replay: {exc}")
+                    with st.expander("Full traceback"):
+                        st.code(traceback.format_exc())
 
-    if st.session_state[replay_key] is not None:
-        st.plotly_chart(st.session_state[replay_key], width="stretch")
-        n_frames = len(st.session_state[replay_key].frames)
-        session_secs = n_frames * 5
-        st.caption(
-            f"⏱  {n_frames} frames · {session_secs // 60} min {session_secs % 60} s covered · "
-            "5 s per frame · Click ▶ Play or drag the slider"
-        )
+        if st.session_state[replay_key] is not None:
+            st.plotly_chart(st.session_state[replay_key], width="stretch")
+            n_frames = len(st.session_state[replay_key].frames)
+            session_secs = n_frames * 5
+            st.caption(
+                f"⏱  {n_frames} frames · {session_secs // 60} min {session_secs % 60} s covered · "
+                "5 s per frame · Click ▶ Play or drag the slider"
+            )
+
+if sess2 is not None:
+    session_map_tabs = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
+    with session_map_tabs[0]:
+        render_maps_block(sess, sess_key, driver1, colour1, lap1, "sess1", fmt_func=_fmt_driver1)
+    with session_map_tabs[1]:
+        render_maps_block(sess2, sess_key2, driver2, colour2, lap2, "sess2", fmt_func=_fmt_driver2)
+else:
+    render_maps_block(sess, sess_key, driver1, colour1, lap1, "single",
+                      other_driver=(driver2 if compare else None),
+                      other_colour=(colour2 if compare else None),
+                      other_lap=(lap2 if compare else None),
+                      fmt_func=_fmt_driver1)
