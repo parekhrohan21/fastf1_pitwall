@@ -25,15 +25,38 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
 
-# Force FastF1 to use the livetiming mirror directly to avoid anti-bot blocks on cloud deployments (like Streamlit Cloud)
+# Force FastF1 to use the livetiming mirror directly and override headers to look like standard browsers (bypassing cloud/anti-bot blocks)
 try:
     import fastf1._api
     fastf1._api.base_url = fastf1._api.base_url_mirror
+    fastf1._api.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Connection': 'keep-alive'
+    })
+    if 'TE' in fastf1._api.headers:
+        del fastf1._api.headers['TE']
 except Exception:
     pass
 try:
     import fastf1.api
     fastf1.api.base_url = fastf1.api.base_url_mirror
+    fastf1.api.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Connection': 'keep-alive'
+    })
+    if 'TE' in fastf1.api.headers:
+        del fastf1.api.headers['TE']
+except Exception:
+    pass
+try:
+    fastf1._api.Cache._requests_session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Connection': 'keep-alive'
+    })
+    fastf1._api.Cache._requests_session_cached.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Connection': 'keep-alive'
+    })
 except Exception:
     pass
 
