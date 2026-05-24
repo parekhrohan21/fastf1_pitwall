@@ -27,6 +27,11 @@ fastf1.Cache.enable_cache(CACHE_DIR)
 
 # Force FastF1 to use the livetiming mirror directly to avoid anti-bot blocks on cloud deployments (like Streamlit Cloud)
 try:
+    import fastf1._api
+    fastf1._api.base_url = fastf1._api.base_url_mirror
+except Exception:
+    pass
+try:
     import fastf1.api
     fastf1.api.base_url = fastf1.api.base_url_mirror
 except Exception:
