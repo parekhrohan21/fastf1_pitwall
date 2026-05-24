@@ -3248,7 +3248,7 @@ st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_gap_data(sess_k: str, laps_df: pd.DataFrame, session_obj=None):
+def _build_gap_data(sess_k: str, laps_df: pd.DataFrame, _session_obj=None):
     """Return a dict {driver: pd.Series(gap_seconds, index=lap_number)} for all drivers."""
     try:
         laps = laps_df.copy()
@@ -3278,7 +3278,7 @@ def _build_gap_data(sess_k: str, laps_df: pd.DataFrame, session_obj=None):
             gap_to_leader[drv] = gap
         # Also return track status by lap for shading
         try:
-            ts = session_obj.track_status.copy() if session_obj is not None else None
+            ts = _session_obj.track_status.copy() if _session_obj is not None else None
             if ts is not None:
                 ts["LapNumber"] = ts.index
         except Exception:
