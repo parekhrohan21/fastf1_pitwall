@@ -25,6 +25,13 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
 
+# Force FastF1 to use the livetiming mirror directly to avoid anti-bot blocks on cloud deployments (like Streamlit Cloud)
+try:
+    import fastf1.api
+    fastf1.api.base_url = fastf1.api.base_url_mirror
+except Exception:
+    pass
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="🏎  Pit Wall — F1 Telemetry",
