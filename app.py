@@ -1117,6 +1117,23 @@ def load_session(year: int, gp: str, session_type: str = "R"):
     return sess
 
 
+def clear_session_cache(year: int, gp: str):
+    """Clear local FastF1 cache directories and Streamlit cache resource for a GP."""
+    try:
+        import shutil
+        import glob
+        gp_clean = str(gp).replace(" ", "_")
+        gp_dir_pattern = os.path.join(CACHE_DIR, str(year), f"*{gp_clean}*")
+        for gp_dir in glob.glob(gp_dir_pattern):
+            shutil.rmtree(gp_dir, ignore_errors=True)
+    except Exception:
+        pass
+    try:
+        load_session.clear()
+    except Exception:
+        pass
+
+
 def format_laptime(td) -> str:
     try:
         if pd.isna(td):
@@ -1294,7 +1311,12 @@ if load_btn:
             st.session_state["sess_key"] = sess_key
             st.session_state["year1"] = year
         except Exception as e:
-            st.error(f"❌ Session 1: {e}")
+            clear_session_cache(year, gp)
+            st.error(
+                f"**Session Loading Error**\n\n"
+                f"FastF1 could not load the lap data: {e}.\n\n"
+                "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+            )
             st.stop()
 
     if compare_sessions:
@@ -1307,7 +1329,12 @@ if load_btn:
                 st.session_state["sess_key2"] = sess_key2
                 st.session_state["year2"] = year2
             except Exception as e:
-                st.error(f"❌ Session 2: {e}")
+                clear_session_cache(year2, gp2)
+                st.error(
+                    f"**Session Loading Error (Session 2)**\n\n"
+                    f"FastF1 could not load the lap data: {e}.\n\n"
+                    "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+                )
                 st.stop()
     else:
         st.session_state["session2"] = None
@@ -1372,6 +1399,16 @@ except Exception as e:
         "the session is very recent and official telemetry hasn't been published yet, "
         "or if the session was cancelled."
     )
+    # Clear cache to allow a clean retry next time
+    try:
+        clear_session_cache(year1, gp)
+    except Exception:
+        pass
+    if sess2 is not None:
+        try:
+            clear_session_cache(year2, gp2)
+        except Exception:
+            pass
     # Clear invalid session states so we don't get stuck in a broken loop
     st.session_state["session"] = None
     st.session_state["session2"] = None
