@@ -25,38 +25,55 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
 
-# Force FastF1 to use the livetiming mirror directly and override headers to look like standard browsers (bypassing cloud/anti-bot blocks)
+# Intercept F1 livetiming requests and route them through curl_cffi to bypass Cloudflare bot detection on datacenter IPs
 try:
-    import fastf1._api
-    fastf1._api.base_url = fastf1._api.base_url_mirror
-    fastf1._api.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Connection': 'keep-alive'
-    })
-    if 'TE' in fastf1._api.headers:
-        del fastf1._api.headers['TE']
-except Exception:
-    pass
-try:
-    import fastf1.api
-    fastf1.api.base_url = fastf1.api.base_url_mirror
-    fastf1.api.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Connection': 'keep-alive'
-    })
-    if 'TE' in fastf1.api.headers:
-        del fastf1.api.headers['TE']
-except Exception:
-    pass
-try:
-    fastf1._api.Cache._requests_session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Connection': 'keep-alive'
-    })
-    fastf1._api.Cache._requests_session_cached.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Connection': 'keep-alive'
-    })
+    import requests
+    from curl_cffi import requests as curl_requests
+
+    # Save original requests Session request method
+    original_request = requests.Session.request
+
+    def patched_request(self, method, url, **kwargs):
+        # We only intercept F1 timing API or mirror requests
+        if "formula1.com" in url or "fastf1.dev" in url:
+            curl_kwargs = {}
+            for key in ['headers', 'params', 'data', 'json', 'timeout', 'cookies', 'verify', 'stream']:
+                if key in kwargs:
+                    curl_kwargs[key] = kwargs[key]
+            
+            # Ensure headers are present and customize them to simulate a standard browser
+            headers = curl_kwargs.get('headers', {})
+            if not headers:
+                headers = {}
+            else:
+                headers = dict(headers)
+            
+            headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            headers['Connection'] = 'keep-alive'
+            if 'TE' in headers:
+                del headers['TE']
+                
+            curl_kwargs['headers'] = headers
+            # Impersonate Chrome 110 browser TLS signature and ciphers
+            curl_kwargs['impersonate'] = 'chrome110'
+            
+            # Execute with curl_cffi
+            r = curl_requests.request(method, url, **curl_kwargs)
+            
+            # Map back to standard requests.Response object
+            req_resp = requests.Response()
+            req_resp.status_code = r.status_code
+            req_resp.url = r.url
+            req_resp._content = r.content
+            req_resp.encoding = r.encoding
+            
+            from requests.structures import CaseInsensitiveDict
+            req_resp.headers = CaseInsensitiveDict(r.headers)
+            return req_resp
+        else:
+            return original_request(self, method, url, **kwargs)
+
+    requests.Session.request = patched_request
 except Exception:
     pass
 
