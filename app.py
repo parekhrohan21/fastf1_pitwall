@@ -25,55 +25,72 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
 
-# Intercept F1 livetiming requests and route them through curl_cffi to bypass Cloudflare bot detection on datacenter IPs
+# ── Cloudflare bypass via HTTPAdapter.send ────────────────────────────────────
+# FastF1 uses its own _SessionWithRateLimiting subclass whose send() method
+# calls super().send() → HTTPAdapter.send() → urllib3.  Patching
+# requests.Session.request (as previously done) has NO effect because FastF1's
+# code path never passes through that method for the actual TLS handshake.
+#
+# The correct intercept point is requests.adapters.HTTPAdapter.send — it is
+# called unconditionally for every HTTPS request regardless of which Session
+# subclass initiates it.  Here we swap in curl_cffi at that layer so that
+# Streamlit Cloud's datacenter IP presents a real Chrome TLS fingerprint to
+# Cloudflare instead of a Python/urllib3 fingerprint that Cloudflare blocks.
 try:
     import requests
+    import requests.adapters
     from curl_cffi import requests as curl_requests
+    from requests.structures import CaseInsensitiveDict
 
-    # Save original requests Session request method
-    original_request = requests.Session.request
+    _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com")
+    _original_adapter_send = requests.adapters.HTTPAdapter.send
 
-    def patched_request(self, method, url, **kwargs):
-        # We only intercept F1 timing API or mirror requests
-        if "formula1.com" in url or "fastf1.dev" in url:
-            curl_kwargs = {}
-            for key in ['headers', 'params', 'data', 'json', 'timeout', 'cookies', 'verify', 'stream']:
-                if key in kwargs:
-                    curl_kwargs[key] = kwargs[key]
-            
-            # Ensure headers are present and customize them to simulate a standard browser
-            headers = curl_kwargs.get('headers', {})
-            if not headers:
-                headers = {}
-            else:
-                headers = dict(headers)
-            
-            headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            headers['Connection'] = 'keep-alive'
-            if 'TE' in headers:
-                del headers['TE']
-                
-            curl_kwargs['headers'] = headers
-            # Impersonate Chrome 110 browser TLS signature and ciphers
-            curl_kwargs['impersonate'] = 'chrome110'
-            
-            # Execute with curl_cffi
-            r = curl_requests.request(method, url, **curl_kwargs)
-            
-            # Map back to standard requests.Response object
-            req_resp = requests.Response()
-            req_resp.status_code = r.status_code
-            req_resp.url = r.url
-            req_resp._content = r.content
-            req_resp.encoding = r.encoding
-            
-            from requests.structures import CaseInsensitiveDict
-            req_resp.headers = CaseInsensitiveDict(r.headers)
-            return req_resp
-        else:
-            return original_request(self, method, url, **kwargs)
+    def _patched_adapter_send(
+        self, request, stream=False, timeout=None,
+        verify=True, cert=None, proxies=None
+    ):
+        """Route F1 API calls through curl_cffi to bypass Cloudflare TLS checks."""
+        url = getattr(request, "url", "") or ""
+        if any(domain in url for domain in _F1_DOMAINS):
+            # Build headers — strip hop-by-hop headers that curl_cffi rejects
+            hdrs = dict(request.headers)
+            hdrs["User-Agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            )
+            for hop in ("TE", "Connection", "Transfer-Encoding", "Keep-Alive",
+                        "Proxy-Authorization", "Upgrade"):
+                hdrs.pop(hop, None)
+            try:
+                curl_resp = curl_requests.request(
+                    method=request.method,
+                    url=url,
+                    headers=hdrs,
+                    data=request.body,
+                    timeout=timeout or 30,
+                    impersonate="chrome124",
+                    allow_redirects=True,
+                )
+                # Map curl_cffi response → requests.Response so FastF1 can parse it
+                resp = requests.Response()
+                resp.status_code = curl_resp.status_code
+                resp.url = curl_resp.url
+                resp._content = curl_resp.content
+                resp.encoding = curl_resp.encoding or "utf-8"
+                resp.headers = CaseInsensitiveDict(dict(curl_resp.headers))
+                resp.request = request
+                return resp
+            except Exception:
+                # Fall back to standard urllib3 if curl_cffi fails
+                pass
+        return _original_adapter_send(
+            self, request,
+            stream=stream, timeout=timeout,
+            verify=verify, cert=cert, proxies=proxies,
+        )
 
-    requests.Session.request = patched_request
+    requests.adapters.HTTPAdapter.send = _patched_adapter_send
 except Exception:
     pass
 
