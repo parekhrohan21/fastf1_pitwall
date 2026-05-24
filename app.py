@@ -1113,8 +1113,47 @@ def load_schedule(year: int) -> pd.DataFrame:
 @st.cache_resource(show_spinner=False, ttl=3600)
 def load_session(year: int, gp: str, session_type: str = "R"):
     sess = fastf1.get_session(year, gp, session_type)
-    sess.load(telemetry=True, laps=True, weather=True, messages=True)
-    return sess
+    
+    def has_laps(s) -> bool:
+        try:
+            return hasattr(s, "laps") and s.laps is not None and not s.laps.empty
+        except Exception:
+            return False
+
+    # Try 1: Load everything (Standard)
+    try:
+        sess.load(telemetry=True, laps=True, weather=True, messages=True)
+        if has_laps(sess):
+            return sess
+    except Exception:
+        pass
+        
+    # Try 2: Load without messages (Messages often fail/absent)
+    try:
+        sess.load(telemetry=True, laps=True, weather=True, messages=False)
+        if has_laps(sess):
+            return sess
+    except Exception:
+        pass
+        
+    # Try 3: Load without telemetry
+    try:
+        sess.load(telemetry=False, laps=True, weather=True, messages=False)
+        if has_laps(sess):
+            return sess
+    except Exception:
+        pass
+
+    # Try 4: Minimal load (Only laps)
+    try:
+        sess.load(telemetry=False, laps=True, weather=False, messages=False)
+        if has_laps(sess):
+            return sess
+    except Exception:
+        pass
+
+    # Try 5: Final fallback check/raise
+    raise ValueError("No lap timing data is available for this session on F1 servers.")
 
 
 def clear_session_cache(year: int, gp: str):
