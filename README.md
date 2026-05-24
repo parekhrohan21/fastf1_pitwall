@@ -155,6 +155,77 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 
 ---
 
+## 🧑‍💻 Contributing & Development Workflow
+
+To ensure code stability and maintain a clean git history, all code changes (fixes or feature requests) must follow this systematic branch-and-PR development workflow:
+
+### Step 1 — Create a GitHub Issue
+Always start by documenting the bug or feature request in a GitHub Issue:
+```bash
+gh issue create --title "<type>: <short summary>" --body "<description and details>" --label "<bug/enhancement>"
+```
+
+### Step 2 — Create a Feature or Fix Branch
+Switch to a clean `main` branch, pull remote changes, and checkout a dedicated feature/fix branch:
+```bash
+git checkout main
+git pull
+git checkout -b <prefix>/<short-description>  # e.g., fix/session-data-unavailable or feature/gap-chart
+```
+
+### Step 3 — Implementation Guidelines
+When modifying `app.py`, adhere to the following safety patterns:
+- **Immediate Data Validation**: When loading F1 session data via `load_session()`, always check that the loaded session object contains valid lap data immediately after loading:
+  ```python
+  sess = load_session(year, gp, session_type)
+  if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
+      raise ValueError("No lap data available for this session.")
+  ```
+- **UI Lockup Prevention**: If a session fails to load or fails validation later in the rendering cycle, clear any invalid session objects from `st.session_state` inside the `except` block to prevent the app from getting stuck in an infinite crash loop:
+  ```python
+  st.session_state["session"] = None
+  st.session_state["session2"] = None
+  st.session_state["sess_key"] = None
+  st.session_state["sess_key2"] = None
+  ```
+
+### Step 4 — Verify Syntax
+Before staging or committing any code, always run a python syntax compilation check to ensure there are no syntax errors:
+```bash
+python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"
+```
+
+### Step 5 — Commit, Push and Open a PR
+1. Stage and commit your changes referencing the issue number:
+   ```bash
+   git add app.py
+   git commit -m "<type>: <short summary>
+
+   Closes #<issue_number>"
+   ```
+2. Push your branch to the remote repository:
+   ```bash
+   git push -u origin <branch-name>
+   ```
+3. Open a Pull Request (PR) on GitHub:
+   ```bash
+   gh pr create --title "<type>: <short summary>" --body "Closes #<issue_number>"
+   ```
+
+### Step 6 — Merge the PR & Clean Up
+Once the PR is verified, merge it and delete the remote branch using:
+```bash
+gh pr merge --merge --delete-branch
+```
+Clean up your local workspace by switching back to `main`, pulling, and pruning remote tracking branches:
+```bash
+git checkout main
+git pull
+git fetch -p
+```
+
+---
+
 ## ⚖️ Data & Licensing
 
 Telemetry data is sourced via [FastF1](https://docs.fastf1.dev) from the official F1 timing stream and the Ergast API.  

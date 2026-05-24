@@ -226,30 +226,62 @@ When upgrading any dependency:
 
 ## GitHub Workflow
 
-This section defines the standard git procedure for all changes to this repository. Follow these steps on every change — no exceptions.
+This section defines the mandatory git procedure for all changes to this repository. Whenever a code change (bug fix or feature request) is requested, follow these steps — no exceptions.
 
 ### Step-by-step procedure
 
 ```
-1. Pull latest changes from remote
+1. Create a GitHub Issue describing the bug or feature request:
+   gh issue create --title "<type>: <short summary>" --body "<description>" --label "<bug/enhancement>"
+
+2. Pull latest changes and checkout a dedicated feature/fix branch:
+   git checkout main
    git pull
+   git checkout -b <prefix>/<short-description>  # e.g., fix/session-data-unavailable
 
-2. Make your code changes in app.py (and docs if needed)
+3. Implement your code changes in app.py following the Coding Standards (including safety validation and state clearing: see below).
 
-3. Syntax-check before staging
+4. Verify syntax before staging:
    python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"
 
-4. Stage all changes
-   git add .
+5. Stage, commit, and push your changes to origin:
+   git add app.py
+   git commit -m "<type>: <short summary>
 
-5. Commit with a descriptive message
-   git commit -m "<type>: <short summary>"
+   Closes #<issue_number>"
+   git push -u origin <branch-name>
 
-6. Push to remote
-   git push
+6. Open a GitHub Pull Request:
+   gh pr create --title "<type>: <short summary>" --body "Closes #<issue_number>"
+
+7. Merge the PR and delete the branch:
+   gh pr merge --merge --delete-branch
+
+8. Clean up local repository:
+   git checkout main
+   git pull
+   git fetch -p
 ```
 
+### Safety & Robustness Standards
+
+When modifying session loading or accessing session attributes, you must implement the following safeguards:
+- **Validate Lap Data on Load**: Immediately after loading a session using `load_session()`, verify that the laps data is available and not empty. Accessing `.laps` throws a `ValueError` if the session is cancelled or too recent.
+  ```python
+  sess = load_session(year, gp, session_type)
+  if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
+      raise ValueError("No lap data available for this session.")
+  ```
+- **Prevent Stuck UI Lockups**: When loading or validating data fails and raises an exception, clear any invalid session objects from `st.session_state` inside the `except` handler before calling `st.stop()`. This ensures that subsequent Streamlit reruns return the user to a clean landing page rather than locking them in a broken state loop.
+  ```python
+  st.session_state["session"] = None
+  st.session_state["session2"] = None
+  st.session_state["sess_key"] = None
+  st.session_state["sess_key2"] = None
+  ```
+
 ---
+
 
 ### Commit message convention
 
@@ -292,7 +324,7 @@ If there are conflicts in `app.py`, resolve manually. The file is a linear scrip
 
 ### Branch policy
 
-This project uses a **single `main` branch**. All changes go directly to `main`. Feature branches are not required unless the project owner explicitly requests one. However, if a separate branch is created, it must always be merged using a Pull Request (PR) to ensure all verification steps are completed before code hits `main`.
+This project enforces a strict **branch-and-PR policy** for all non-trivial changes (fixes or feature requests). Direct pushes to `main` are restricted to documentation-only updates or minor copy changes. All code modifications must be developed in a separate branch and merged via Pull Request (PR) to ensure code quality and stability.
 
 ---
 
