@@ -1288,6 +1288,8 @@ if load_btn:
     with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~30 s)"):
         try:
             sess = load_session(year, gp, session_type)
+            if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
+                raise ValueError("No lap data available for this session.")
             st.session_state["session"] = sess
             st.session_state["sess_key"] = sess_key
             st.session_state["year1"] = year
@@ -1299,6 +1301,8 @@ if load_btn:
         with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~30 s)"):
             try:
                 sess2 = load_session(year2, gp2, session_type2)
+                if not hasattr(sess2, "laps") or sess2.laps is None or sess2.laps.empty:
+                    raise ValueError("No lap data available for this session.")
                 st.session_state["session2"] = sess2
                 st.session_state["sess_key2"] = sess_key2
                 st.session_state["year2"] = year2
@@ -1368,6 +1372,11 @@ except Exception as e:
         "the session is very recent and official telemetry hasn't been published yet, "
         "or if the session was cancelled."
     )
+    # Clear invalid session states so we don't get stuck in a broken loop
+    st.session_state["session"] = None
+    st.session_state["session2"] = None
+    st.session_state["sess_key"] = None
+    st.session_state["sess_key2"] = None
     st.stop()
 
 # ── Laps snapshot ─────────────────────────────────────────────────────────────
