@@ -51,33 +51,34 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | Lines (approx) | Section | Purpose |
 |---|---|---|
 | 1–22 | Imports & warnings | All `import` statements |
-| 23–35 | FastF1 cache + page config | `fastf1.Cache.enable_cache`, `st.set_page_config` |
-| 36–179 | PWA injection | Injects Web Manifest + Apple meta tags via `components.html` |
-| 180–222 | Page-transition JS | `MutationObserver` replays `pageEnter` CSS on every rerender |
-| 223–814 | Custom CSS | Full design system — keyframes, typography, layout, cards, banner |
-| 815–984 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
-| 985–1066 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
-| 1067–1192 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
-| 1193–1247 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button |
-| 1248–1266 | Session state | Initialises session variables in Streamlit state |
-| 1267–1297 | Landing page | Welcome panel with features summary if no session is loaded |
-| 1298–1329 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping |
-| 1330–1433 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
-| 1434–1496 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
-| 1497–1657 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
-| 1658–1736 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
-| 1737–1901 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
-| 1902–2240 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
-| 2241–2358 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
-| 2359–2536 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
-| 2537–2573 | Telemetry charts | Matplotlib telemetry chart builder and renderer |
-| 2574–2645 | Export Telemetry | CSV export widget for driver lap data |
-| 2646–2676 | Speed Delta | Matplotlib comparison chart |
-| 2677–2776 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
-| 2777–2977 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
-| 2978–3121 | Gap to Leader | Plotly gap analysis over the race distance |
-| 3122–3228 | Race Position Chart | Track positions over all laps |
-| 3229–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
+| 23–79 | FastF1 cache + requests patch | `fastf1.Cache.enable_cache`, requests monkey-patch |
+| 80–87 | Page config | `st.set_page_config` |
+| 88–231 | PWA injection | Injects Web Manifest + Apple meta tags via `components.html` |
+| 232–274 | Page-transition JS | `MutationObserver` replays `pageEnter` CSS on every rerender |
+| 275–866 | Custom CSS | Full design system — keyframes, typography, layout, cards, banner |
+| 867–1036 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
+| 1037–1118 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
+| 1119–1244 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
+| 1245–1299 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button |
+| 1300–1318 | Session state | Initialises session variables in Streamlit state |
+| 1319–1349 | Landing page | Welcome panel with features summary if no session is loaded |
+| 1350–1381 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping |
+| 1382–1485 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
+| 1486–1548 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
+| 1549–1709 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
+| 1710–1788 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
+| 1789–1953 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
+| 1954–2292 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
+| 2293–2410 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
+| 2411–2588 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
+| 2589–2625 | Telemetry charts | Matplotlib telemetry chart builder and renderer |
+| 2626–2697 | Export Telemetry | CSV export widget for driver lap data |
+| 2698–2728 | Speed Delta | Matplotlib comparison chart |
+| 2729–2828 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
+| 2829–3029 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
+| 3030–3173 | Gap to Leader | Plotly gap analysis over the race distance |
+| 3174–3280 | Race Position Chart | Track positions over all laps |
+| 3281–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
 
 ---
 
