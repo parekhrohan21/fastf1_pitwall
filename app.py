@@ -41,6 +41,8 @@ try:
     import requests.adapters
     from curl_cffi import requests as curl_requests
     from requests.structures import CaseInsensitiveDict
+    from urllib3.response import HTTPResponse
+    from io import BytesIO
 
     _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com")
     _original_adapter_send = requests.adapters.HTTPAdapter.send
@@ -80,6 +82,19 @@ try:
                 resp.encoding = curl_resp.encoding or "utf-8"
                 resp.headers = CaseInsensitiveDict(dict(curl_resp.headers))
                 resp.request = request
+                
+                # FastF1 uses stream=True and iter_lines() on responses like .jsonStream
+                # requests_cache also requires a proper raw response object
+                raw_response = HTTPResponse(
+                    body=BytesIO(curl_resp.content),
+                    headers=curl_resp.headers,
+                    status=curl_resp.status_code,
+                    preload_content=False,
+                    original_response=None
+                )
+                resp.raw = raw_response
+                resp.history = []
+                resp.reason = 'OK'
                 return resp
             except Exception:
                 # Fall back to standard urllib3 if curl_cffi fails
