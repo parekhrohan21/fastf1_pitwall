@@ -39,7 +39,8 @@ fastf1.Cache.enable_cache(CACHE_DIR)
 _PATCH_STATUS = {
     "imported": False,
     "import_err": None,
-    "request_errs": []
+    "request_errs": [],
+    "proxy_errs": []
 }
 
 _WORKING_PROXY = None
@@ -67,7 +68,7 @@ def test_proxy_sync(proxy_info):
 
 def find_new_proxy():
     import concurrent.futures
-    from curl_cffi import requests as curl_requests
+    _PATCH_STATUS["proxy_errs"] = []
     
     # We query socks5 and http lists
     sources_socks5 = [
@@ -84,34 +85,38 @@ def find_new_proxy():
     # Fetch SOCKS5
     for url in sources_socks5:
         try:
+            from curl_cffi import requests as curl_requests
             resp = curl_requests.get(url, timeout=5)
             if resp.status_code == 200:
                 for line in resp.text.strip().split("\n"):
                     line = line.strip()
                     if line and ":" in line:
                         proxies.add(("socks5", line))
-        except Exception:
-            pass
+        except Exception as e:
+            _PATCH_STATUS["proxy_errs"].append(f"SOCKS5 fetch error for {url}: {e}")
             
     # Fetch HTTP
     for url in sources_http:
         try:
+            from curl_cffi import requests as curl_requests
             resp = curl_requests.get(url, timeout=5)
             if resp.status_code == 200:
                 for line in resp.text.strip().split("\n"):
                     line = line.strip()
                     if line and ":" in line:
                         proxies.add(("http", line))
-        except Exception:
-            pass
+        except Exception as e:
+            _PATCH_STATUS["proxy_errs"].append(f"HTTP fetch error for {url}: {e}")
             
     proxy_list = list(proxies)
     if not proxy_list:
+        _PATCH_STATUS["proxy_errs"].append("No proxies fetched from sources.")
         return None
         
     # Test concurrently with 60 workers, up to 300 proxies
     test_subset = proxy_list[:300]
     
+    test_failures = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         futures = {executor.submit(test_proxy_sync, p): p for p in test_subset}
         for future in concurrent.futures.as_completed(futures):
@@ -119,8 +124,14 @@ def find_new_proxy():
                 res = future.result()
                 if res:
                     return res
-            except Exception:
-                pass
+            except Exception as e:
+                p = futures[future]
+                test_failures.append(f"Proxy test failed for {p}: {e}")
+                
+    if test_failures:
+        _PATCH_STATUS["proxy_errs"].append(f"Tested {len(test_subset)} proxies. Sample failures: {test_failures[:5]}")
+    else:
+        _PATCH_STATUS["proxy_errs"].append(f"Tested {len(test_subset)} proxies but none returned True.")
     return None
 
 def get_working_proxy(force_refresh=False):
@@ -133,9 +144,13 @@ def get_working_proxy(force_refresh=False):
 
 def test_curl_cffi_request():
     try:
+        if not _PATCH_STATUS["imported"]:
+            return f"Patch not imported! Error was:\n{_PATCH_STATUS['import_err']}"
+            
         p = get_working_proxy(force_refresh=True)
         if not p:
-            return "Failed to find any working proxy."
+            return f"Failed to find any working proxy.\nProxy Search Logs:\n" + "\n".join(_PATCH_STATUS.get("proxy_errs", []))
+            
         proto, addr = p
         proxy_url = f"{proto}://{addr}"
         proxies = {
