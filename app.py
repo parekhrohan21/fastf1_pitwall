@@ -142,10 +142,26 @@ def get_working_proxy(force_refresh=False):
     _WORKING_PROXY = find_new_proxy()
     return _WORKING_PROXY
 
+import os
+IS_CLOUD = (
+    os.environ.get("HOME") == "/home/appuser" or
+    os.environ.get("STREAMLIT_SHARING_MODE") is not None or
+    os.environ.get("STREAMLIT_RUNTIME_IS_SHARING_MODE") is not None
+)
+
 def test_curl_cffi_request():
     try:
         if not _PATCH_STATUS["imported"]:
             return f"Patch not imported! Error was:\n{_PATCH_STATUS['import_err']}"
+            
+        if not IS_CLOUD:
+            from curl_cffi import requests as curl_requests
+            resp = curl_requests.get(
+                "https://livetiming.formula1.com/static/StreamingStatus.json",
+                impersonate="chrome124",
+                timeout=10
+            )
+            return f"Running locally (no proxy bypass active). Direct connection test status: {resp.status_code}\nHeaders: {dict(resp.headers)}"
             
         p = get_working_proxy(force_refresh=True)
         if not p:
@@ -185,9 +201,9 @@ try:
         self, request, stream=False, timeout=None,
         verify=True, cert=None, proxies=None
     ):
-        """Route F1 API calls through curl_cffi + proxy to bypass Cloudflare/CloudFront blocks."""
+        """Route F1 API calls through curl_cffi + proxy to bypass Cloudflare/CloudFront blocks (only in Streamlit Cloud)."""
         url = getattr(request, "url", "") or ""
-        if any(domain in url for domain in _F1_DOMAINS):
+        if IS_CLOUD and any(domain in url for domain in _F1_DOMAINS):
             # Fetch working proxy
             working_proxy = get_working_proxy()
             curl_proxies = None
@@ -1598,6 +1614,7 @@ with st.sidebar:
     # ── Diagnostics expander ──────────────────────────────────────────────────
     with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
         st.write(f"**Patch Imported:** {_PATCH_STATUS['imported']}")
+        st.write(f"**Running in Cloud:** {IS_CLOUD}")
         if _PATCH_STATUS['import_err']:
             st.error(f"Import Error:\n{_PATCH_STATUS['import_err']}")
         
