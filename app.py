@@ -1448,7 +1448,7 @@ with st.sidebar:
     # ── Diagnostics expander ──────────────────────────────────────────────────
     with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
         st.write(f"**Patch Imported:** {_PATCH_STATUS['imported']}")
-        st.write(f"**Running in Cloud:** {IS_CLOUD}")
+        st.write(f"**Patch Applied:** {_PATCH_STATUS['patched']}")
         if _PATCH_STATUS['import_err']:
             st.error(f"Import Error:\n{_PATCH_STATUS['import_err']}")
         
