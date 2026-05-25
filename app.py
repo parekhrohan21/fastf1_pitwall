@@ -42,15 +42,114 @@ _PATCH_STATUS = {
     "request_errs": []
 }
 
-def test_curl_cffi_request():
+_WORKING_PROXY = None
+
+def test_proxy_sync(proxy_info):
+    if not proxy_info:
+        return False
+    proto, addr = proxy_info
+    proxy_url = f"{proto}://{addr}"
+    proxies = {
+        "http": proxy_url,
+        "https": proxy_url
+    }
     try:
         from curl_cffi import requests as curl_requests
         resp = curl_requests.get(
             "https://livetiming.formula1.com/static/StreamingStatus.json",
             impersonate="chrome124",
+            proxies=proxies,
+            timeout=5
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+def find_new_proxy():
+    import concurrent.futures
+    from curl_cffi import requests as curl_requests
+    
+    # We query socks5 and http lists
+    sources_socks5 = [
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=1500&country=all",
+        "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt"
+    ]
+    sources_http = [
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=1500&country=all&ssl=yes",
+        "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt"
+    ]
+    
+    proxies = set() # elements are (protocol, addr)
+    
+    # Fetch SOCKS5
+    for url in sources_socks5:
+        try:
+            resp = curl_requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                for line in resp.text.strip().split("\n"):
+                    line = line.strip()
+                    if line and ":" in line:
+                        proxies.add(("socks5", line))
+        except Exception:
+            pass
+            
+    # Fetch HTTP
+    for url in sources_http:
+        try:
+            resp = curl_requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                for line in resp.text.strip().split("\n"):
+                    line = line.strip()
+                    if line and ":" in line:
+                        proxies.add(("http", line))
+        except Exception:
+            pass
+            
+    proxy_list = list(proxies)
+    if not proxy_list:
+        return None
+        
+    # Test concurrently with 60 workers, up to 300 proxies
+    test_subset = proxy_list[:300]
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
+        futures = {executor.submit(test_proxy_sync, p): p for p in test_subset}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                res = future.result()
+                if res:
+                    return res
+            except Exception:
+                pass
+    return None
+
+def get_working_proxy(force_refresh=False):
+    global _WORKING_PROXY
+    if _WORKING_PROXY and not force_refresh:
+        return _WORKING_PROXY
+            
+    _WORKING_PROXY = find_new_proxy()
+    return _WORKING_PROXY
+
+def test_curl_cffi_request():
+    try:
+        p = get_working_proxy(force_refresh=True)
+        if not p:
+            return "Failed to find any working proxy."
+        proto, addr = p
+        proxy_url = f"{proto}://{addr}"
+        proxies = {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+        from curl_cffi import requests as curl_requests
+        resp = curl_requests.get(
+            "https://livetiming.formula1.com/static/StreamingStatus.json",
+            impersonate="chrome124",
+            proxies=proxies,
             timeout=10
         )
-        return f"Status: {resp.status_code}\nHeaders: {dict(resp.headers)}\nBody prefix: {resp.text[:300]}"
+        return f"Using Proxy: {proto}://{addr}\nStatus: {resp.status_code}\nHeaders: {dict(resp.headers)}\nBody prefix: {resp.text[:300]}"
     except Exception as e:
         import traceback
         return f"Error: {e}\n{traceback.format_exc()}"
@@ -71,9 +170,19 @@ try:
         self, request, stream=False, timeout=None,
         verify=True, cert=None, proxies=None
     ):
-        """Route F1 API calls through curl_cffi to bypass Cloudflare TLS checks."""
+        """Route F1 API calls through curl_cffi + proxy to bypass Cloudflare/CloudFront blocks."""
         url = getattr(request, "url", "") or ""
         if any(domain in url for domain in _F1_DOMAINS):
+            # Fetch working proxy
+            working_proxy = get_working_proxy()
+            curl_proxies = None
+            if working_proxy:
+                proto, addr = working_proxy
+                curl_proxies = {
+                    "http": f"{proto}://{addr}",
+                    "https": f"{proto}://{addr}"
+                }
+                
             # Build headers — strip hop-by-hop headers that curl_cffi rejects
             hdrs = dict(request.headers)
             hdrs["User-Agent"] = (
@@ -85,6 +194,7 @@ try:
                         "Proxy-Authorization", "Upgrade"):
                 hdrs.pop(hop, None)
             try:
+                # Attempt 1
                 curl_resp = curl_requests.request(
                     method=request.method,
                     url=url,
@@ -93,6 +203,7 @@ try:
                     timeout=timeout or 30,
                     impersonate="chrome124",
                     allow_redirects=True,
+                    proxies=curl_proxies,
                 )
                 # Map curl_cffi response → requests.Response so FastF1 can parse it
                 resp = requests.Response()
@@ -117,12 +228,55 @@ try:
                 resp.reason = 'OK'
                 return resp
             except Exception as e:
-                import traceback
-                _PATCH_STATUS["request_errs"].append({
-                    "url": url,
-                    "err": str(e),
-                    "traceback": traceback.format_exc()
-                })
+                # Force refresh proxy and retry once
+                try:
+                    working_proxy = get_working_proxy(force_refresh=True)
+                    if working_proxy:
+                        proto, addr = working_proxy
+                        curl_proxies = {
+                            "http": f"{proto}://{addr}",
+                            "https": f"{proto}://{addr}"
+                        }
+                    else:
+                        curl_proxies = None
+                        
+                    curl_resp = curl_requests.request(
+                        method=request.method,
+                        url=url,
+                        headers=hdrs,
+                        data=request.body,
+                        timeout=timeout or 30,
+                        impersonate="chrome124",
+                        allow_redirects=True,
+                        proxies=curl_proxies,
+                    )
+                    
+                    resp = requests.Response()
+                    resp.status_code = curl_resp.status_code
+                    resp.url = curl_resp.url
+                    resp._content = curl_resp.content
+                    resp.encoding = curl_resp.encoding or "utf-8"
+                    resp.headers = CaseInsensitiveDict(dict(curl_resp.headers))
+                    resp.request = request
+                    
+                    raw_response = HTTPResponse(
+                        body=BytesIO(curl_resp.content),
+                        headers=curl_resp.headers,
+                        status=curl_resp.status_code,
+                        preload_content=False,
+                        original_response=None
+                    )
+                    resp.raw = raw_response
+                    resp.history = []
+                    resp.reason = 'OK'
+                    return resp
+                except Exception as retry_e:
+                    import traceback
+                    _PATCH_STATUS["request_errs"].append({
+                        "url": url,
+                        "err": f"Retry failed: {retry_e}",
+                        "traceback": traceback.format_exc()
+                    })
         return _original_adapter_send(
             self, request,
             stream=stream, timeout=timeout,
