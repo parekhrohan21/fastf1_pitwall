@@ -36,6 +36,25 @@ fastf1.Cache.enable_cache(CACHE_DIR)
 # subclass initiates it.  Here we swap in curl_cffi at that layer so that
 # Streamlit Cloud's datacenter IP presents a real Chrome TLS fingerprint to
 # Cloudflare instead of a Python/urllib3 fingerprint that Cloudflare blocks.
+_PATCH_STATUS = {
+    "imported": False,
+    "import_err": None,
+    "request_errs": []
+}
+
+def test_curl_cffi_request():
+    try:
+        from curl_cffi import requests as curl_requests
+        resp = curl_requests.get(
+            "https://livetiming.formula1.com/static/StreamingStatus.json",
+            impersonate="chrome124",
+            timeout=10
+        )
+        return f"Status: {resp.status_code}\nHeaders: {dict(resp.headers)}\nBody prefix: {resp.text[:300]}"
+    except Exception as e:
+        import traceback
+        return f"Error: {e}\n{traceback.format_exc()}"
+
 try:
     import requests
     import requests.adapters
@@ -44,6 +63,7 @@ try:
     from urllib3.response import HTTPResponse
     from io import BytesIO
 
+    _PATCH_STATUS["imported"] = True
     _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com")
     _original_adapter_send = requests.adapters.HTTPAdapter.send
 
@@ -96,9 +116,13 @@ try:
                 resp.history = []
                 resp.reason = 'OK'
                 return resp
-            except Exception:
-                # Fall back to standard urllib3 if curl_cffi fails
-                pass
+            except Exception as e:
+                import traceback
+                _PATCH_STATUS["request_errs"].append({
+                    "url": url,
+                    "err": str(e),
+                    "traceback": traceback.format_exc()
+                })
         return _original_adapter_send(
             self, request,
             stream=stream, timeout=timeout,
@@ -106,8 +130,9 @@ try:
         )
 
     requests.adapters.HTTPAdapter.send = _patched_adapter_send
-except Exception:
-    pass
+except Exception as e:
+    import traceback
+    _PATCH_STATUS["import_err"] = f"{e}\n{traceback.format_exc()}"
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -1400,6 +1425,25 @@ with st.sidebar:
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
     load_btn = st.button("⬇️  Load Session(s)", width="stretch")
+
+    # ── Diagnostics expander ──────────────────────────────────────────────────
+    with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
+        st.write(f"**Patch Imported:** {_PATCH_STATUS['imported']}")
+        if _PATCH_STATUS['import_err']:
+            st.error(f"Import Error:\n{_PATCH_STATUS['import_err']}")
+        
+        st.write("**Request Errors:**")
+        if _PATCH_STATUS['request_errs']:
+            for err in _PATCH_STATUS['request_errs']:
+                st.write(f"URL: {err['url']}")
+                st.error(f"Error: {err['err']}\n\nTraceback:\n{err['traceback']}")
+        else:
+            st.write("None recorded.")
+            
+        if st.button("Run Connection Test"):
+            with st.spinner("Testing connection..."):
+                res = test_curl_cffi_request()
+                st.code(res)
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
