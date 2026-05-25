@@ -163,7 +163,7 @@ try:
     from io import BytesIO
 
     _PATCH_STATUS["imported"] = True
-    _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com")
+    _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com", "jolpica.net")
     _original_adapter_send = requests.adapters.HTTPAdapter.send
 
     def _patched_adapter_send(
