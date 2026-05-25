@@ -37,75 +37,79 @@ try:
 except Exception:
     pass
 
-# ── Cloudflare bypass via HTTPAdapter.send ────────────────────────────────────
-# FastF1 uses its own _SessionWithRateLimiting subclass whose send() method
-# calls super().send() → HTTPAdapter.send() → urllib3.  Patching
-# requests.Session.request (as previously done) has NO effect because FastF1's
-# code path never passes through that method for the actual TLS handshake.
+# ── Cloudflare / CloudFront bypass via curl_cffi ─────────────────────────────
+# Streamlit Community Cloud runs on AWS datacenter IPs.  F1's live-timing CDN
+# (CloudFront) and the FastF1 mirror (Cloudflare) both return HTTP 403 for
+# requests originating from known datacenter ranges.
 #
-# The correct intercept point is requests.adapters.HTTPAdapter.send — it is
-# called unconditionally for every HTTPS request regardless of which Session
-# subclass initiates it.  Here we swap in curl_cffi at that layer so that
-# Streamlit Cloud's datacenter IP presents a real Chrome TLS fingerprint to
-# Cloudflare instead of a Python/urllib3 fingerprint that Cloudflare blocks.
+# Fix: intercept every outbound HTTPS request at requests.adapters.HTTPAdapter.send
+# — the lowest transport layer called by *all* requests.Session subclasses
+# (including FastF1's _SessionWithRateLimiting and requests_cache.CachedSession).
+# We replace the TLS handshake with curl_cffi which presents a genuine Chrome 124
+# JA3/JA4 fingerprint, bypassing bot-detection rules.
+#
+# Key design choices:
+#   • No IS_CLOUD guard — environment-variable detection was silently False on
+#     newer Streamlit Cloud builds, so curl_cffi was never activated.  The patch
+#     is now unconditional for all F1 domains (negligible overhead locally).
+#   • No urllib3.HTTPResponse raw wrapping — constructing a fake urllib3 response
+#     from BytesIO caused iter_lines() failures in FastF1's .jsonStream path.
+#     Instead we pre-load _content; requests.Response.iter_lines() checks
+#     _content first and works correctly without a live socket.
 _PATCH_STATUS = {
     "imported": False,
     "import_err": None,
-    "request_errs": []
+    "patched": False,
+    "request_errs": [],
 }
 
-import os
-IS_CLOUD = (
-    os.environ.get("HOME") == "/home/appuser" or
-    os.environ.get("STREAMLIT_SHARING_MODE") is not None or
-    os.environ.get("STREAMLIT_RUNTIME_IS_SHARING_MODE") is not None
-)
-
 def test_curl_cffi_request():
+    """Diagnostic: direct curl_cffi GET to the FastF1 mirror — call from sidebar."""
     try:
         if not _PATCH_STATUS["imported"]:
-            return f"Patch not imported! Error was:\n{_PATCH_STATUS['import_err']}"
-            
-        from curl_cffi import requests as curl_requests
-        resp = curl_requests.get(
+            return f"curl_cffi not imported.\nError: {_PATCH_STATUS['import_err']}"
+        from curl_cffi import requests as _cr
+        resp = _cr.get(
             "https://livetiming-mirror.fastf1.dev/static/StreamingStatus.json",
             impersonate="chrome124",
-            timeout=10
+            timeout=10,
         )
-        return f"Mirror Connection Test:\nStatus: {resp.status_code}\nHeaders: {dict(resp.headers)}\nBody prefix: {resp.text[:300]}"
-    except Exception as e:
+        return (
+            f"Mirror status: {resp.status_code}\n"
+            f"Body prefix: {resp.text[:200]}"
+        )
+    except Exception as exc:
         import traceback
-        return f"Error: {e}\n{traceback.format_exc()}"
+        return f"Error: {exc}\n{traceback.format_exc()}"
 
 try:
     import requests
     import requests.adapters
     from curl_cffi import requests as curl_requests
     from requests.structures import CaseInsensitiveDict
-    from urllib3.response import HTTPResponse
-    from io import BytesIO
 
     _PATCH_STATUS["imported"] = True
-    _F1_DOMAINS = ("formula1.com", "fastf1.dev", "ergast.com", "jolpica.net")
+    _F1_DOMAINS = (
+        "formula1.com",
+        "fastf1.dev",
+        "ergast.com",
+        "jolpica.net",
+        "jolpi.ca",
+    )
     _original_adapter_send = requests.adapters.HTTPAdapter.send
 
     def _patched_adapter_send(
         self, request, stream=False, timeout=None,
-        verify=True, cert=None, proxies=None
+        verify=True, cert=None, proxies=None,
     ):
-        """Route F1 API calls through curl_cffi to bypass Cloudflare/CloudFront blocks (only in Streamlit Cloud)."""
+        """Route F1 API calls through curl_cffi to bypass CDN bot-detection."""
         url = getattr(request, "url", "") or ""
-        if IS_CLOUD and any(domain in url for domain in _F1_DOMAINS):
-            # Build headers — strip hop-by-hop headers that curl_cffi rejects
-            hdrs = dict(request.headers)
-            hdrs["User-Agent"] = (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            )
-            for hop in ("TE", "Connection", "Transfer-Encoding", "Keep-Alive",
-                        "Proxy-Authorization", "Upgrade"):
-                hdrs.pop(hop, None)
+        if any(domain in url for domain in _F1_DOMAINS):
+            # Strip hop-by-hop headers curl_cffi rejects; let impersonate set UA.
+            hdrs = {k: v for k, v in request.headers.items()
+                    if k not in ("TE", "Connection", "Transfer-Encoding",
+                                 "Keep-Alive", "Proxy-Authorization", "Upgrade",
+                                 "User-Agent")}
             try:
                 curl_resp = curl_requests.request(
                     method=request.method,
@@ -116,35 +120,27 @@ try:
                     impersonate="chrome124",
                     allow_redirects=True,
                 )
-                # Map curl_cffi response → requests.Response so FastF1 can parse it
+                # Build a requests.Response with _content pre-loaded.
+                # iter_lines() / iter_content() both short-circuit to _content
+                # when it is already set — no live socket needed.
                 resp = requests.Response()
                 resp.status_code = curl_resp.status_code
-                resp.url = curl_resp.url
+                resp.url = str(curl_resp.url)
                 resp._content = curl_resp.content
                 resp.encoding = curl_resp.encoding or "utf-8"
                 resp.headers = CaseInsensitiveDict(dict(curl_resp.headers))
                 resp.request = request
-                
-                # FastF1 uses stream=True and iter_lines() on responses like .jsonStream
-                # requests_cache also requires a proper raw response object
-                raw_response = HTTPResponse(
-                    body=BytesIO(curl_resp.content),
-                    headers=curl_resp.headers,
-                    status=curl_resp.status_code,
-                    preload_content=False,
-                    original_response=None
-                )
-                resp.raw = raw_response
                 resp.history = []
-                resp.reason = 'OK'
+                resp.reason = "OK" if curl_resp.status_code < 400 else "Error"
                 return resp
-            except Exception as e:
+            except Exception as exc:
                 import traceback
                 _PATCH_STATUS["request_errs"].append({
                     "url": url,
-                    "err": str(e),
-                    "traceback": traceback.format_exc()
+                    "err": str(exc),
+                    "traceback": traceback.format_exc(),
                 })
+                # Fall through to original adapter on curl_cffi failure
         return _original_adapter_send(
             self, request,
             stream=stream, timeout=timeout,
@@ -152,9 +148,10 @@ try:
         )
 
     requests.adapters.HTTPAdapter.send = _patched_adapter_send
-except Exception as e:
+    _PATCH_STATUS["patched"] = True
+except Exception as exc:
     import traceback
-    _PATCH_STATUS["import_err"] = f"{e}\n{traceback.format_exc()}"
+    _PATCH_STATUS["import_err"] = f"{exc}\n{traceback.format_exc()}"
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
