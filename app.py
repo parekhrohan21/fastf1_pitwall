@@ -25,17 +25,7 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
 
-# Force FastF1 to use the livetiming mirror directly to avoid F1's CloudFront WAF blocks on AWS IPs
-try:
-    import fastf1._api
-    fastf1._api.base_url = fastf1._api.base_url_mirror
-except Exception:
-    pass
-try:
-    import fastf1.api
-    fastf1.api.base_url = fastf1.api.base_url_mirror
-except Exception:
-    pass
+
 
 # ── Cloudflare / CloudFront bypass via curl_cffi ─────────────────────────────
 # Streamlit Community Cloud runs on AWS datacenter IPs.  F1's live-timing CDN
@@ -64,13 +54,13 @@ _PATCH_STATUS = {
 }
 
 def test_curl_cffi_request():
-    """Diagnostic: direct curl_cffi GET to the FastF1 mirror — call from sidebar."""
+    """Diagnostic: direct curl_cffi GET to the F1 livetiming — call from sidebar."""
     try:
         if not _PATCH_STATUS["imported"]:
             return f"curl_cffi not imported.\nError: {_PATCH_STATUS['import_err']}"
         from curl_cffi import requests as _cr
         resp = _cr.get(
-            "https://livetiming-mirror.fastf1.dev/static/StreamingStatus.json",
+            "https://livetiming.formula1.com/static/StreamingStatus.json",
             impersonate="chrome124",
             timeout=10,
         )
