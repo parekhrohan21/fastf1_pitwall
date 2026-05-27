@@ -19,7 +19,7 @@ Your primary responsibilities are:
 | Property | Value |
 |---|---|
 | **Stack** | Python 3.11+ · Streamlit ≥ 1.44 · FastF1 ≥ 3.3 |
-| **Entry point** | `app.py` (2 500 + lines, single-file monolith) |
+| **Entry point** | `app.py` (4 000 + lines, single-file monolith) |
 | **Data source** | FastF1 library → official F1 timing API + Ergast |
 | **Port** | `8501` (local and Docker) |
 | **Cache dir** | `./cache/` (FastF1 disk cache, gitignored) |
@@ -51,34 +51,33 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | Lines (approx) | Section | Purpose |
 |---|---|---|
 | 1–22 | Imports & warnings | All `import` statements |
-| 23–79 | FastF1 cache + requests patch | `fastf1.Cache.enable_cache`, requests monkey-patch |
-| 80–87 | Page config | `st.set_page_config` |
-| 88–231 | PWA injection | Injects Web Manifest + Apple meta tags via `components.html` |
-| 232–274 | Page-transition JS | `MutationObserver` replays `pageEnter` CSS on every rerender |
-| 275–866 | Custom CSS | Full design system — keyframes, typography, layout, cards, banner |
-| 867–1036 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
-| 1037–1118 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
-| 1119–1244 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
-| 1245–1299 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button |
-| 1300–1318 | Session state | Initialises session variables in Streamlit state |
-| 1319–1349 | Landing page | Welcome panel with features summary if no session is loaded |
-| 1350–1381 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping |
-| 1382–1485 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
-| 1486–1548 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
-| 1549–1709 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
-| 1710–1788 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
-| 1789–1953 | Lap Time History | `_build_lap_history`, `_lap_history_fig` |
-| 1954–2292 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
-| 2293–2410 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
-| 2411–2588 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
-| 2589–2625 | Telemetry charts | Matplotlib telemetry chart builder and renderer |
-| 2626–2697 | Export Telemetry | CSV export widget for driver lap data |
-| 2698–2728 | Speed Delta | Matplotlib comparison chart |
-| 2729–2828 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
-| 2829–3029 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
-| 3030–3173 | Gap to Leader | Plotly gap analysis over the race distance |
-| 3174–3280 | Race Position Chart | Track positions over all laps |
-| 3281–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
+| 23–145 | FastF1 cache + requests patch | `fastf1.Cache.enable_cache`, requests monkey-patch via `curl_cffi` |
+| 146–153 | Page config | `st.set_page_config` |
+| 154–297 | PWA injection | Injects Web Manifest + Apple meta tags via `components.html` |
+| 298–340 | Page-transition JS | `MutationObserver` replays `pageEnter` CSS on every rerender |
+| 341–932 | Custom CSS | Full design system — keyframes, typography, layout, cards, banner |
+| 933–1102 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
+| 1103–1184 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
+| 1185–1366 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
+| 1367–1465 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button, and connection diagnostics |
+| 1466–1527 | Session state | Initialises session variables in Streamlit state |
+| 1528–1558 | Landing page | Welcome panel with features summary if no session is loaded |
+| 1559–1614 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping, `_all_laps` extraction |
+| 1615–1728 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
+| 1729–1790 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
+| 1791–1964 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
+| 1965–2046 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
+| 2047–2218 | Lap Time History | `_build_lap_history`, `_lap_history_fig` with compound filter |
+| 2219–2572 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
+| 2573–2690 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
+| 2691–2908 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
+| 2909–2980 | Export Telemetry | CSV export widget for driver lap data |
+| 2981–3011 | Speed Delta | Matplotlib comparison chart |
+| 3012–3126 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
+| 3127–3331 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
+| 3332–3485 | Gap to Leader | Plotly gap analysis over the race distance |
+| 3486–3607 | Race Position Chart | Track positions over all laps |
+| 3608–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
 
 ---
 
@@ -105,7 +104,7 @@ When adding new UI that shows a driver identifier, always wrap it with `_fmt_dri
 All data-builder functions are cached with `@st.cache_data(ttl=3600)`. The cache key always includes `sess_key` (a string `"{year}_{gp}_{session_type}"`). Do **not** add new session-state accesses inside `@st.cache_data` functions — pass data as parameters instead.
 
 ### 5. Single canonical compound colour dict
-`COMPOUND_COLOURS` at line ~787 is the **only** definition of compound colours in the entire codebase.
+`COMPOUND_COLOURS` at line ~1157 is the **only** definition of compound colours in the entire codebase.
 It carries three keys per compound: `fill` (hex background), `text` (label contrast colour), `letter` (badge abbreviation).
 `_CMP_PALETTE` and all other inline dicts (`cmp_dot`, `cmp_colours_map`) have been removed.
 When adding new chart types, always derive colours with:
