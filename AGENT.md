@@ -59,25 +59,25 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 933–1102 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
 | 1103–1184 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
 | 1185–1366 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached` |
-| 1367–1465 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button, and connection diagnostics |
-| 1466–1527 | Session state | Initialises session variables in Streamlit state |
-| 1528–1558 | Landing page | Welcome panel with features summary if no session is loaded |
-| 1559–1614 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping, `_all_laps` extraction |
-| 1615–1728 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
-| 1729–1790 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
-| 1791–1964 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
-| 1965–2046 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
-| 2047–2218 | Lap Time History | `_build_lap_history`, `_lap_history_fig` with compound filter |
-| 2219–2572 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
-| 2573–2690 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
-| 2691–2908 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
-| 2909–2980 | Export Telemetry | CSV export widget for driver lap data |
-| 2981–3011 | Speed Delta | Matplotlib comparison chart |
-| 3012–3126 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
-| 3127–3331 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
-| 3332–3485 | Gap to Leader | Plotly gap analysis over the race distance |
-| 3486–3607 | Race Position Chart | Track positions over all laps |
-| 3608–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
+| 1367–1497 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button, and connection diagnostics |
+| 1498–1559 | Session state | Initialises session variables in Streamlit state |
+| 1560–1590 | Landing page | Welcome panel with features summary if no session is loaded |
+| 1591–1646 | Driver controls & labels | `all_drivers` extraction, `_fmt_driver` mapping, `_all_laps` extraction |
+| 1647–1760 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
+| 1761–1822 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
+| 1823–1996 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
+| 1997–2078 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
+| 2079–2250 | Lap Time History | `_build_lap_history`, `_lap_history_fig` with compound filter |
+| 2251–2604 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
+| 2605–2722 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
+| 2723–2940 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
+| 2941–3012 | Export Telemetry | CSV export widget for driver lap data |
+| 3013–3043 | Speed Delta | Matplotlib comparison chart |
+| 3044–3158 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
+| 3159–3363 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
+| 3364–3517 | Gap to Leader | Plotly gap analysis over the race distance |
+| 3518–3639 | Race Position Chart | Track positions over all laps |
+| 3640–end | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
 
 ---
 

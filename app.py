@@ -1396,12 +1396,27 @@ with st.sidebar:
     _def_gp_idx = gp_names.index("British Grand Prix") if "British Grand Prix" in gp_names else min(4, len(gp_names) - 1)
     gp = st.selectbox("Grand Prix", gp_names, index=_def_gp_idx)
 
-    session_map = {
-        "Race": "R", "Qualifying": "Q", "Sprint": "S",
+    _session_code_map = {
         "Practice 1": "FP1", "Practice 2": "FP2", "Practice 3": "FP3",
+        "Qualifying": "Q", "Sprint Qualifying": "SQ", "Sprint Shootout": "SS",
+        "Sprint": "S", "Race": "R"
     }
-    session_label = st.selectbox("Session", list(session_map.keys()))
-    session_type = session_map[session_label]
+
+    # Determine dynamic sessions for primary session selection
+    gp_row = schedule[schedule["EventName"] == gp]
+    if not gp_row.empty:
+        row = gp_row.iloc[0]
+        primary_sessions = []
+        for i in range(1, 6):
+            s_val = row.get(f"Session{i}")
+            if pd.notna(s_val) and str(s_val).strip() != "":
+                primary_sessions.append(str(s_val).strip())
+    else:
+        primary_sessions = ["Practice 1", "Practice 2", "Practice 3", "Qualifying", "Race"]
+
+    _def_sess_idx = primary_sessions.index("Race") if "Race" in primary_sessions else len(primary_sessions) - 1
+    session_label = st.selectbox("Session", primary_sessions, index=_def_sess_idx)
+    session_type = _session_code_map.get(session_label, session_label)
 
     # --- Session 2 Selector ---
     compare_sessions = st.checkbox("Compare with another session", value=False, key="compare_sessions_chk")
@@ -1424,8 +1439,25 @@ with st.sidebar:
         _def_gp_idx2 = gp_names2.index("British Grand Prix") if "British Grand Prix" in gp_names2 else min(4, len(gp_names2) - 1)
         gp2 = st.selectbox("Grand Prix 2", gp_names2, index=_def_gp_idx2, key="gp2")
         
-        session_label2 = st.selectbox("Session 2", list(session_map.keys()), key="session2")
-        session_type2 = session_map[session_label2]
+        # Determine dynamic sessions for secondary session selection
+        gp_row2 = schedule2[schedule2["EventName"] == gp2]
+        if not gp_row2.empty:
+            row2 = gp_row2.iloc[0]
+            secondary_sessions = []
+            for i in range(1, 6):
+                s_val = row2.get(f"Session{i}")
+                if pd.notna(s_val) and str(s_val).strip() != "":
+                    secondary_sessions.append(str(s_val).strip())
+        else:
+            secondary_sessions = ["Practice 1", "Practice 2", "Practice 3", "Qualifying", "Race"]
+
+        if session_label in secondary_sessions:
+            _def_sess_idx2 = secondary_sessions.index(session_label)
+        else:
+            _def_sess_idx2 = secondary_sessions.index("Race") if "Race" in secondary_sessions else len(secondary_sessions) - 1
+
+        session_label2 = st.selectbox("Session 2", secondary_sessions, index=_def_sess_idx2, key="session2")
+        session_type2 = _session_code_map.get(session_label2, session_label2)
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
@@ -1621,8 +1653,8 @@ def _session_info_header(session, sess_type_code: str) -> None:
         # Human-readable session type
         _type_labels = {
             "R": "Race", "Q": "Qualifying", "SQ": "Sprint Qualifying",
-            "S": "Sprint", "FP1": "Practice 1", "FP2": "Practice 2",
-            "FP3": "Practice 3",
+            "SS": "Sprint Shootout", "S": "Sprint",
+            "FP1": "Practice 1", "FP2": "Practice 2", "FP3": "Practice 3",
         }
         session_label = _type_labels.get(str(sess_type_code).upper(), str(sess_type_code))
 
@@ -1655,8 +1687,8 @@ def _session_info_header(session, sess_type_code: str) -> None:
         # Session type → icon
         _type_icons = {
             "Race": "🏆", "Qualifying": "⏱", "Sprint": "⚡",
-            "Sprint Qualifying": "⚡", "Practice 1": "🔧",
-            "Practice 2": "🔧", "Practice 3": "🔧",
+            "Sprint Qualifying": "⚡", "Sprint Shootout": "⚡",
+            "Practice 1": "🔧", "Practice 2": "🔧", "Practice 3": "🔧",
         }
         sess_icon = _type_icons.get(session_label, "🏎")
 
