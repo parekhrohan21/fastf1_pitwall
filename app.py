@@ -53,21 +53,146 @@ _PATCH_STATUS = {
     "request_errs": [],
 }
 
+_WORKING_PROXY = None
+
+PROXY_SOURCES = {
+    "socks5": [
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=1500&country=all",
+        "https://raw.githubusercontent.com/Hookzof/socks5_list/master/proxy.txt",
+        "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt"
+    ],
+    "http": [
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=1500&country=all&ssl=yes",
+        "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies.txt"
+    ]
+}
+
+def _fetch_proxy_source(proto, url):
+    try:
+        resp = curl_requests.get(url, timeout=4)
+        if resp.status_code == 200:
+            lines = resp.text.strip().split("\n")
+            extracted = []
+            for line in lines:
+                line = line.strip()
+                if line and ":" in line:
+                    parts = line.split(":")
+                    if len(parts) >= 2 and parts[-1].isdigit():
+                        ip = parts[-2].split("/")[-1]
+                        port = parts[-1]
+                        extracted.append((proto, f"{ip}:{port}"))
+            return extracted
+    except Exception:
+        pass
+    return []
+
+def _find_working_proxy():
+    import concurrent.futures
+    import random
+    
+    all_proxies = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for proto, urls in PROXY_SOURCES.items():
+            for url in urls:
+                futures.append(executor.submit(_fetch_proxy_source, proto, url))
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                all_proxies.extend(future.result())
+            except Exception:
+                pass
+            
+    all_proxies = list(set(all_proxies))
+    if not all_proxies:
+        return None
+        
+    random.shuffle(all_proxies)
+    test_subset = all_proxies[:200]
+    
+    def test_single_proxy(proxy_info):
+        proto, addr = proxy_info
+        proxy_url = f"{proto}://{addr}"
+        proxies = {"http": proxy_url, "https": proxy_url}
+        try:
+            resp = curl_requests.get(
+                "https://livetiming.formula1.com/static/StreamingStatus.json",
+                impersonate="chrome124",
+                proxies=proxies,
+                timeout=2.5
+            )
+            if resp.status_code == 200:
+                return proxy_info
+        except Exception:
+            pass
+        return None
+
+    working = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=80) as executor:
+        futures = {executor.submit(test_single_proxy, p): p for p in test_subset}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                res = future.result()
+                if res:
+                    working.append(res)
+                    if len(working) >= 2:
+                        break
+            except Exception:
+                pass
+                    
+    if working:
+        return working[0]
+    return None
+
 def test_curl_cffi_request():
     """Diagnostic: direct curl_cffi GET to the F1 livetiming — call from sidebar."""
     try:
         if not _PATCH_STATUS["imported"]:
             return f"curl_cffi not imported.\nError: {_PATCH_STATUS['import_err']}"
         from curl_cffi import requests as _cr
-        resp = _cr.get(
-            "https://livetiming.formula1.com/static/StreamingStatus.json",
-            impersonate="chrome124",
-            timeout=10,
-        )
-        return (
-            f"Mirror status: {resp.status_code}\n"
-            f"Body prefix: {resp.text[:200]}"
-        )
+        
+        # Try direct request first
+        direct_err = None
+        try:
+            resp = _cr.get(
+                "https://livetiming.formula1.com/static/StreamingStatus.json",
+                impersonate="chrome124",
+                timeout=5,
+            )
+            return (
+                f"Direct request worked!\n"
+                f"Status: {resp.status_code}\n"
+                f"Body prefix: {resp.text[:200]}"
+            )
+        except Exception as exc:
+            direct_err = str(exc)
+            
+        # Try proxy
+        global _WORKING_PROXY
+        if not _WORKING_PROXY:
+            _WORKING_PROXY = _find_working_proxy()
+            
+        if _WORKING_PROXY:
+            proto, addr = _WORKING_PROXY
+            proxy_url = f"{proto}://{addr}"
+            proxies = {"http": proxy_url, "https": proxy_url}
+            resp = _cr.get(
+                "https://livetiming.formula1.com/static/StreamingStatus.json",
+                impersonate="chrome124",
+                proxies=proxies,
+                timeout=5,
+            )
+            return (
+                f"Direct request failed: {direct_err}\n"
+                f"Proxy request worked using {_WORKING_PROXY}!\n"
+                f"Status: {resp.status_code}\n"
+                f"Body: {resp.text[:200]}"
+            )
+        else:
+            return (
+                f"Direct request failed: {direct_err}\n"
+                f"No working proxy could be found."
+            )
     except Exception as exc:
         import traceback
         return f"Error: {exc}\n{traceback.format_exc()}"
@@ -92,15 +217,20 @@ try:
         self, request, stream=False, timeout=None,
         verify=True, cert=None, proxies=None,
     ):
-        """Route F1 API calls through curl_cffi to bypass CDN bot-detection."""
+        global _WORKING_PROXY
         url = getattr(request, "url", "") or ""
         if any(domain in url for domain in _F1_DOMAINS):
-            # Strip hop-by-hop headers curl_cffi rejects; let impersonate set UA.
             hdrs = {k: v for k, v in request.headers.items()
                     if k not in ("TE", "Connection", "Transfer-Encoding",
                                  "Keep-Alive", "Proxy-Authorization", "Upgrade",
                                  "User-Agent")}
-            try:
+            
+            def do_curl_request(proxy_tuple):
+                curl_proxies = None
+                if proxy_tuple:
+                    proto, addr = proxy_tuple
+                    curl_proxies = {"http": f"{proto}://{addr}", "https": f"{proto}://{addr}"}
+                
                 curl_resp = curl_requests.request(
                     method=request.method,
                     url=url,
@@ -109,10 +239,9 @@ try:
                     timeout=timeout or 30,
                     impersonate="chrome124",
                     allow_redirects=True,
+                    proxies=curl_proxies,
                 )
-                # Build a requests.Response with _content pre-loaded.
-                # iter_lines() / iter_content() both short-circuit to _content
-                # when it is already set — no live socket needed.
+                
                 resp = requests.Response()
                 resp.status_code = curl_resp.status_code
                 resp.url = str(curl_resp.url)
@@ -123,14 +252,50 @@ try:
                 resp.history = []
                 resp.reason = "OK" if curl_resp.status_code < 400 else "Error"
                 return resp
-            except Exception as exc:
-                import traceback
-                _PATCH_STATUS["request_errs"].append({
-                    "url": url,
-                    "err": str(exc),
-                    "traceback": traceback.format_exc(),
-                })
-                # Fall through to original adapter on curl_cffi failure
+
+            errors = []
+            
+            # 1. Try direct request
+            try:
+                resp = do_curl_request(None)
+                if resp.status_code < 400:
+                    return resp
+                errors.append(f"Direct request status: {resp.status_code}")
+            except Exception as e:
+                errors.append(f"Direct request exception: {e}")
+                
+            # 2. Try currently cached proxy
+            if _WORKING_PROXY:
+                try:
+                    resp = do_curl_request(_WORKING_PROXY)
+                    if resp.status_code < 400:
+                        return resp
+                    errors.append(f"Cached proxy status: {resp.status_code}")
+                except Exception as e:
+                    errors.append(f"Cached proxy exception: {e}")
+                _WORKING_PROXY = None
+
+            # 3. Find new proxy and try
+            new_proxy = _find_working_proxy()
+            if new_proxy:
+                _WORKING_PROXY = new_proxy
+                try:
+                    resp = do_curl_request(_WORKING_PROXY)
+                    if resp.status_code < 400:
+                        return resp
+                    errors.append(f"New proxy status: {resp.status_code}")
+                except Exception as e:
+                    errors.append(f"New proxy exception: {e}")
+                _WORKING_PROXY = None
+                
+            # Log all errors to _PATCH_STATUS
+            import traceback
+            _PATCH_STATUS["request_errs"].append({
+                "url": url,
+                "err": " | ".join(errors),
+                "traceback": traceback.format_exc(),
+            })
+
         return _original_adapter_send(
             self, request,
             stream=stream, timeout=timeout,
