@@ -995,6 +995,10 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
        RESPONSIVE
     ═══════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
+        section.main > div.block-container {
+            padding: 1.5rem 0.6rem 2rem !important;
+        }
+
         .main-back-home {
             display: inline-flex !important;
             margin-bottom: 16px !important;
@@ -1040,6 +1044,9 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
             padding: 10px 14px !important;
             border-radius: 14px !important;
         }
+        .weather-strip .weather-item {
+            margin-left: 0 !important;
+        }
 
         /* Force standard columns to stack vertically on mobile */
         [data-testid="stHorizontalBlock"] {
@@ -1056,6 +1063,22 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
             width: calc(50% - 6px) !important;
             min-width: calc(50% - 6px) !important;
             flex: 1 1 calc(50% - 6px) !important;
+        }
+        .metric-card {
+            padding: 12px 8px 10px !important;
+            border-radius: 12px !important;
+        }
+        .metric-label {
+            font-size: 8px !important;
+            letter-spacing: 1px !important;
+        }
+        .metric-value {
+            font-size: 14px !important;
+            margin-top: 6px !important;
+        }
+        .metric-sub {
+            font-size: 9px !important;
+            margin-top: 2px !important;
         }
 
         /* Matplotlib scroll container - allows panning on mobile instead of shrinking */
@@ -1074,10 +1097,14 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
             width: 900px !important;
         }
 
-        /* Compact tables on mobile screen sizes */
+        /* Compact and scrollable tables on mobile screen sizes */
         table td, table th {
             padding: 4px 6px !important;
             font-size: 11px !important;
+        }
+        div.element-container:has(table) {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
         }
 
         .session-info-header {
@@ -1732,7 +1759,7 @@ if sess is None:
         unsafe_allow_html=True,
     )
     st.markdown(
-        "<div style='max-width:560px; margin:80px auto; text-align:center;'>"
+        "<div class='landing-container' style='max-width:560px; margin:80px auto; text-align:center;'>"
         "<div style='font-size:64px; margin-bottom:16px;'>🏎</div>"
         "<h1 style='font-size:36px; font-weight:800; color:var(--text-color); margin-bottom:8px;'>Pit Wall</h1>"
         "<p style='opacity:0.7; font-size:15px; line-height:1.6; margin-bottom:32px;'>"
@@ -2411,7 +2438,7 @@ else:
     else:
         _hist_pairs_filtered = _hist_pairs
 
-    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps), width="stretch")
+    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps), width="stretch", config={"displayModeBar": False})
 
 # ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
 st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
@@ -2713,7 +2740,7 @@ _fuel_all_none = all(p[2] is None or p[2].empty for p in _fuel_pairs)
 if _fuel_all_none:
     st.info("Fuel-adjusted pace not available for this session.")
 else:
-    st.plotly_chart(_fuel_pace_fig(_fuel_pairs), width="stretch")
+    st.plotly_chart(_fuel_pace_fig(_fuel_pairs), width="stretch", config={"displayModeBar": False})
 
     # ── Pace summary stat cards
     _pace_cols = st.columns(len(_fuel_pairs))
@@ -2880,7 +2907,7 @@ if compare and driver2:
 if all(not s for _, s in _stint_data):
     st.info("Stint data not available for this session.")
 else:
-    st.plotly_chart(_stint_fig(_stint_data), width="stretch")
+    st.plotly_chart(_stint_fig(_stint_data), width="stretch", config={"displayModeBar": False})
 
 
 
@@ -3650,7 +3677,7 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
     colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
     gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps)
-    st.plotly_chart(gtl_fig, width="stretch")
+    st.plotly_chart(gtl_fig, width="stretch", config={"displayModeBar": False})
 
     # Show quick stats below the chart
     stat_cols = st.columns(len(highlight))
@@ -3788,7 +3815,7 @@ def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colou
         hoverlabel=dict(bgcolor="rgba(20,20,20,0.85)", font_size=12),
     )
 
-    st.plotly_chart(pos_fig, width="stretch")
+    st.plotly_chart(pos_fig, width="stretch", config={"displayModeBar": False})
 
 
 if sess2 is not None:
@@ -3945,7 +3972,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                 col2=other_colour,
             )
             if sm_fig:
-                st.plotly_chart(sm_fig, width="stretch")
+                st.plotly_chart(sm_fig, width="stretch", config={"displayModeBar": False})
             else:
                 st.info("Position data not available for this lap.")
         else:
@@ -4030,7 +4057,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     )
                     input_fig1 = _input_map_fig(lap, driver, colour)
                     if input_fig1:
-                        st.plotly_chart(input_fig1, width="stretch")
+                        st.plotly_chart(input_fig1, width="stretch", config={"displayModeBar": False})
                     else:
                         st.info(f"Input telemetry not available for {fmt_func(driver) if fmt_func else driver}.")
                 with col2:
@@ -4041,13 +4068,13 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     )
                     input_fig2 = _input_map_fig(other_lap, other_driver, other_colour)
                     if input_fig2:
-                        st.plotly_chart(input_fig2, width="stretch")
+                        st.plotly_chart(input_fig2, width="stretch", config={"displayModeBar": False})
                     else:
                         st.info(f"Input telemetry not available for {fmt_func(other_driver) if fmt_func else other_driver}.")
             else:
                 input_fig = _input_map_fig(lap, driver, colour)
                 if input_fig:
-                    st.plotly_chart(input_fig, width="stretch")
+                    st.plotly_chart(input_fig, width="stretch", config={"displayModeBar": False})
                 else:
                     st.info("Input telemetry (Throttle/Brake) not available for this lap.")
         else:
@@ -4304,7 +4331,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                         st.code(traceback.format_exc())
 
         if st.session_state[replay_key] is not None:
-            st.plotly_chart(st.session_state[replay_key], width="stretch")
+            st.plotly_chart(st.session_state[replay_key], width="stretch", config={"displayModeBar": False})
             n_frames = len(st.session_state[replay_key].frames)
             session_secs = n_frames * 5
             st.caption(
