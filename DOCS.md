@@ -209,7 +209,7 @@ This ensures the CSS injection block reads the updated value on the same rerun r
 
 ## 6b. Compound Colour System
 
-`COMPOUND_COLOURS` in the Constants block (~line 1349) is the **single source of truth** for all compound colours. Every consumer in the codebase derives from it — no inline dicts anywhere.
+`COMPOUND_COLOURS` in the Constants block (~line 1367) is the **single source of truth** for all compound colours. Every consumer in the codebase derives from it — no inline dicts anywhere.
 
 ```python
 COMPOUND_COLOURS = {
@@ -309,7 +309,7 @@ Renders the full driver banner section:
 
 All CSS is injected via `st.markdown(..., unsafe_allow_html=True)` in two blocks:
 
-### Block 1 — Design System (lines 507–1124)
+### Block 1 — Design System (lines 525–1142)
 Static, loaded once. Defines:
 
 | Component | CSS class / selector |
@@ -323,7 +323,7 @@ Static, loaded once. Defines:
 | Section titles | `.section-title` |
 | Buttons | `[data-testid="stSidebar"] .stButton > button` |
 
-### Block 2 — Theme Override (lines 1125–1295)
+### Block 2 — Theme Override (lines 1143–1313)
 Dynamic, re-injected on every rerender based on `st.session_state["dark_mode"]`.
 
 **Dark mode** variables:
@@ -452,7 +452,7 @@ MutationObserver replays pageEnter animation
 
 ### Adding new components to the theme
 
-When you add a new Streamlit component that doesn't respond to theme changes, add a CSS override to the **Theme CSS block** (lines 1125–1295):
+When you add a new Streamlit component that doesn't respond to theme changes, add a CSS override to the **Theme CSS block** (lines 1143–1313):
 
 ```python
 # Inside the dark/light mode conditional CSS string:
