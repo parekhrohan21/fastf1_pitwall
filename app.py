@@ -225,6 +225,16 @@ try:
                                  "Keep-Alive", "Proxy-Authorization", "Upgrade",
                                  "User-Agent")}
             
+            class MockRaw:
+                def __init__(self, url, headers=None, reason=None, status=None):
+                    self._request_url = url
+                    self.decode_content = True
+                    self.headers = headers
+                    self.reason = reason
+                    self.status = status
+                    self.version = 11
+                    self.closed = True
+
             def do_curl_request(proxy_tuple):
                 curl_proxies = None
                 if proxy_tuple:
@@ -251,6 +261,14 @@ try:
                 resp.request = request
                 resp.history = []
                 resp.reason = "OK" if curl_resp.status_code < 400 else "Error"
+                
+                # Mock raw response for requests_cache compatibility
+                resp.raw = MockRaw(
+                    url=str(curl_resp.url),
+                    headers=CaseInsensitiveDict(dict(curl_resp.headers)),
+                    reason=resp.reason,
+                    status=curl_resp.status_code
+                )
                 return resp
 
             errors = []
