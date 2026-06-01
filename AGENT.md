@@ -279,6 +279,8 @@ When modifying session loading or accessing session attributes, you must impleme
   st.session_state["sess_key"] = None
   st.session_state["sess_key2"] = None
   ```
+- **Requests Monkey-Patching Caching Compatibility**: When monkey-patching `requests` (e.g., to bypass CloudFront blocks via `curl_cffi`), the returned custom `Response` objects must mock the `raw` attribute using a local `MockRaw` class. If `resp.raw` is `None` or lacks essential properties, `requests_cache` will crash during serialization with `AttributeError: 'NoneType' object has no attribute '_request_url'`.
+
 
 ---
 

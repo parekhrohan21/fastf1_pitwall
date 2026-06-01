@@ -121,6 +121,34 @@ fastf1.Cache.enable_cache("./cache")
 ```
 Persists raw API responses to disk. Lives in `./cache/` (gitignored). Survives app restarts. Mount as a Docker volume to persist across container restarts.
 
+#### Monkey-Patch Caching Compatibility (`requests_cache` serialization)
+FastF1 uses `requests_cache` to cache raw API calls. Because we monkey-patched `requests.adapters.HTTPAdapter.send` using `curl_cffi` (to rotate proxies and bypass CloudFront blocks), we bypass the standard `requests` response instantiation.
+If the mock response object returned by our patch does not have a properly populated `response.raw` attribute, the `requests_cache` SQLite serializer crashes with an `AttributeError: 'NoneType' object has no attribute '_request_url'`.
+
+To prevent this:
+1. Define a `MockRaw` helper class inside the patch:
+   ```python
+   class MockRaw:
+       def __init__(self, url, headers=None, reason=None, status=None):
+           self._request_url = url
+           self.decode_content = True
+           self.headers = headers
+           self.reason = reason
+           self.status = status
+           self.version = 11
+           self.closed = True
+   ```
+2. Construct and assign `resp.raw` inside the patch function:
+   ```python
+   resp.raw = MockRaw(
+       url=str(curl_resp.url),
+       headers=CaseInsensitiveDict(dict(curl_resp.headers)),
+       reason=resp.reason,
+       status=curl_resp.status_code
+   )
+   ```
+
+
 ### Layer 2 — `@st.cache_data`
 ```python
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -629,6 +657,10 @@ st.plotly_chart(fig, width="stretch")
 st.pyplot(fig, width="stretch")
 st.button("Label", width="stretch")
 ```
+
+### ⑧ Monkey-Patched requests Compatibility with `requests_cache`
+When wrapping requests or custom adapters in FastF1, never return a `requests.Response()` object with `response.raw` left as `None`. Doing so causes `requests_cache`'s serializer to throw an `AttributeError` when trying to save timing data. Always mock the `raw` attribute using a helper class (e.g. `MockRaw`) providing `_request_url`, `decode_content`, `headers`, `status`, `reason`, `version`, and `closed`.
+
 
 ---
 
