@@ -92,6 +92,9 @@ sess.load(telemetry=True, laps=True, weather=True, messages=True)
 
 `sess.load()` downloads and caches to `./cache/`. First call per session takes 10–30 seconds; subsequent calls return in milliseconds from disk.
 
+> [!NOTE]
+> **Active/Ongoing Sessions:** The dashboard is designed to load and visualize historical, completed sessions. Live timing streams (ongoing sessions) are not supported. Attempting to load an active session will fail validation with a "No lap data available" error until F1 compiles and publishes the static timing database files on their CDN (usually 2–24 hours after the session ends).
+
 ### Key FastF1 Objects
 
 | Object | Type | How accessed | Contains |

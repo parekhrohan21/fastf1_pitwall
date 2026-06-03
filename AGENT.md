@@ -215,6 +215,7 @@ When upgrading any dependency:
 
 | Limitation | Notes |
 |---|---|
+| Active & ongoing sessions | Live timing streaming is not supported. Active sessions will fail validation with empty lap data until the final static database is published to F1's CDN (usually 2–24h after session ends). |
 | Very recent sessions | FastF1 may not have timing data for sessions less than ~24h old. Show a clear `st.error` message. |
 | Safety Car / Red Flag laps | Filtered out of Lap Time History and Fuel-Adjusted Pace using `> 2.5× median` outlier removal. |
 | ~~`@st.cache_data` + `session_state`~~ | ✅ **Resolved** — All 7 data-builder functions now receive `laps_df` as an explicit parameter. `_all_laps` extracted once after session load. No cached function accesses `st.session_state["session"]` internally. |

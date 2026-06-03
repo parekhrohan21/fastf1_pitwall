@@ -146,6 +146,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 | Problem | Fix |
 |---|---|
 | First load is slow | Expected behavior (FastF1 is downloading ~50-100MB of telemetry). Subsequent loads are cached. |
+| Active / Ongoing Sessions | The dashboard does not support real-time live timing streaming. Active sessions will fail to load until their final static timing data is published on F1's CDN (typically 2–24 hours after completion). |
 | Session fails to load | Some recent/future sessions may not be published fully yet. Try an older completed race. |
 | Port 8501 already in use | Run `lsof -i :8501` and kill the process, or run Streamlit on a different port using `streamlit run app.py --server.port 8502` |
 | Docker fails to connect API | The Docker Daemon is not running. Launch the Docker Desktop explicitly first using `open -a Docker`, wait 30 seconds for the engine to initialize, and try again. |
