@@ -530,8 +530,10 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
     [data-testid="stSidebar"] {
         background-color: var(--secondary-background-color) !important;
         border-right: 1px solid rgba(128,128,128,0.12) !important;
+        transition: background-color 0.35s ease, transform 0.4s ease;
+    }
+    section[data-testid="stSidebar"][data-collapsed="false"] {
         animation: slideInLeft 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        transition: background-color 0.35s ease;
     }
     [data-testid="stSidebar"] .stButton > button { width: 100%; }
 
