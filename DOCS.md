@@ -387,6 +387,16 @@ At session load the primary CSS variable is set dynamically:
 ```
 This flows to button glows, card accents, banner borders, and chart highlights automatically.
 
+### Sidebar Collapsed Control Compatibility
+
+When customizing sidebar styles or adding transitions (like the slide-in entry animation), do not target the base `[data-testid="stSidebar"]` selector directly with keyframe animations using `forwards` or `infinite` fill-modes. 
+
+Streamlit hides the sidebar natively when collapsed by applying a dynamic `transform` translation (e.g., `translate3d(-336px, 0px, 0px)`). An overriding keyframe animation with `forwards` forces `transform: translateX(0)` (or the final frame state), which overrides Streamlit's collapsed state translation. This leaves the sidebar stuck on the screen or squished in mobile viewports.
+
+To prevent this layout break:
+- Target `section[data-testid="stSidebar"][data-collapsed="false"]` for expanded-state animations.
+- Let Streamlit's native `transform` handle the collapsed state (`data-collapsed="true"`).
+
 ### Page Transition JS
 
 A `MutationObserver` (injected via `components.html`) watches for Streamlit's `data-stale="false"` flip (which signals a rerender completed) and resets the `animation` property on `.block-container` to replay `pageEnter` every time. This makes every button click feel like a smooth page transition.
@@ -663,6 +673,9 @@ st.button("Label", width="stretch")
 
 ### ⑧ Monkey-Patched requests Compatibility with `requests_cache`
 When wrapping requests or custom adapters in FastF1, never return a `requests.Response()` object with `response.raw` left as `None`. Doing so causes `requests_cache`'s serializer to throw an `AttributeError` when trying to save timing data. Always mock the `raw` attribute using a helper class (e.g. `MockRaw`) providing `_request_url`, `decode_content`, `headers`, `status`, `reason`, `version`, and `closed`.
+
+### ⑨ Custom Sidebar Animations and Collapsed State Overrides
+If you apply a custom CSS keyframe animation to `[data-testid="stSidebar"]` directly with `forwards` or `infinite` fill-mode, it will block Streamlit's native sidebar hiding translation on mobile. You must scope the animation to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`) so that the collapsed sidebar can transition and translate off-screen cleanly.
 
 
 ---

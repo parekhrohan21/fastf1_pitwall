@@ -89,6 +89,9 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 ### 2. CSS injection over Streamlit theming
 The app injects raw CSS via `st.markdown(..., unsafe_allow_html=True)` to override Streamlit's BaseWeb components. This is necessary because Streamlit's native theme API does not expose enough hooks for full dark/light mode control. Maintain this approach.
 
+When customizing or animating the sidebar (`[data-testid="stSidebar"]`), do not apply transform keyframe animations directly to the base `[data-testid="stSidebar"]` container using `forwards` or `infinite` fill-mode. Doing so overrides Streamlit's native inline collapsed state `transform` translation, preventing the sidebar from sliding off-screen on mobile. Always scope entry transitions to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`).
+
+
 ### 3. `format_func` for all driver selectboxes
 Driver numbers (e.g. `"4"`) are the internal keys throughout. The display layer uses `_fmt_driver(num)` → `"NOR · Norris"` via `format_func=`. Never change the underlying session state / FastF1 calls to use names — always use raw numbers internally.
 
