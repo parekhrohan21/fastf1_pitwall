@@ -340,7 +340,7 @@ Renders the full driver banner section:
 
 All CSS is injected via `st.markdown(..., unsafe_allow_html=True)` in two blocks:
 
-### Block 1 — Design System (lines 452–1071)
+### Block 1 — Design System (lines 451–1071)
 Static, loaded once. Defines:
 
 | Component | CSS class / selector |
@@ -354,7 +354,7 @@ Static, loaded once. Defines:
 | Section titles | `.section-title` |
 | Buttons | `[data-testid="stSidebar"] .stButton > button` |
 
-### Block 2 — Theme Override (lines 1072–1242)
+### Block 2 — Theme Override (lines 1072–1241)
 Dynamic, re-injected on every rerender based on `st.session_state["dark_mode"]`.
 
 **Dark mode** variables:
@@ -439,6 +439,8 @@ Race Position           ← Plotly line chart — all drivers faded, selected hi
 Track Map               ← Plotly scatter (speed-coloured path)
         │
 Race Replay             ← Plotly animated scatter (all drivers)
+        │
+Official Classification ← Official Session Classification (HTML table)
 ```
 
 Each chart section follows the same pattern:
@@ -468,6 +470,7 @@ Each chart section follows the same pattern:
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colors sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colors markers by Throttle/Brake state. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
+| Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Qualifying: Q1/Q2/Q3; Race: Time/Status/Grid/Points) |
 
 ---
 
@@ -493,7 +496,7 @@ MutationObserver replays pageEnter animation
 
 ### Adding new components to the theme
 
-When you add a new Streamlit component that doesn't respond to theme changes, add a CSS override to the **Theme CSS block** (lines 1072–1242):
+When you add a new Streamlit component that doesn't respond to theme changes, add a CSS override to the **Theme CSS block** (lines 1072–1241):
 
 ```python
 # Inside the dark/light mode conditional CSS string:
@@ -676,6 +679,9 @@ When wrapping requests or custom adapters in FastF1, never return a `requests.Re
 
 ### ⑨ Custom Sidebar Animations and Collapsed State Overrides
 If you apply a custom CSS keyframe animation to `[data-testid="stSidebar"]` directly with `forwards` or `infinite` fill-mode, it will block Streamlit's native sidebar hiding translation on mobile. You must scope the animation to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`) so that the collapsed sidebar can transition and translate off-screen cleanly.
+
+### ⑩ Empty Official Standings in Practice Sessions
+Do not assume `sess.results` contains official standings or non-NaN `Position` column entries for practice sessions (`FP1`, `FP2`, `FP3`). They are unordered and `results.Position` is fully null/NaN. For practice sessions, intercept the results check and display an informational note pointing users to the `Fastest Laps Leaderboard` instead of rendering a table of NaNs.
 
 
 ---

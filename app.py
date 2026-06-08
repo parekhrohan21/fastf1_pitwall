@@ -1503,6 +1503,170 @@ def style_ax(ax, ylabel: str, special: str = ""):
         ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
 
 
+def _format_classification_time(row, is_first=False) -> str:
+    """Format final classification time / status for display."""
+    try:
+        t = row.get("Time")
+        status = row.get("Status")
+        if pd.isna(t) or status not in ("Finished",):
+            return str(status) if pd.notna(status) else "—"
+        
+        total_seconds = t.total_seconds()
+        if is_first:
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            seconds = total_seconds % 60
+            if hours > 0:
+                return f"{hours}:{minutes:02d}:{seconds:06.3f}"
+            else:
+                return f"{minutes}:{seconds:06.3f}"
+        else:
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            seconds = total_seconds % 60
+            if hours > 0:
+                return f"+{hours}:{minutes:02d}:{seconds:06.3f}"
+            elif minutes > 0:
+                return f"+{minutes}:{seconds:06.3f}s"
+            else:
+                return f"+{seconds:.3f}s"
+    except Exception:
+        return "—"
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_final_classification(sess_k: str, results_df: pd.DataFrame):
+    """Process and return classification results from FastF1."""
+    try:
+        df = results_df.copy()
+        if df.empty:
+            return None
+        
+        # Check if it is practice session
+        if "Position" in df.columns and df["Position"].isna().all():
+            return "PRACTICE"
+        
+        # Sort by Position
+        if "Position" in df.columns:
+            df = df.dropna(subset=["Position"]).sort_values("Position").reset_index(drop=True)
+            df["Pos"] = df["Position"].astype(int)
+        else:
+            # Fallback sort by index/position if column not present
+            df["Pos"] = df.index + 1
+            
+        return df
+    except Exception:
+        return None
+
+
+def _render_final_classification(df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
+    """Render official classification results as a styled HTML table."""
+    if isinstance(df, str) and df == "PRACTICE":
+        st.info("ℹ️ Official classification results are not available for Practice sessions. Please refer to the Fastest Laps Leaderboard above.")
+        return
+
+    if df is None or df.empty:
+        st.info("Leaderboard not available for this session.")
+        return
+
+    # Check if Q1 column exists and has non-nulls (Qualifying)
+    is_qualifying = "Q1" in df.columns and df["Q1"].notna().any()
+    
+    colour_map = dict(zip(highlight_drivers, highlight_colours))
+    rows_html = ""
+    
+    for i, row in df.iterrows():
+        drv = str(row["DriverNumber"])
+        is_hl = drv in colour_map
+        accent = colour_map.get(drv, "transparent")
+        row_bg = f"{accent}18" if is_hl else "transparent"
+        border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
+        pos_col = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
+        
+        # Format team name with team color strip / indicator if available
+        team_name = str(row.get("TeamName", ""))
+        team_color = str(row.get("TeamColor", ""))
+        team_html = team_name
+        if team_color and team_color != "nan":
+            # Add a small team color block before team name
+            team_html = (
+                f"<span style='display:inline-block; width:4px; height:12px; "
+                f"background:#{team_color.lstrip('#')}; margin-right:6px; vertical-align:middle;'></span>"
+                f"{team_name}"
+            )
+
+        if is_qualifying:
+            # Show Q1, Q2, Q3
+            q1_t = format_laptime(row.get("Q1"))
+            q2_t = format_laptime(row.get("Q2"))
+            q3_t = format_laptime(row.get("Q3"))
+            
+            rows_html += (
+                f"<tr style='background:{row_bg}; {border_css}'>"
+                f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
+                f"<td style='padding:7px 10px;'>{team_html}</td>"
+                f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q1_t}</td>"
+                f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q2_t}</td>"
+                f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q3_t}</td>"
+                f"</tr>"
+            )
+        else:
+            # Show Race/Sprint results
+            is_first = (i == 0)
+            time_status = _format_classification_time(row, is_first=is_first)
+            
+            points_val = row.get("Points", 0.0)
+            points_str = f"{int(points_val)}" if pd.notna(points_val) and points_val % 1 == 0 else f"{points_val}"
+            if float(points_val) == 0.0:
+                points_str = "0"
+            points_str = f"<b>{points_str}</b>" if float(points_val) > 0.0 else points_str
+            
+            grid_pos = row.get("GridPosition")
+            grid_str = f"{int(grid_pos)}" if pd.notna(grid_pos) else "—"
+            
+            laps_val = row.get("Laps")
+            laps_str = f"{int(laps_val)}" if pd.notna(laps_val) else "—"
+
+            rows_html += (
+                f"<tr style='background:{row_bg}; {border_css}'>"
+                f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
+                f"<td style='padding:7px 10px;'>{team_html}</td>"
+                f"<td style='padding:7px 10px; text-align:center;'>{grid_str}</td>"
+                f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{time_status}</td>"
+                f"<td style='padding:7px 10px; text-align:center;'>{laps_str}</td>"
+                f"<td style='padding:7px 10px; text-align:center;'>{points_str}</td>"
+                f"</tr>"
+            )
+
+    if is_qualifying:
+        headers = ["Pos", "Driver", "Team", "Q1", "Q2", "Q3"]
+        alignments = ["center", "left", "left", "left", "left", "left"]
+    else:
+        headers = ["Pos", "Driver", "Team", "Grid", "Time/Status", "Laps", "Points"]
+        alignments = ["center", "left", "left", "center", "left", "center", "center"]
+
+    th_html = ""
+    for h, align in zip(headers, alignments):
+        th_html += f"<th style='padding:8px 10px; text-align:{align};'>{h}</th>"
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          {th_html}
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -4298,3 +4462,23 @@ else:
                       other_colour=(colour2 if compare else None),
                       other_lap=(lap2 if compare else None),
                       fmt_func=_fmt_driver1)
+
+
+# ── Official Session Classification ──────────────────────────────────────────
+st.markdown("<hr style='margin:24px 0 16px; border-style: solid; opacity:0.15;'>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>Official Session Classification</div>", unsafe_allow_html=True)
+
+if sess2 is not None:
+    tab_cls1, tab_cls2 = st.tabs([f"Session 1 Classification ({year1})", f"Session 2 Classification ({year2})"])
+    with tab_cls1:
+        _cls1 = _build_final_classification(sess_key, sess.results)
+        _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1)
+    with tab_cls2:
+        _cls2 = _build_final_classification(sess_key2, sess2.results)
+        _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2)
+else:
+    _cls = _build_final_classification(sess_key, sess.results)
+    _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
+    _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
+    _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1)
+
