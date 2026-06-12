@@ -683,6 +683,9 @@ If you apply a custom CSS keyframe animation to `[data-testid="stSidebar"]` dire
 ### ⑩ Empty Official Standings in Practice Sessions
 Do not assume `sess.results` contains official standings or non-NaN `Position` column entries for practice sessions (`FP1`, `FP2`, `FP3`). They are unordered and `results.Position` is fully null/NaN. For practice sessions, intercept the results check and display an informational note pointing users to the `Fastest Laps Leaderboard` instead of rendering a table of NaNs.
 
+### ⑪ Unhashable Session Results Object in st.cache_data
+FastF1's results DataFrame (`SessionResults`) is a custom pandas DataFrame subclass with extra attributes. Passing it to an `@st.cache_data` cached function throws an `UnhashableParamError` because Streamlit's hash engine doesn't support custom subclassed DataFrames. To fix this, prefix the parameter name in the cached function signature with a leading underscore (e.g., `_results_df`) to exclude it from the hash key calculation.
+
 
 ---
 
