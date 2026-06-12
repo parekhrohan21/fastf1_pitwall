@@ -686,6 +686,9 @@ Do not assume `sess.results` contains official standings or non-NaN `Position` c
 ### ⑪ Unhashable Session Results Object in st.cache_data
 FastF1's results DataFrame (`SessionResults`) is a custom pandas DataFrame subclass with extra attributes. Passing it to an `@st.cache_data` cached function throws an `UnhashableParamError` because Streamlit's hash engine doesn't support custom subclassed DataFrames. To fix this, prefix the parameter name in the cached function signature with a leading underscore (e.g., `_results_df`) to exclude it from the hash key calculation.
 
+### ⑫ GPS Coordinates vs Telemetry Channels in Track Maps
+Do not assume all telemetry channels (like `Speed`, `Throttle`, `Brake`, or Sector timing session data) are present just because a lap's telemetry is successfully retrieved. Always check for the presence of the required coordinate columns `X` and `Y` to render the basic track outline first. If speed or input data is missing, draw a gray track outline (or sector-dominance fallback) and display an informational warning banner instead of failing/crashing the entire map component.
+
 
 ---
 
