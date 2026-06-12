@@ -125,6 +125,12 @@ The official classification results are fetched from `sess.results` and cached u
 - Selected drivers in the telemetry selector are highlighted in the classification table with their driver colors.
 - To prevent Streamlit's cache manager from throwing an `UnhashableParamError`, the results DataFrame argument must be prefixed with a leading underscore in the function signature (e.g. `_results_df`), telling Streamlit to skip hashing this complex Pandas subclass object.
 
+### 7. Track Map Telemetry Fallback
+When telemetry data is incomplete (e.g., missing `Speed` or `Throttle`/`Brake` channels), the track maps must fall back gracefully rather than failing or showing a generic error.
+- Check for `X` and `Y` coordinate columns first. If coordinate data is present, draw a gray track outline (in single or comparison sector dominance map).
+- Draw the Start/Finish marker on the coordinates if coordinate data is available.
+- If specific channels are missing, display an informational warning below the chart via `st.info()` (e.g., `"Speed telemetry is not available; showing track outline only."` or `"Throttle/Brake inputs telemetry is not available; showing track outline only."`).
+- Unpack the return tuples `(fig, warning_msg)` safely in the UI callback layers.
 
 ---
 

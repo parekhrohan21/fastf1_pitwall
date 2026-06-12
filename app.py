@@ -3961,14 +3961,15 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
         def _speed_map_fig(l_obj, drv: str, col: str, l_obj2=None, drv2=None, col2=None):
             tel = _get_telemetry_for_map(l_obj, drv, sess_k)
             if tel is None or tel.empty:
-                return None
+                return None, "GPS position telemetry is not available for this lap."
 
-            # Need X, Y and Speed columns
-            needed = {"X", "Y", "Speed"}
-            if not needed.issubset(tel.columns):
-                return None
+            # We strictly need coordinate columns
+            if not {"X", "Y"}.issubset(tel.columns) or tel["X"].dropna().empty or tel["Y"].dropna().empty:
+                return None, "GPS position coordinates (X/Y) are not available for this lap."
 
             fig = go.Figure()
+            has_speed = "Speed" in tel.columns and tel["Speed"].notna().any()
+            warning_msg = None if has_speed else "Speed telemetry is not available; showing track outline only."
 
             if l_obj2 is not None and drv2:
                 # ── Compare mode: Sector dominance map
@@ -3991,7 +3992,16 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     if c == col2: return drv2
                     return "Unknown"
 
-                if "SessionTime" in tel.columns and "Sector1SessionTime" in l_obj and pd.notna(l_obj["Sector1SessionTime"]):
+                # Check if sector dominance mapping can be done (requires SessionTime and Sector1SessionTime)
+                has_sectors = (
+                    "SessionTime" in tel.columns 
+                    and "Sector1SessionTime" in l_obj 
+                    and pd.notna(l_obj["Sector1SessionTime"])
+                    and "Sector2SessionTime" in l_obj
+                    and pd.notna(l_obj["Sector2SessionTime"])
+                )
+
+                if has_sectors:
                     s1_time = l_obj["Sector1SessionTime"]
                     s2_time = l_obj["Sector2SessionTime"]
                     
@@ -4015,15 +4025,17 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     add_sector(s2_mask, c_s2, "Sector 2")
                     add_sector(s3_mask, c_s3, "Sector 3")
                 else:
-                    # Fallback to gray if session time missing
+                    # Fallback to gray if session time / sectors missing
                     fig.add_trace(go.Scatter(
                         x=tel["X"], y=tel["Y"], mode="lines",
                         line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
                     ))
+                    if not warning_msg:
+                        warning_msg = "Sector timing data is incomplete; showing single track outline."
 
                 # Driver 2 path overlay
                 tel2 = _get_telemetry_for_map(l_obj2, drv2, sess_k)
-                if tel2 is not None and needed.issubset(tel2.columns):
+                if tel2 is not None and {"X", "Y"}.issubset(tel2.columns) and not tel2["X"].dropna().empty:
                     fig.add_trace(go.Scatter(
                         x=tel2["X"], y=tel2["Y"],
                         mode="markers",
@@ -4040,20 +4052,21 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
                 ))
 
-                # Driver 1 speed-coloured scatter
-                fig.add_trace(go.Scatter(
-                    x=tel["X"], y=tel["Y"],
-                    mode="markers",
-                    marker=dict(
-                        color=tel["Speed"],
-                        colorscale=[[0.0, "#1a1aff"], [0.35, "#00c8ff"], [0.65, "#00e400"], [0.85, "#ffd700"], [1.0, "#ff2200"]],
-                        size=4,
-                        colorbar=dict(title=dict(text="Speed (km/h)"), thickness=10, len=0.7, bgcolor="rgba(0,0,0,0)", x=1.02),
-                        showscale=True,
-                    ),
-                    name=drv,
-                    hovertemplate=f"<b>{drv}</b><br>Speed: %{{marker.color:.0f}} km/h<br>X: %{{x:.0f}}  Y: %{{y:.0f}}<extra></extra>"
-                ))
+                if has_speed:
+                    # Driver 1 speed-coloured scatter
+                    fig.add_trace(go.Scatter(
+                        x=tel["X"], y=tel["Y"],
+                        mode="markers",
+                        marker=dict(
+                            color=tel["Speed"],
+                            colorscale=[[0.0, "#1a1aff"], [0.35, "#00c8ff"], [0.65, "#00e400"], [0.85, "#ffd700"], [1.0, "#ff2200"]],
+                            size=4,
+                            colorbar=dict(title=dict(text="Speed (km/h)"), thickness=10, len=0.7, bgcolor="rgba(0,0,0,0)", x=1.02),
+                            showscale=True,
+                        ),
+                        name=drv,
+                        hovertemplate=f"<b>{drv}</b><br>Speed: %{{marker.color:.0f}} km/h<br>X: %{{x:.0f}}  Y: %{{y:.0f}}<extra></extra>"
+                    ))
 
             # ── Start / finish marker
             fig.add_trace(go.Scatter(
@@ -4073,17 +4086,23 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                 height=520,
                 margin=dict(l=0, r=80, t=10, b=10),
             )
-            return fig
+            return fig, warning_msg
 
         if lap is not None:
-            sm_fig = _speed_map_fig(
+            res = _speed_map_fig(
                 lap, driver, colour,
                 l_obj2=other_lap,
                 drv2=other_driver,
                 col2=other_colour,
             )
-            if sm_fig:
-                st.plotly_chart(sm_fig, width="stretch", config={"displayModeBar": False})
+            if res is not None:
+                sm_fig, err_msg = res
+                if sm_fig:
+                    st.plotly_chart(sm_fig, width="stretch", config={"displayModeBar": False})
+                    if err_msg:
+                        st.info(err_msg)
+                else:
+                    st.info(err_msg)
             else:
                 st.info("Position data not available for this lap.")
         else:
@@ -4096,12 +4115,11 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
         def _input_map_fig(l_obj, drv: str, col: str):
             tel = _get_telemetry_for_map(l_obj, drv, sess_k)
             if tel is None or tel.empty:
-                return None
+                return None, "GPS position telemetry is not available for this lap."
 
-            # Need X, Y, Throttle, Brake
-            needed = {"X", "Y", "Throttle", "Brake"}
-            if not needed.issubset(tel.columns):
-                return None
+            # We strictly need coordinate columns
+            if not {"X", "Y"}.issubset(tel.columns) or tel["X"].dropna().empty or tel["Y"].dropna().empty:
+                return None, "GPS position coordinates (X/Y) are not available for this lap."
 
             fig = go.Figure()
 
@@ -4111,30 +4129,35 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                 line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
             ))
 
-            def get_input_color(row):
-                if row["Brake"] > 0:
-                    return "#ff2200"  # Red for braking
-                elif row["Throttle"] >= 99:
-                    return "#00e400"  # Green for full throttle
-                else:
-                    return "#ffd700"  # Yellow for coasting/modulating
+            # Check if inputs exist (Throttle and Brake)
+            has_inputs = {"Throttle", "Brake"}.issubset(tel.columns) and tel["Throttle"].notna().any() and tel["Brake"].notna().any()
+            warning_msg = None if has_inputs else "Throttle/Brake inputs telemetry is not available; showing track outline only."
 
-            colors = tel.apply(get_input_color, axis=1)
+            if has_inputs:
+                def get_input_color(row):
+                    if row["Brake"] > 0:
+                        return "#ff2200"  # Red for braking
+                    elif row["Throttle"] >= 99:
+                        return "#00e400"  # Green for full throttle
+                    else:
+                        return "#ffd700"  # Yellow for coasting/modulating
 
-            fig.add_trace(go.Scatter(
-                x=tel["X"], y=tel["Y"],
-                mode="markers",
-                marker=dict(color=colors, size=4),
-                name=drv,
-                hovertemplate=(
-                    f"<b>{drv}</b><br>"
-                    "Throttle: %{customdata[0]:.0f}%<br>"
-                    "Brake: %{customdata[1]}<br>"
-                    "<extra></extra>"
-                ),
-                customdata=np.stack((tel["Throttle"], tel["Brake"]), axis=-1),
-                showlegend=False
-            ))
+                colors = tel.apply(get_input_color, axis=1)
+
+                fig.add_trace(go.Scatter(
+                    x=tel["X"], y=tel["Y"],
+                    mode="markers",
+                    marker=dict(color=colors, size=4),
+                    name=drv,
+                    hovertemplate=(
+                        f"<b>{drv}</b><br>"
+                        "Throttle: %{customdata[0]:.0f}%<br>"
+                        "Brake: %{customdata[1]}<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=np.stack((tel["Throttle"], tel["Brake"]), axis=-1),
+                    showlegend=False
+                ))
 
             # Start / finish marker
             fig.add_trace(go.Scatter(
@@ -4155,7 +4178,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                 xaxis=dict(visible=False, scaleanchor="y", scaleratio=1), yaxis=dict(visible=False),
                 height=520, margin=dict(l=0, r=80, t=10, b=10),
             )
-            return fig
+            return fig, warning_msg
 
         if lap is not None:
             if other_driver and other_lap is not None:
@@ -4166,9 +4189,15 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                         f"color:{colour};'>{fmt_func(driver) if fmt_func else driver}</div>",
                         unsafe_allow_html=True
                     )
-                    input_fig1 = _input_map_fig(lap, driver, colour)
-                    if input_fig1:
-                        st.plotly_chart(input_fig1, width="stretch", config={"displayModeBar": False})
+                    res1 = _input_map_fig(lap, driver, colour)
+                    if res1 is not None:
+                        input_fig1, err_msg1 = res1
+                        if input_fig1:
+                            st.plotly_chart(input_fig1, width="stretch", config={"displayModeBar": False})
+                            if err_msg1:
+                                st.info(err_msg1)
+                        else:
+                            st.info(err_msg1)
                     else:
                         st.info(f"Input telemetry not available for {fmt_func(driver) if fmt_func else driver}.")
                 with col2:
@@ -4177,15 +4206,27 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                         f"color:{other_colour};'>{fmt_func(other_driver) if fmt_func else other_driver}</div>",
                         unsafe_allow_html=True
                     )
-                    input_fig2 = _input_map_fig(other_lap, other_driver, other_colour)
-                    if input_fig2:
-                        st.plotly_chart(input_fig2, width="stretch", config={"displayModeBar": False})
+                    res2 = _input_map_fig(other_lap, other_driver, other_colour)
+                    if res2 is not None:
+                        input_fig2, err_msg2 = res2
+                        if input_fig2:
+                            st.plotly_chart(input_fig2, width="stretch", config={"displayModeBar": False})
+                            if err_msg2:
+                                st.info(err_msg2)
+                        else:
+                            st.info(err_msg2)
                     else:
                         st.info(f"Input telemetry not available for {fmt_func(other_driver) if fmt_func else other_driver}.")
             else:
-                input_fig = _input_map_fig(lap, driver, colour)
-                if input_fig:
-                    st.plotly_chart(input_fig, width="stretch", config={"displayModeBar": False})
+                res = _input_map_fig(lap, driver, colour)
+                if res is not None:
+                    input_fig, err_msg = res
+                    if input_fig:
+                        st.plotly_chart(input_fig, width="stretch", config={"displayModeBar": False})
+                        if err_msg:
+                            st.info(err_msg)
+                    else:
+                        st.info(err_msg)
                 else:
                     st.info("Input telemetry (Throttle/Brake) not available for this lap.")
         else:
