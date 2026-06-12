@@ -123,6 +123,7 @@ The official classification results are fetched from `sess.results` and cached u
 - Race/Sprint sessions format absolute time for the winner, relative gaps for subsequent finishers, and DNFs/laps using their status value.
 - Qualifying/Shootout sessions display `Q1`, `Q2`, and `Q3` lap times.
 - Selected drivers in the telemetry selector are highlighted in the classification table with their driver colors.
+- To prevent Streamlit's cache manager from throwing an `UnhashableParamError`, the results DataFrame argument must be prefixed with a leading underscore in the function signature (e.g. `_results_df`), telling Streamlit to skip hashing this complex Pandas subclass object.
 
 
 ---

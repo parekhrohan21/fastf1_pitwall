@@ -1535,10 +1535,10 @@ def _format_classification_time(row, is_first=False) -> str:
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_final_classification(sess_k: str, results_df: pd.DataFrame):
+def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
     """Process and return classification results from FastF1."""
     try:
-        df = results_df.copy()
+        df = _results_df.copy()
         if df.empty:
             return None
         
