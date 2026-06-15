@@ -689,6 +689,9 @@ FastF1's results DataFrame (`SessionResults`) is a custom pandas DataFrame subcl
 ### ⑫ GPS Coordinates vs Telemetry Channels in Track Maps
 Do not assume all telemetry channels (like `Speed`, `Throttle`, `Brake`, or Sector timing session data) are present just because a lap's telemetry is successfully retrieved. Always check for the presence of the required coordinate columns `X` and `Y` to render the basic track outline first. If speed or input data is missing, draw a gray track outline (or sector-dominance fallback) and display an informational warning banner instead of failing/crashing the entire map component.
 
+### ⑬ External Championship Standings API Caching and Matching
+Championship standings data is loaded from the external Jolpi (Ergast) API. Because network requests can introduce latency or potentially fail, always wrap standings fetching inside `@st.cache_data` with a reasonable TTL (e.g., 3600 seconds) and handle exceptions gracefully. When matching constructors from the standings list to the local `TEAM_COLOURS` dictionary, apply name normalization (stripping suffixes like 'F1 Team' and 'Racing') to avoid mismatching due to minor variations between FastF1 naming and the Ergast database.
+
 
 ---
 

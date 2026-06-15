@@ -132,6 +132,14 @@ When telemetry data is incomplete (e.g., missing `Speed` or `Throttle`/`Brake` c
 - If specific channels are missing, display an informational warning below the chart via `st.info()` (e.g., `"Speed telemetry is not available; showing track outline only."` or `"Throttle/Brake inputs telemetry is not available; showing track outline only."`).
 - Unpack the return tuples `(fig, warning_msg)` safely in the UI callback layers.
 
+### 8. Constructors' Championship Standings Table
+To provide seasonal championship context, a Constructors' Championship standings table is rendered directly above the official session classification table at the bottom of the page.
+- The standings data is fetched dynamically from the Jolpi (Ergast) API for the season and round being viewed: `https://api.jolpi.ca/ergast/f1/{year}/{round_no}/constructorStandings.json`.
+- Standings are fetched and cached using `@st.cache_data(show_spinner=False, ttl=3600)` to prevent excessive network requests.
+- Suffix cleaning (`F1 Team`, `Racing`) and substring matching are used to match team names dynamically against `TEAM_COLOURS` for colored row indicators.
+- The row corresponding to the selected driver's team is highlighted using their constructor color.
+- If the API call fails or there are no standings (e.g., pre-season testing), the dashboard recovers gracefully by displaying an informational warning instead of crashing.
+
 ---
 
 ## Running the Project
