@@ -1534,6 +1534,127 @@ def _format_classification_time(row, is_first=False) -> str:
         return "—"
 
 
+def get_constructor_colour(name: str) -> str:
+    # Try exact match first
+    if name in TEAM_COLOURS:
+        return TEAM_COLOURS[name]
+    # Try case-insensitive matching/substring matching
+    for k, v in TEAM_COLOURS.items():
+        if k.lower() in name.lower() or name.lower() in k.lower():
+            return v
+    # Try stripping common suffixes like "F1 Team", "Racing", etc.
+    clean_name = name.replace("F1 Team", "").replace("Racing", "").strip()
+    for k, v in TEAM_COLOURS.items():
+        clean_k = k.replace("F1 Team", "").replace("Racing", "").strip()
+        if clean_k.lower() == clean_name.lower():
+            return v
+    return "#B6BABD"  # Default gray
+
+
+def is_same_team(team_a: str, team_b: str) -> bool:
+    if not team_a or not team_b:
+        return False
+    clean_a = team_a.replace("F1 Team", "").replace("Racing", "").strip().lower()
+    clean_b = team_b.replace("F1 Team", "").replace("Racing", "").strip().lower()
+    return clean_a in clean_b or clean_b in clean_a
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_constructor_standings(year: int, round_no: int = None):
+    """Fetch Constructor Standings from the Jolpi Ergast API."""
+    import requests
+    try:
+        if round_no is not None and round_no > 0:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/{round_no}/constructorStandings.json"
+        else:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/constructorStandings.json"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            lists = data.get("MRData", {}).get("StandingsTable", {}).get("StandingsLists", [])
+            if lists:
+                return lists[0].get("ConstructorStandings", [])
+    except Exception:
+        pass
+    return None
+
+
+def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
+    """Render constructor standings as a styled HTML table."""
+    if not standings_list:
+        st.info("ℹ️ Constructors' Championship standings are not available for this session.")
+        return
+
+    # Build a map of highlighted teams to their colors
+    hl_map = {}
+    for team, col in zip(highlight_teams, highlight_colours):
+        if team:
+            hl_map[team] = col
+
+    rows_html = ""
+    for item in standings_list:
+        pos = item.get("position", "")
+        points = item.get("points", "0")
+        wins = item.get("wins", "0")
+        constructor = item.get("Constructor", {})
+        c_name = constructor.get("name", "")
+
+        # Find matching team highlight color
+        is_hl = False
+        accent = "transparent"
+        for hl_team, col in hl_map.items():
+            if is_same_team(hl_team, c_name):
+                is_hl = True
+                accent = col
+                break
+
+        row_bg = f"{accent}18" if is_hl else "transparent"
+        border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
+        pos_col = f"<span style='color:{accent}; font-weight:700;'>{pos}</span>" if is_hl else str(pos)
+
+        # Get team color for the indicator block
+        team_color_hex = get_constructor_colour(c_name)
+        team_indicator = ""
+        if team_color_hex:
+            team_indicator = (
+                f"<span style='display:inline-block; width:4px; height:12px; "
+                f"background:{team_color_hex}; margin-right:6px; vertical-align:middle;'></span>"
+            )
+
+        team_html = f"{team_indicator}{c_name}"
+
+        rows_html += (
+            f"<tr style='background:{row_bg}; {border_css}'>"
+            f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{team_html}</td>"
+            f"<td style='padding:7px 10px; text-align:center;'>{wins}</td>"
+            f"<td style='padding:7px 10px; text-align:center;'><b>{points}</b></td>"
+            f"</tr>"
+        )
+
+    headers = ["Pos", "Constructor", "Wins", "Points"]
+    alignments = ["center", "left", "center", "center"]
+
+    th_html = ""
+    for h, align in zip(headers, alignments):
+        th_html += f"<th style='padding:8px 10px; text-align:{align};'>{h}</th>"
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          {th_html}
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
 def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
     """Process and return classification results from FastF1."""
@@ -4505,19 +4626,64 @@ else:
                       fmt_func=_fmt_driver1)
 
 
-# ── Official Session Classification ──────────────────────────────────────────
+# ── Championship Standings & Classification ───────────────────────────────────
 st.markdown("<hr style='margin:24px 0 16px; border-style: solid; opacity:0.15;'>", unsafe_allow_html=True)
-st.markdown("<div class='section-title'>Official Session Classification</div>", unsafe_allow_html=True)
+st.markdown("<div class='section-title'>Championship Standings & Classification</div>", unsafe_allow_html=True)
+
+
+def _get_round(session):
+    try:
+        ev = session.event
+        if ev is not None and "RoundNumber" in ev:
+            val = ev["RoundNumber"]
+            if pd.notna(val):
+                return int(val)
+    except Exception:
+        pass
+    return None
+
 
 if sess2 is not None:
-    tab_cls1, tab_cls2 = st.tabs([f"Session 1 Classification ({year1})", f"Session 2 Classification ({year2})"])
+    tab_cls1, tab_cls2 = st.tabs([f"Session 1 Standings & Results ({year1})", f"Session 2 Standings & Results ({year2})"])
     with tab_cls1:
+        # Session 1 Constructors Standings
+        r1 = _get_round(sess)
+        standings1 = _build_constructor_standings(year1, r1)
+        team1 = sess.get_driver(driver1).get("TeamName", "") if driver1 else ""
+        st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 8px; opacity: 0.85;'>🏆 Constructors' Championship Standings</div>", unsafe_allow_html=True)
+        _render_constructor_standings(standings1, [team1], [colour1])
+        
+        # Session 1 Classification
+        st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls1 = _build_final_classification(sess_key, sess.results)
         _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1)
+        
     with tab_cls2:
+        # Session 2 Constructors Standings
+        r2 = _get_round(sess2)
+        standings2 = _build_constructor_standings(year2, r2)
+        team2 = sess2.get_driver(driver2).get("TeamName", "") if driver2 else ""
+        st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 8px; opacity: 0.85;'>🏆 Constructors' Championship Standings</div>", unsafe_allow_html=True)
+        _render_constructor_standings(standings2, [team2], [colour2])
+        
+        # Session 2 Classification
+        st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls2 = _build_final_classification(sess_key2, sess2.results)
         _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2)
 else:
+    # Single Session constructors standings
+    r = _get_round(sess)
+    standings = _build_constructor_standings(year, r)
+    team1 = sess.get_driver(driver1).get("TeamName", "") if driver1 else ""
+    team2 = (sess.get_driver(driver2).get("TeamName", "") if (compare and driver2) else "")
+    _hl_teams = [team1] + ([team2] if team2 else [])
+    _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
+    
+    st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 8px; opacity: 0.85;'>🏆 Constructors' Championship Standings</div>", unsafe_allow_html=True)
+    _render_constructor_standings(standings, _hl_teams, _hl_colours)
+    
+    # Single Session classification
+    st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
     _cls = _build_final_classification(sess_key, sess.results)
     _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
     _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
