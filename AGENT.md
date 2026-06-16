@@ -140,6 +140,13 @@ To provide seasonal championship context, a Constructors' Championship standings
 - The row corresponding to the selected driver's team is highlighted using their constructor color.
 - If the API call fails or there are no standings (e.g., pre-season testing), the dashboard recovers gracefully by displaying an informational warning instead of crashing.
 
+### 9. Driver Standing Points in Session Classification Table
+To give a holistic view of the championship standings alongside session results, the total Drivers' Championship standings points are rendered as an additional column (`CH Points`) in the official classification table.
+- Driver standing records are fetched dynamically from the Jolpi (Ergast) API: `https://api.jolpi.ca/ergast/f1/{year}/{round_no}/driverStandings.json`.
+- Requests are cached using `@st.cache_data(show_spinner=False, ttl=3600)` to ensure optimal performance.
+- Drivers in the session classification DataFrame are mapped to their standing records by checking abbreviation codes (e.g., `NOR`), car/driver number strings, or driver last name substrings.
+- If standings data is not available, the points column gracefully displays `—`.
+
 ---
 
 ## Running the Project

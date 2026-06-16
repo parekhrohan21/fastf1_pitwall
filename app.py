@@ -1655,6 +1655,51 @@ def _render_constructor_standings(standings_list, highlight_teams: list, highlig
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+def get_driver_standings_points(standings_list, drv_abbr: str, drv_num: str, drv_lastname: str) -> str:
+    if not standings_list:
+        return "—"
+    
+    # Try match by code, permanentNumber, or last name (case-insensitive)
+    for item in standings_list:
+        points = item.get("points", "0")
+        driver_info = item.get("Driver", {})
+        code = driver_info.get("code", "").upper()
+        perm_num = driver_info.get("permanentNumber", "")
+        family_name = driver_info.get("familyName", "")
+        
+        # Check abbreviation match
+        if drv_abbr and code and drv_abbr.upper() == code:
+            return points
+        # Check number match
+        if drv_num and perm_num and str(drv_num) == str(perm_num):
+            return points
+        # Check family name match
+        if drv_lastname and family_name and drv_lastname.lower() in family_name.lower():
+            return points
+            
+    return "—"
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_driver_standings(year: int, round_no: int = None):
+    """Fetch Driver Standings from the Jolpi Ergast API."""
+    import requests
+    try:
+        if round_no is not None and round_no > 0:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/{round_no}/driverStandings.json"
+        else:
+            url = f"https://api.jolpi.ca/ergast/f1/{year}/driverStandings.json"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            lists = data.get("MRData", {}).get("StandingsTable", {}).get("StandingsLists", [])
+            if lists:
+                return lists[0].get("DriverStandings", [])
+    except Exception:
+        pass
+    return None
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
 def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
     """Process and return classification results from FastF1."""
@@ -1680,7 +1725,7 @@ def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
         return None
 
 
-def _render_final_classification(df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
+def _render_final_classification(df, highlight_drivers: list, highlight_colours: list, fmt_func=None, standings_list=None):
     """Render official classification results as a styled HTML table."""
     if isinstance(df, str) and df == "PRACTICE":
         st.info("ℹ️ Official classification results are not available for Practice sessions. Please refer to the Fastest Laps Leaderboard above.")
@@ -1704,6 +1749,11 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
         border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
         pos_col = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
         
+        # Get driver standing details
+        drv_abbr = str(row.get("Abbreviation", ""))
+        drv_lastname = str(row.get("LastName", ""))
+        tot_points = get_driver_standings_points(standings_list, drv_abbr, drv, drv_lastname) if standings_list else "—"
+
         # Format team name with team color strip / indicator if available
         team_name = str(row.get("TeamName", ""))
         team_color = str(row.get("TeamColor", ""))
@@ -1730,6 +1780,7 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q1_t}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q2_t}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q3_t}</td>"
+                f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{tot_points}</td>"
                 f"</tr>"
             )
         else:
@@ -1758,15 +1809,16 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{time_status}</td>"
                 f"<td style='padding:7px 10px; text-align:center;'>{laps_str}</td>"
                 f"<td style='padding:7px 10px; text-align:center;'>{points_str}</td>"
+                f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{tot_points}</td>"
                 f"</tr>"
             )
 
     if is_qualifying:
-        headers = ["Pos", "Driver", "Team", "Q1", "Q2", "Q3"]
-        alignments = ["center", "left", "left", "left", "left", "left"]
+        headers = ["Pos", "Driver", "Team", "Q1", "Q2", "Q3", "CH Points"]
+        alignments = ["center", "left", "left", "left", "left", "left", "center"]
     else:
-        headers = ["Pos", "Driver", "Team", "Grid", "Time/Status", "Laps", "Points"]
-        alignments = ["center", "left", "left", "center", "left", "center", "center"]
+        headers = ["Pos", "Driver", "Team", "Grid", "Time/Status", "Laps", "Points", "CH Points"]
+        alignments = ["center", "left", "left", "center", "left", "center", "center", "center"]
 
     th_html = ""
     for h, align in zip(headers, alignments):
@@ -4656,7 +4708,8 @@ if sess2 is not None:
         # Session 1 Classification
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls1 = _build_final_classification(sess_key, sess.results)
-        _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1)
+        standings_d1 = _build_driver_standings(year1, r1)
+        _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1, standings_d1)
         
     with tab_cls2:
         # Session 2 Constructors Standings
@@ -4669,7 +4722,8 @@ if sess2 is not None:
         # Session 2 Classification
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls2 = _build_final_classification(sess_key2, sess2.results)
-        _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2)
+        standings_d2 = _build_driver_standings(year2, r2)
+        _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2, standings_d2)
 else:
     # Single Session constructors standings
     r = _get_round(sess)
@@ -4687,5 +4741,6 @@ else:
     _cls = _build_final_classification(sess_key, sess.results)
     _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
     _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
-    _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1)
+    standings_d = _build_driver_standings(year, r)
+    _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d)
 
