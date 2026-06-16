@@ -692,6 +692,9 @@ Do not assume all telemetry channels (like `Speed`, `Throttle`, `Brake`, or Sect
 ### ⑬ External Championship Standings API Caching and Matching
 Championship standings data is loaded from the external Jolpi (Ergast) API. Because network requests can introduce latency or potentially fail, always wrap standings fetching inside `@st.cache_data` with a reasonable TTL (e.g., 3600 seconds) and handle exceptions gracefully. When matching constructors from the standings list to the local `TEAM_COLOURS` dictionary, apply name normalization (stripping suffixes like 'F1 Team' and 'Racing') to avoid mismatching due to minor variations between FastF1 naming and the Ergast database.
 
+### ⑭ Multi-Key Matching for Standings Drivers
+Drivers in the standings database (Ergast) may have minor record variations compared to FastF1 results (such as Verstappen's number mapping, name spelling, or temporary replacement drivers). To ensure robust mapping between the session classification results DataFrame and the standings API, resolve drivers using a fallback multi-key matching function check checking driver three-letter abbreviation codes, car number strings, and last/family name substrings before defaulting to a missing value indicator (`—`).
+
 
 ---
 
