@@ -695,6 +695,9 @@ Championship standings data is loaded from the external Jolpi (Ergast) API. Beca
 ### ⑭ Multi-Key Matching for Standings Drivers
 Drivers in the standings database (Ergast) may have minor record variations compared to FastF1 results (such as Verstappen's number mapping, name spelling, or temporary replacement drivers). To ensure robust mapping between the session classification results DataFrame and the standings API, resolve drivers using a fallback multi-key matching function check checking driver three-letter abbreviation codes, car number strings, and last/family name substrings before defaulting to a missing value indicator (`—`).
 
+### ⑮ Normalizing Winner Lookup Identifiers
+FastF1 session results and lap telemetry might store driver identifiers as driver numbers (e.g., '4', '1') or abbreviation strings (e.g., 'NOR', 'VER') depending on the session data and year. When resolving the winner to set selectbox default selection indices, always run resolved winners through a mapping resolver checking abbreviation codes and driver numbers against the session's driver labels to translate them safely to the exact key format present in the list of selectbox options.
+
 
 ---
 

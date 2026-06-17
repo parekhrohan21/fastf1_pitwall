@@ -1534,6 +1534,68 @@ def _format_classification_time(row, is_first=False) -> str:
         return "—"
 
 
+def _map_driver_id_to_number(session, driver_id: str, all_drivers: list) -> str:
+    """Map a driver ID (number or abbreviation) to the key used in all_drivers."""
+    if not driver_id or not all_drivers:
+        return ""
+    
+    driver_id = str(driver_id).strip().upper()
+    if driver_id in all_drivers:
+        return driver_id
+        
+    for key in all_drivers:
+        try:
+            info = session.get_driver(key)
+            abbr = str(info.get("Abbreviation", "")).strip().upper()
+            dnum = str(info.get("DriverNumber", "")).strip().upper()
+            lname = str(info.get("LastName", "")).strip().upper()
+            
+            if driver_id in (abbr, dnum) or (lname and driver_id == lname):
+                return key
+        except Exception:
+            pass
+            
+    return all_drivers[0] if all_drivers else ""
+
+
+def _get_session_winner(session, all_drivers: list) -> str:
+    """Return the driver number/abbreviation string of the session winner / fastest driver."""
+    try:
+        results = session.results
+        if results is not None and not results.empty:
+            if "Position" in results.columns and results["Position"].notna().any():
+                p1_row = results[results["Position"] == 1]
+                if not p1_row.empty:
+                    for col in ["Abbreviation", "DriverNumber", "Driver"]:
+                        if col in p1_row.columns:
+                            val = str(p1_row.iloc[0][col]).strip()
+                            if val in all_drivers:
+                                return val
+                    if "Abbreviation" in p1_row.columns:
+                        abbr = str(p1_row.iloc[0]["Abbreviation"]).strip()
+                        mapped = _map_driver_id_to_number(session, abbr, all_drivers)
+                        if mapped in all_drivers:
+                            return mapped
+                    if "DriverNumber" in p1_row.columns:
+                        dnum = str(p1_row.iloc[0]["DriverNumber"]).strip()
+                        mapped = _map_driver_id_to_number(session, dnum, all_drivers)
+                        if mapped in all_drivers:
+                            return mapped
+                            
+        if hasattr(session, "laps") and session.laps is not None and not session.laps.empty:
+            fastest_lap = session.laps.pick_fastest()
+            if fastest_lap is not None and not pd.isna(fastest_lap.get("Driver")):
+                val = str(fastest_lap["Driver"]).strip()
+                if val in all_drivers:
+                    return val
+                mapped = _map_driver_id_to_number(session, val, all_drivers)
+                if mapped in all_drivers:
+                    return mapped
+    except Exception:
+        pass
+    return "NOR" if "NOR" in all_drivers else (all_drivers[0] if all_drivers else "")
+
+
 def get_constructor_colour(name: str) -> str:
     # Try exact match first
     if name in TEAM_COLOURS:
@@ -2238,7 +2300,8 @@ else:
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
-    _def_d1_idx = all_drivers1.index("4") if "4" in all_drivers1 else 0
+    _p1_drv1 = _get_session_winner(sess, all_drivers1)
+    _def_d1_idx = all_drivers1.index(_p1_drv1) if _p1_drv1 in all_drivers1 else 0
     driver1 = st.selectbox(
         "Driver 1", all_drivers1, index=_def_d1_idx, key="d1",
         format_func=_fmt_driver1,
