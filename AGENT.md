@@ -147,6 +147,13 @@ To give a holistic view of the championship standings alongside session results,
 - Drivers in the session classification DataFrame are mapped to their standing records by checking abbreviation codes (e.g., `NOR`), car/driver number strings, or driver last name substrings.
 - If standings data is not available, the points column gracefully displays `—`.
 
+### 10. Default Selected Driver as Race/Session Winner
+To ensure the dashboard loads displaying the most relevant driver first, the default selected driver is set dynamically to the winner of that session:
+- For Race, Sprint, and Qualifying sessions, the winner is determined by looking up the driver with Position 1 in `session.results`.
+- For Practice sessions, where standings are not defined, the winner is resolved to the driver who set the overall fastest lap in `session.laps`.
+- In cases where the F1 identifier returned by results or laps is a number or alternative key format, a mapping resolver matches it to the respective key in `all_drivers1` (which uses abbreviations or numbers depending on the session data).
+- The default index falls back to Norris ("NOR" / "4") or index 0 if the winner cannot be resolved.
+
 ---
 
 ## Running the Project
