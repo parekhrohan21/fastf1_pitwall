@@ -1596,6 +1596,32 @@ def _get_session_winner(session, all_drivers: list) -> str:
     return "NOR" if "NOR" in all_drivers else (all_drivers[0] if all_drivers else "")
 
 
+def _get_default_gp_index(schedule, event_names: list) -> int:
+    """Determine the default Grand Prix index based on the most recent completed event."""
+    try:
+        now = pd.Timestamp.now()
+        if not schedule.empty and "EventDate" in schedule.columns:
+            s_dates = pd.to_datetime(schedule["EventDate"])
+            if s_dates.dt.tz is not None:
+                s_dates = s_dates.dt.tz_localize(None)
+            if now.tz is not None:
+                now = now.tz_localize(None)
+            past_events = schedule[s_dates <= now]
+            if not past_events.empty:
+                last_completed_gp = past_events.iloc[-1]["EventName"]
+                if last_completed_gp in event_names:
+                    return event_names.index(last_completed_gp)
+    except Exception:
+        pass
+        
+    if not schedule.empty:
+        first_race = schedule.iloc[0]["EventName"]
+        if first_race in event_names:
+            return event_names.index(first_race)
+            
+    return 0
+
+
 def get_constructor_colour(name: str) -> str:
     # Try exact match first
     if name in TEAM_COLOURS:
@@ -1921,7 +1947,7 @@ with st.sidebar:
     st.markdown("<hr style='margin:0 0 16px'>", unsafe_allow_html=True)
 
     _years = list(range(2026, 2017, -1))
-    year = st.selectbox("Season", _years, index=_years.index(2025) if 2025 in _years else 0, label_visibility="visible")
+    year = st.selectbox("Season", _years, index=0, label_visibility="visible")
 
     with st.spinner("Loading calendar…"):
         try:
@@ -1931,7 +1957,7 @@ with st.sidebar:
             st.error(f"Could not load {year} schedule: {e}")
             st.stop()
 
-    _def_gp_idx = gp_names.index("British Grand Prix") if "British Grand Prix" in gp_names else min(4, len(gp_names) - 1)
+    _def_gp_idx = _get_default_gp_index(schedule, gp_names)
     gp = st.selectbox("Grand Prix", gp_names, index=_def_gp_idx)
 
     _session_code_map = {
@@ -1966,7 +1992,7 @@ with st.sidebar:
     if compare_sessions:
         st.markdown("<hr style='margin:12px 0 8px; border-style: dashed; opacity:0.5;'>", unsafe_allow_html=True)
         st.markdown("<div style='font-size:11px; font-weight:700; text-transform:uppercase; margin-bottom:8px; opacity:0.8;'>Session 2 Selection</div>", unsafe_allow_html=True)
-        year2 = st.selectbox("Season 2", _years, index=_years.index(2025) if 2025 in _years else 0, key="year2")
+        year2 = st.selectbox("Season 2", _years, index=0, key="year2")
         with st.spinner("Loading calendar 2…"):
             try:
                 schedule2 = load_schedule(year2)
@@ -1974,7 +2000,7 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Could not load {year2} schedule: {e}")
                 st.stop()
-        _def_gp_idx2 = gp_names2.index("British Grand Prix") if "British Grand Prix" in gp_names2 else min(4, len(gp_names2) - 1)
+        _def_gp_idx2 = _get_default_gp_index(schedule2, gp_names2)
         gp2 = st.selectbox("Grand Prix 2", gp_names2, index=_def_gp_idx2, key="gp2")
         
         # Determine dynamic sessions for secondary session selection
@@ -2041,9 +2067,9 @@ if "session2" not in st.session_state:
     st.session_state["session2"] = None
     st.session_state["sess_key2"] = None
 if "year1" not in st.session_state:
-    st.session_state["year1"] = 2025
+    st.session_state["year1"] = _years[0] if _years else 2026
 if "year2" not in st.session_state:
-    st.session_state["year2"] = 2025
+    st.session_state["year2"] = _years[0] if _years else 2026
 
 sess_key = f"{year}_{gp}_{session_type}"
 sess_key2 = f"{year2}_{gp2}_{session_type2}" if compare_sessions else None

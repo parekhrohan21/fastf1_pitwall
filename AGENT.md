@@ -154,6 +154,11 @@ To ensure the dashboard loads displaying the most relevant driver first, the def
 - In cases where the F1 identifier returned by results or laps is a number or alternative key format, a mapping resolver matches it to the respective key in `all_drivers1` (which uses abbreviations or numbers depending on the session data).
 - The default index falls back to Norris ("NOR" / "4") or index 0 if the winner cannot be resolved.
 
+### 11. Default Season and Session/Event Selection to the Most Recent Ones
+To improve user experience, the dashboard initializes both Season 1 and Season 2 selectors to the most recent season (the first entry in the descending list of years, currently 2026).
+Furthermore, the default Grand Prix index is resolved dynamically by filtering the season's calendar schedule to locate the most recent completed Grand Prix (where the event date is less than or equal to the current system date).
+If no races have occurred yet in the selected season, the dashboard falls back gracefully to the first event of the calendar (Round 1).
+
 ---
 
 ## Running the Project
