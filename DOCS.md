@@ -698,6 +698,9 @@ Drivers in the standings database (Ergast) may have minor record variations comp
 ### ⑮ Normalizing Winner Lookup Identifiers
 FastF1 session results and lap telemetry might store driver identifiers as driver numbers (e.g., '4', '1') or abbreviation strings (e.g., 'NOR', 'VER') depending on the session data and year. When resolving the winner to set selectbox default selection indices, always run resolved winners through a mapping resolver checking abbreviation codes and driver numbers against the session's driver labels to translate them safely to the exact key format present in the list of selectbox options.
 
+### ⑯ Safely Comparing Dates and Timezones for Default Event Selection
+When resolving the default Grand Prix index dynamically by comparing event dates with the current time `pd.Timestamp.now()`, mismatching timezone properties (offset-aware vs. offset-naive timestamps) can trigger a `TypeError`. To ensure safe comparisons, normalize both datetimes to timezone-naive by stripping timezone info (e.g. via `dt.tz_localize(None)`) before filtering events in the schedule.
+
 
 ---
 
