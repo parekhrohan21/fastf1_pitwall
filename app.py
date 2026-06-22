@@ -1597,7 +1597,7 @@ def _get_session_winner(session, all_drivers: list) -> str:
 
 
 def _get_default_gp_index(schedule, event_names: list) -> int:
-    """Determine the default Grand Prix index based on the most recent completed event."""
+    """Determine the default Grand Prix index based on the most recent completed event (Issue #53)."""
     try:
         now = pd.Timestamp.now()
         if not schedule.empty and "EventDate" in schedule.columns:
