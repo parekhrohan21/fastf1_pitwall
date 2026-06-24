@@ -1831,6 +1831,12 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
     
     for i, row in df.iterrows():
         drv = str(row["DriverNumber"])
+        drv_name = fmt_func(drv) if fmt_func else drv
+        if drv_name != drv:
+            display_drv = f"{drv} · {drv_name}"
+        else:
+            display_drv = drv
+            
         is_hl = drv in colour_map
         accent = colour_map.get(drv, "transparent")
         row_bg = f"{accent}18" if is_hl else "transparent"
@@ -1863,7 +1869,7 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
             rows_html += (
                 f"<tr style='background:{row_bg}; {border_css}'>"
                 f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
-                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
+                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{display_drv}</td>"
                 f"<td style='padding:7px 10px;'>{team_html}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q1_t}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{q2_t}</td>"
@@ -1891,7 +1897,7 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
             rows_html += (
                 f"<tr style='background:{row_bg}; {border_css}'>"
                 f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
-                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{fmt_func(drv) if fmt_func else drv}</td>"
+                f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{display_drv}</td>"
                 f"<td style='padding:7px 10px;'>{team_html}</td>"
                 f"<td style='padding:7px 10px; text-align:center;'>{grid_str}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{time_status}</td>"

@@ -159,6 +159,9 @@ To improve user experience, the dashboard initializes both Season 1 and Season 2
 Furthermore, the default Grand Prix index is resolved dynamically by filtering the season's calendar schedule to locate the most recent completed Grand Prix (where the event date is less than or equal to the current system date).
 If no races have occurred yet in the selected season, the dashboard falls back gracefully to the first event of the calendar (Round 1).
 
+### 12. Combined Driver Car Number and Name in Classification Table
+To provide clear mappings between driver numbers and full names, the Driver column in the final session classification table displays both the car number and the formatted name together (e.g., `44 · HAM · Hamilton` instead of just `HAM · Hamilton`). A clean conditional fallback ensures that if full driver information is unavailable, only the car number is displayed.
+
 ---
 
 ## Running the Project
