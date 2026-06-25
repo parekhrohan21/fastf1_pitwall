@@ -1831,9 +1831,13 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
     
     for i, row in df.iterrows():
         drv = str(row["DriverNumber"])
-        drv_name = fmt_func(drv) if fmt_func else drv
-        if drv_name != drv:
-            display_drv = f"{drv} · {drv_name}"
+        abbr = str(row.get("Abbreviation", "")).strip()
+        last_name = str(row.get("LastName", "")).strip()
+        if abbr and abbr != "nan":
+            if last_name and last_name != "nan":
+                display_drv = f"{drv} · {abbr} · {last_name}"
+            else:
+                display_drv = f"{drv} · {abbr}"
         else:
             display_drv = drv
             
