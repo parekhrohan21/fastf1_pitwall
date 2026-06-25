@@ -160,7 +160,7 @@ Furthermore, the default Grand Prix index is resolved dynamically by filtering t
 If no races have occurred yet in the selected season, the dashboard falls back gracefully to the first event of the calendar (Round 1).
 
 ### 12. Combined Driver Car Number and Name in Classification Table
-To provide clear mappings between driver numbers and full names, the Driver column in the final session classification table displays both the car number and the formatted name together (e.g., `44 · HAM · Hamilton` instead of just `HAM · Hamilton`). A clean conditional fallback ensures that if full driver information is unavailable, only the car number is displayed.
+To provide clear mappings between driver numbers and full names, the Driver column in the final session classification table displays both the car number and the formatted name together (e.g., `44 · HAM · Hamilton` instead of just `HAM · Hamilton`). Rather than using selectbox formatting functions (which map from abbreviation strings and cause lookup key mismatches with car numbers), this is resolved directly from the `Abbreviation` and `LastName` columns in the FastF1 results DataFrame. A clean conditional fallback ensures that if driver name info is missing, only the car number is displayed.
 
 ---
 
