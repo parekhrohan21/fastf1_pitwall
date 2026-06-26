@@ -162,6 +162,9 @@ If no races have occurred yet in the selected season, the dashboard falls back g
 ### 12. Combined Driver Car Number and Name in Classification Table
 To provide clear mappings between driver numbers and full names, the Driver column in the final session classification table displays both the car number and the formatted name together (e.g., `44 · HAM · Hamilton` instead of just `HAM · Hamilton`). Rather than using selectbox formatting functions (which map from abbreviation strings and cause lookup key mismatches with car numbers), this is resolved directly from the `Abbreviation` and `LastName` columns in the FastF1 results DataFrame. A clean conditional fallback ensures that if driver name info is missing, only the car number is displayed.
 
+### 13. Pit Stop Count in Session Classification Table
+To provide a complete overview of the race strategy alongside results, a `Stops` column is displayed in the final official session classification table for Race and Sprint sessions. The number of stops is calculated dynamically by filtering the session's laps DataFrame for each driver and counting the number of laps containing both non-null `PitInTime` and `PitOutTime` values.
+
 ---
 
 ## Running the Project

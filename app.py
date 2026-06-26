@@ -1813,7 +1813,7 @@ def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
         return None
 
 
-def _render_final_classification(df, highlight_drivers: list, highlight_colours: list, fmt_func=None, standings_list=None):
+def _render_final_classification(df, highlight_drivers: list, highlight_colours: list, fmt_func=None, standings_list=None, laps_df=None):
     """Render official classification results as a styled HTML table."""
     if isinstance(df, str) and df == "PRACTICE":
         st.info("ℹ️ Official classification results are not available for Practice sessions. Please refer to the Fastest Laps Leaderboard above.")
@@ -1864,6 +1864,15 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
                 f"{team_name}"
             )
 
+        # Count stops for Race/Sprint
+        stops_str = "0"
+        if not is_qualifying and laps_df is not None and not laps_df.empty:
+            if drv_abbr:
+                drv_laps = laps_df[laps_df["Driver"] == drv_abbr]
+                if not drv_laps.empty:
+                    stops_count = drv_laps[drv_laps["PitInTime"].notna() & drv_laps["PitOutTime"].notna()].shape[0]
+                    stops_str = str(stops_count)
+
         if is_qualifying:
             # Show Q1, Q2, Q3
             q1_t = format_laptime(row.get("Q1"))
@@ -1906,6 +1915,7 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
                 f"<td style='padding:7px 10px; text-align:center;'>{grid_str}</td>"
                 f"<td style='padding:7px 10px; font-family:monospace; font-size:13px;'>{time_status}</td>"
                 f"<td style='padding:7px 10px; text-align:center;'>{laps_str}</td>"
+                f"<td style='padding:7px 10px; text-align:center;'>{stops_str}</td>"
                 f"<td style='padding:7px 10px; text-align:center;'>{points_str}</td>"
                 f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{tot_points}</td>"
                 f"</tr>"
@@ -1915,8 +1925,8 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
         headers = ["Pos", "Driver", "Team", "Q1", "Q2", "Q3", "CH Points"]
         alignments = ["center", "left", "left", "left", "left", "left", "center"]
     else:
-        headers = ["Pos", "Driver", "Team", "Grid", "Time/Status", "Laps", "Points", "CH Points"]
-        alignments = ["center", "left", "left", "center", "left", "center", "center", "center"]
+        headers = ["Pos", "Driver", "Team", "Grid", "Time/Status", "Laps", "Stops", "Points", "CH Points"]
+        alignments = ["center", "left", "left", "center", "left", "center", "center", "center", "center"]
 
     th_html = ""
     for h, align in zip(headers, alignments):
@@ -4808,7 +4818,7 @@ if sess2 is not None:
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls1 = _build_final_classification(sess_key, sess.results)
         standings_d1 = _build_driver_standings(year1, r1)
-        _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1, standings_d1)
+        _render_final_classification(_cls1, [driver1], [colour1], _fmt_driver1, standings_d1, laps_df=_all_laps1)
         
     with tab_cls2:
         # Session 2 Constructors Standings
@@ -4822,7 +4832,7 @@ if sess2 is not None:
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls2 = _build_final_classification(sess_key2, sess2.results)
         standings_d2 = _build_driver_standings(year2, r2)
-        _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2, standings_d2)
+        _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2, standings_d2, laps_df=_all_laps2)
 else:
     # Single Session constructors standings
     r = _get_round(sess)
@@ -4841,5 +4851,5 @@ else:
     _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
     _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
     standings_d = _build_driver_standings(year, r)
-    _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d)
+    _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d, laps_df=_all_laps1)
 
