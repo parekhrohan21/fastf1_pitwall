@@ -140,7 +140,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 12. **Fastest Laps Leaderboard** — A ranked table of every driver's best lap with gap to P1, compound, and top speed. Your selected driver(s) are highlighted.
 13. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
 14. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map, driver input pedal traces, or build the full multi-car Race Replay animation!
-15. **Official Session Classification** — Scroll to the very bottom to view the official final standings table (with points, retirements/laps, and Q1/Q2/Q3 split times where applicable).
+15. **Official Session Classification** — Scroll to the very bottom to view the official final standings table (with points, retirements/laps, stops, and Q1/Q2/Q3 split times where applicable).
 
 ---
 
