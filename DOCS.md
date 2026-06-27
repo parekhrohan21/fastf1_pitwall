@@ -701,6 +701,9 @@ FastF1 session results and lap telemetry might store driver identifiers as drive
 ### ⑯ Safely Comparing Dates and Timezones for Default Event Selection
 When resolving the default Grand Prix index dynamically by comparing event dates with the current time `pd.Timestamp.now()`, mismatching timezone properties (offset-aware vs. offset-naive timestamps) can trigger a `TypeError`. To ensure safe comparisons, normalize both datetimes to timezone-naive by stripping timezone info (e.g. via `dt.tz_localize(None)`) before filtering events in the schedule.
 
+### ⑰ Accurately Counting Pit Stops from Laps Data
+When counting a driver's pit stops in F1 sessions, rely on identifying laps containing both non-null `PitInTime` and `PitOutTime` columns. Do not count `PitInTime` alone, as this will also count retirements that occurred in the pit lane (which are not completed pit stops).
+
 
 ---
 
