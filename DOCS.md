@@ -313,6 +313,15 @@ Safe — individual driver failures don't break the whole dict.
 `format_func` for `st.selectbox`. Returns `_drv_labels.get(num, num)`.
 Use this everywhere a driver number is displayed to a user.
 
+### `_build_constructor_standings(year: int, round_no: int = None) -> list`
+Fetches season Constructors' Championship standings from Jolpi (Ergast) API. Cached using `@st.cache_data(show_spinner=False, ttl=3600)` with failure fallback.
+
+### `_render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list)`
+Renders Constructors' Championship standings as a styled HTML table. Highlighted rows indicate constructor teams associated with the selected driver(s).
+
+### `_build_driver_standings(year: int, round_no: int = None) -> list`
+Fetches season Drivers' Championship standings from Jolpi (Ergast) API. Cached using `@st.cache_data(show_spinner=False, ttl=3600)` with failure fallback. Used to append total standings points to the classification table.
+
 ### `get_telemetry_cached(driver, lap, sess_key) -> pd.DataFrame | None`
 Fetches and caches raw telemetry for one lap via `lap.get_car_data().add_distance()`.
 Stores result in `st.session_state` under a compound key.
@@ -440,6 +449,8 @@ Track Map               ← Plotly scatter (speed-coloured path)
         │
 Race Replay             ← Plotly animated scatter (all drivers)
         │
+Constructors' Standings ← Constructors' Championship Standings (HTML table)
+        │
 Official Classification ← Official Session Classification (HTML table)
 ```
 
@@ -452,25 +463,26 @@ Each chart section follows the same pattern:
 
 ## 10. Chart Inventory
 
-| Chart | Library | Builder function | Figure function | Key data source |
+| Chart / Table | Library | Builder function | Figure/Render function | Key data source |
 |---|---|---|---|---|
 | Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `sess.laps` |
 | Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
 | Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
 | Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `sess.laps` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
-| Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_stops` | `PitInTime`, `PitOutTime` |
+| Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `PitInTime`, `PitOutTime` |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |
-| Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | inline | `sess.laps` S1/S2/S3 min per driver |
-| Gap to Leader | Plotly | `_build_gap_data` | inline | `sess.laps` cumulative time |
-| Race Position | Plotly | `_build_position_data` | inline | `sess.laps["Position"]` per driver |
+| Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `sess.laps` S1/S2/S3 min per driver |
+| Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `sess.laps` cumulative time |
+| Race Position | Plotly | `_build_position_data` | `_render_position_section` | `sess.laps["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colors sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colors markers by Throttle/Brake state. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
-| Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Qualifying: Q1/Q2/Q3; Race: Time/Status/Grid/Points) |
+| Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
+| Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `sess.laps` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
 
 ---
 
@@ -717,6 +729,7 @@ When counting a driver's pit stops in F1 sessions, rely on identifying laps cont
 | Leaderboard (all drivers) | `@st.cache_data` per session key |
 | Gap to Leader (all drivers) | `@st.cache_data` per session key |
 | Driver name labels | Built once at session load, stored in `_drv_labels` module-level dict |
+| Standings data fetch (Ergast) | `@st.cache_data(show_spinner=False, ttl=3600)` with exception safety filters |
 
 The heaviest single operation is `sess.load()` on first call. Everything else is sub-second once the session is cached.
 
@@ -790,7 +803,13 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Low~~ | ~~**Fuel-corrected qualifying sim**~~ | ✅ **Done** — Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |
 | ~~Tech debt~~ | ~~**Consolidate compound colour dicts**~~ | ✅ **Done** — `COMPOUND_COLOURS` is now the single canonical dict. `_CMP_PALETTE`, `cmp_dot`, and `cmp_colours_map` have all been removed. |
+| ~~Medium~~ | ~~**Constructors' Championship Standings**~~ | ✅ **Done** — Added `_build_constructor_standings` and `_render_constructor_standings` to render the constructor standings table dynamically using Ergast API. |
+| ~~Medium~~ | ~~**Driver points in classification table**~~ | ✅ **Done** — Integrated Ergast driver standings API to display total Drivers' Championship standings points in a `CH Points` column in the final classification table. |
+| ~~Low~~ | ~~**Winner-based default selection**~~ | ✅ **Done** — Set default selected driver dynamically to the session winner (or driver with fastest lap in practice) on first load. |
+| ~~Medium~~ | ~~**Dynamic calendar default GP/season**~~ | ✅ **Done** — Automatically resolve the default season to the most recent calendar year and default Grand Prix index to the most recently completed race using system date comparison. |
+| ~~Medium~~ | ~~**Driver name/number classification columns**~~ | ✅ **Done** — Combined driver number, abbreviation, and lastName in the official session classification table, resolving it safely directly from results DataFrame columns. |
+| ~~High~~ | ~~**Pit stop counts in classification**~~ | ✅ **Done** — Renders a `Stops` column in the session classification table, calculated by counting laps with both non-null `PitInTime` and `PitOutTime`. |
 
 ---
 
-*Last updated: May 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+*Last updated: June 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
