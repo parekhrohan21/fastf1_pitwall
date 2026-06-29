@@ -465,24 +465,24 @@ Each chart section follows the same pattern:
 
 | Chart / Table | Library | Builder function | Figure/Render function | Key data source |
 |---|---|---|---|---|
-| Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `sess.laps` |
-| Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `sess.laps.pick_drivers()` — compound multiselect filter applied before render |
-| Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `sess.laps.pick_drivers()` |
-| Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `sess.laps` |
-| Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `sess.laps.pick_drivers()` |
-| Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `PitInTime`, `PitOutTime` |
+| Session Statistics | HTML | — (inline) | `render_session_stats` | `sess.get_driver()`, `laps_df` |
+| Lap Time History | Plotly | `_build_lap_history` | `_lap_history_fig` | `laps_df` filtered by driver — compound multiselect filter applied before render |
+| Fuel-Adjusted Pace | Plotly | `_build_fuel_adjusted` | `_fuel_pace_fig` | `laps_df` filtered by driver |
+| Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `laps_df` |
+| Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
+| Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
-| Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `sess.laps.groupby("Driver")` |
-| Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `sess.laps` S1/S2/S3 min per driver |
-| Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `sess.laps` cumulative time |
-| Race Position | Plotly | `_build_position_data` | `_render_position_section` | `sess.laps["Position"]` per driver |
+| Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `laps_df` grouped by driver |
+| Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
+| Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
+| Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colors sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colors markers by Throttle/Brake state. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
-| Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `sess.laps` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
+| Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `laps_df` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
 
 ---
 
@@ -575,17 +575,17 @@ st.markdown("<div class='section-title'>My New Section</div>", unsafe_allow_html
 
 ```python
 @st.cache_data(show_spinner=False, ttl=3600)
-def _build_my_data(driver: str, sess_k: str) -> pd.DataFrame | None:
+def _build_my_data(driver: str, sess_k: str, laps_df: pd.DataFrame) -> pd.DataFrame | None:
     """One-line docstring describing what this returns."""
     try:
-        laps = st.session_state["session"].laps.pick_drivers(driver).copy()
+        drv_laps = laps_df[laps_df["Driver"] == driver].copy()
         # ... transform data ...
-        return result_df
+        return drv_laps
     except Exception:
         return None
 ```
 
-> Note: pass `sess_k` as a string parameter (not the session object) so `@st.cache_data` can hash it.
+> Note: pass `sess_k` as a string parameter (not the session object) and `laps_df` as a casted plain `pd.DataFrame` (never raw `fastf1.core.Laps`) to prevent Streamlit from throwing `UnhashableParamError`. Inside the builder, use boolean filtering (never `.pick_drivers()`).
 
 ### Step 4 — Write a figure builder
 
@@ -621,7 +621,7 @@ Always call `plt.close(fig)` immediately after `st.pyplot(fig)`.
 ### Step 5 — Render it
 
 ```python
-_my_data = _build_my_data(driver1, sess_key)
+_my_data = _build_my_data(driver1, sess_key, _all_laps1)
 if _my_data is None or _my_data.empty:
     st.info("Data not available for this session.")
 else:
