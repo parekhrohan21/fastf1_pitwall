@@ -8,7 +8,6 @@ import warnings
 import streamlit as st
 import streamlit.components.v1 as components
 import fastf1
-import fastf1.plotting
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
