@@ -254,6 +254,7 @@ matplotlib>=3.8.0
 pandas>=2.2.0
 numpy>=1.26.0
 plotly>=5.18.0
+curl-cffi>=0.5.10
 ```
 
 When upgrading any dependency:

@@ -49,6 +49,7 @@ The Pit Wall dashboard is built around three principles:
 | Interactive charts | Plotly | ≥ 5.18 | Track map, race replay, lap history, stint timeline, gap chart |
 | Data wrangling | Pandas | ≥ 2.2 | All lap/telemetry DataFrames |
 | Numerics | NumPy | ≥ 1.26 | Interpolation for speed delta, position replay |
+| HTTP request engine | curl-cffi | ≥ 0.5.10 | TLS fingerprint impersonation to bypass anti-bot / CloudFront filters |
 
 ---
 
@@ -812,4 +813,4 @@ Items agreed by the project owner as desirable but not yet implemented:
 
 ---
 
-*Last updated: June 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+*Last updated: July 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
