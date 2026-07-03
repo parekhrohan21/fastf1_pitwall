@@ -37,6 +37,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Mobile PWA Ready**: The dashboard acts as a native mobile application. Pin it to your iOS or Android home screen for a fullscreen, address-bar-free app experience powered by an injected embedded Web Manifest!
 - **Session Info Header**: A contextual banner displayed immediately after loading a session, showing the **circuit name**, **country flag** emoji, **round number**, **session type** (with icon — 🏆 Race, ⏱ Qualifying, ⚡ Sprint, 🔧 Practice), and **event date**. The banner is styled with the active team colour as a left-accent border and a subtle gradient tint, and degrades silently if any field is unavailable.
 - **Driver Name Mapping**: All driver dropdowns, lap selectors, and the fastest laps leaderboard display full formatted names (e.g. `NOR · Norris`) instead of raw FastF1 driver numbers. Built dynamically from FastF1 session data so it works correctly for any season, with a raw-number fallback for any driver whose info is unavailable.
+- **Connection Diagnostics & Bypass**: Bypasses anti-bot/CloudFront datacenter blockades automatically on cloud hosting platforms using unconditional TLS handshake emulation (via `curl_cffi`) impersonating a genuine browser signature. Includes a sidebar **Connection Diagnostics** widget to test connectivity and optional proxy configuration (`F1_PROXY`).
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -156,6 +157,8 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 | Sidebar shows `keyboard_double_arrow_left` text | The custom font CSS is overriding Streamlit's icon font. Ensure you are running the latest version of the app — this was patched via explicit `Material Symbols` CSS restoration. |
 | Plotly deprecation warning on `use_container_width` | The codebase now uses `width='stretch'` / `width='content'` throughout. If you see this warning, ensure you are running the latest version of the app. |
 | Top bar doesn't change with theme | A known edge-case on older cached renders. Toggle the theme button once more — the CSS injection re-applies on every rerun. |
+| F1 API HTTP 403 blocks (CloudFront/Cloudflare) | Bypassed automatically on cloud hosting platforms (e.g. Streamlit Community Cloud) using TLS impersonation. If blocks persist, set the `F1_PROXY` environment variable or Streamlit secret to route requests through a proxy. |
+| Verify API connectivity or TLS status | Expand the **🔌 Connection Diagnostics** widget at the bottom of the sidebar and click **Test Connection** to check if the F1 Timing CDN is accessible from your host. |
 
 ---
 
