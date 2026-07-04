@@ -1947,6 +1947,17 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
     st.markdown(table_html, unsafe_allow_html=True)
 
 
+def _render_footer() -> None:
+    """Render a styled bottom footer indicating design origin."""
+    st.markdown(
+        "<div style='text-align: center; margin-top: 60px; margin-bottom: 30px; "
+        "font-size: 13px; opacity: 0.5; font-family: var(--font-family); color: var(--text-color);'>"
+        "Made proudly in Great Britain 🇬🇧"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -2169,6 +2180,7 @@ if sess is None:
         "</div></div>",
         unsafe_allow_html=True,
     )
+    _render_footer()
     st.stop()
 
 # ── Driver & lap controls ──────────────────────────────────────────────────────
@@ -4851,4 +4863,8 @@ else:
     _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
     standings_d = _build_driver_standings(year, r)
     _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d, laps_df=_all_laps1)
+
+
+_render_footer()
+
 
