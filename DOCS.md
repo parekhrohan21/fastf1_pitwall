@@ -810,6 +810,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Dynamic calendar default GP/season**~~ | ✅ **Done** — Automatically resolve the default season to the most recent calendar year and default Grand Prix index to the most recently completed race using system date comparison. |
 | ~~Medium~~ | ~~**Driver name/number classification columns**~~ | ✅ **Done** — Combined driver number, abbreviation, and lastName in the official session classification table, resolving it safely directly from results DataFrame columns. |
 | ~~High~~ | ~~**Pit stop counts in classification**~~ | ✅ **Done** — Renders a `Stops` column in the session classification table, calculated by counting laps with both non-null `PitInTime` and `PitOutTime`. |
+| ~~Low~~ | ~~**Design origin footer**~~ | ✅ **Done** — Renders a styled, theme-friendly footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of the page and welcome states. |
 
 ---
 
