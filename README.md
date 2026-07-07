@@ -38,6 +38,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Session Info Header**: A contextual banner displayed immediately after loading a session, showing the **circuit name**, **country flag** emoji, **round number**, **session type** (with icon — 🏆 Race, ⏱ Qualifying, ⚡ Sprint, 🔧 Practice), and **event date**. The banner is styled with the active team colour as a left-accent border and a subtle gradient tint, and degrades silently if any field is unavailable.
 - **Driver Name Mapping**: All driver dropdowns, lap selectors, and the fastest laps leaderboard display full formatted names (e.g. `NOR · Norris`) instead of raw FastF1 driver numbers. Built dynamically from FastF1 session data so it works correctly for any season, with a raw-number fallback for any driver whose info is unavailable.
 - **Connection Diagnostics & Bypass**: Bypasses anti-bot/CloudFront datacenter blockades automatically on cloud hosting platforms using unconditional TLS handshake emulation (via `curl_cffi`) impersonating a genuine browser signature. Includes a sidebar **Connection Diagnostics** widget to test connectivity and optional proxy configuration (`F1_PROXY`).
+- **Design Origin Footer**: A subtle, beautifully styled bottom footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of all pages and states.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
