@@ -1027,20 +1027,24 @@ st.markdown("""<!-- ── Google Font: Inter for premium typographic quality �
             margin-top: 2px !important;
         }
 
-        /* Matplotlib scroll container - allows panning on mobile instead of shrinking */
+        /* Matplotlib responsive container - allows shrinking to fit mobile */
         div.element-container:has([data-testid="stImage"]) {
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            -webkit-overflow-scrolling: touch;
+            overflow: hidden !important;
             border-radius: 16px;
             border: 1px solid rgba(128,128,128,0.15);
             background: var(--secondary-background-color);
-            padding: 10px;
+            padding: 8px;
             margin-bottom: 12px;
+            box-sizing: border-box !important;
         }
         div.element-container [data-testid="stImage"] {
-            min-width: 900px !important;
-            width: 900px !important;
+            width: 100% !important;
+            min-width: auto !important;
+        }
+        div.element-container [data-testid="stImage"] img {
+            max-width: 100% !important;
+            height: auto !important;
+            object-fit: contain !important;
         }
 
         /* Compact and scrollable tables on mobile screen sizes */
