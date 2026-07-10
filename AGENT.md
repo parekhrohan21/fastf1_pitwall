@@ -214,7 +214,7 @@ The app is healthy when:
 2. Follow the section pattern: `# ── Section Name ──────` header comment.
 3. Use `@st.cache_data(show_spinner=False, ttl=3600)` for any data-loading function.
 4. Use `st.plotly_chart(fig, width="stretch")` for all Plotly charts (never `use_container_width`).
-5. Use `st.pyplot(fig, width="stretch")` for all Matplotlib charts.
+5. Use `st.pyplot(fig, width="stretch")` for all Matplotlib charts. Do not use hardcoded `min-width` CSS on `stImage` containers; allow Streamlit's native responsive scaling to fit mobile viewports dynamically without clipping.
 6. Update `README.md` Key Features and How to Use sections.
 7. Commit code and README separately or together — always keep them in sync.
 
