@@ -94,7 +94,7 @@ sess.load(telemetry=True, laps=True, weather=True, messages=True)
 `sess.load()` downloads and caches to `./cache/`. First call per session takes 10–30 seconds; subsequent calls return in milliseconds from disk.
 
 > [!NOTE]
-> **Active/Ongoing Sessions:** The dashboard is designed to load and visualize historical, completed sessions. Live timing streams (ongoing sessions) are not supported. Attempting to load an active session will fail validation with a "No lap data available" error until F1 compiles and publishes the static timing database files on their CDN (usually 2–24 hours after the session ends).
+> **Active/Ongoing Sessions:** The dashboard is designed to load and visualise historical, completed sessions. Live timing streams (ongoing sessions) are not supported. Attempting to load an active session will fail validation with a "No lap data available" error until F1 compiles and publishes the static timing database files on their CDN (usually 2–24 hours after the session ends).
 
 ### Key FastF1 Objects
 
@@ -399,7 +399,7 @@ This flows to button glows, card accents, banner borders, and chart highlights a
 
 ### Sidebar Collapsed Control Compatibility
 
-When customizing sidebar styles or adding transitions (like the slide-in entry animation), do not target the base `[data-testid="stSidebar"]` selector directly with keyframe animations using `forwards` or `infinite` fill-modes. 
+When customising sidebar styles or adding transitions (like the slide-in entry animation), do not target the base `[data-testid="stSidebar"]` selector directly with keyframe animations using `forwards` or `infinite` fill-modes. 
 
 Streamlit hides the sidebar natively when collapsed by applying a dynamic `transform` translation (e.g., `translate3d(-336px, 0px, 0px)`). An overriding keyframe animation with `forwards` forces `transform: translateX(0)` (or the final frame state), which overrides Streamlit's collapsed state translation. This leaves the sidebar stuck on the screen or squished in mobile viewports.
 
@@ -479,8 +479,8 @@ Each chart section follows the same pattern:
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
 | Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
-| Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colors sectors by dominance. |
-| Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colors markers by Throttle/Brake state. |
+| Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colours sectors by dominance. |
+| Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
 | Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `laps_df` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
@@ -708,7 +708,7 @@ Championship standings data is loaded from the external Jolpi (Ergast) API. Beca
 ### ⑭ Multi-Key Matching for Standings Drivers
 Drivers in the standings database (Ergast) may have minor record variations compared to FastF1 results (such as Verstappen's number mapping, name spelling, or temporary replacement drivers). To ensure robust mapping between the session classification results DataFrame and the standings API, resolve drivers using a fallback multi-key matching function check checking driver three-letter abbreviation codes, car number strings, and last/family name substrings before defaulting to a missing value indicator (`—`).
 
-### ⑮ Normalizing Winner Lookup Identifiers
+### ⑮ Normalising Winner Lookup Identifiers
 FastF1 session results and lap telemetry might store driver identifiers as driver numbers (e.g., '4', '1') or abbreviation strings (e.g., 'NOR', 'VER') depending on the session data and year. When resolving the winner to set selectbox default selection indices, always run resolved winners through a mapping resolver checking abbreviation codes and driver numbers against the session's driver labels to translate them safely to the exact key format present in the list of selectbox options.
 
 ### ⑯ Safely Comparing Dates and Timezones for Default Event Selection
@@ -799,7 +799,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Sector mini-map colouring**~~ | ✅ **Done** — Track map converted to Sector Dominance Map in Compare Mode. Track is divided into 3 zones based on `Sector1SessionTime` and `Sector2SessionTime`. Coloured automatically using the team colour of the driver who was fastest in each sector. |
 | ~~Medium~~ | ~~**Compound filter on lap history**~~ | ✅ **Done** — `st.multiselect` above `_lap_history_fig` filters by compound. Options derived live from session data. All compounds selected by default; uses `COMPOUND_COLOURS` letter badges in labels. |
 | ~~Low~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
-| ~~Medium~~ | ~~**Driver Input Track Map**~~ | ✅ **Done** — `_input_map_fig()` visualizes throttle/brake/coasting telemetry as colored markers on the track path. Supports side-by-side comparison. |
+| ~~Medium~~ | ~~**Driver Input Track Map**~~ | ✅ **Done** — `_input_map_fig()` visualises throttle/brake/coasting telemetry as coloured markers on the track path. Supports side-by-side comparison. |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | ~~Low~~ | ~~**Fuel-corrected qualifying sim**~~ | ✅ **Done** — Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |
