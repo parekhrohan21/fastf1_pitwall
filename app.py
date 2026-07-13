@@ -1989,6 +1989,7 @@ with st.sidebar:
             gp_names = schedule["EventName"].tolist()
         except Exception as e:
             st.error(f"Could not load {year} schedule: {e}")
+            _render_footer()
             st.stop()
 
     _def_gp_idx = _get_default_gp_index(schedule, gp_names)
@@ -2033,6 +2034,7 @@ with st.sidebar:
                 gp_names2 = schedule2["EventName"].tolist()
             except Exception as e:
                 st.error(f"Could not load {year2} schedule: {e}")
+                _render_footer()
                 st.stop()
         _def_gp_idx2 = _get_default_gp_index(schedule2, gp_names2)
         gp2 = st.selectbox("Grand Prix 2", gp_names2, index=_def_gp_idx2, key="gp2")
@@ -2124,6 +2126,7 @@ if load_btn:
                 f"FastF1 could not load the lap data: {e}.\n\n"
                 "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
             )
+            _render_footer()
             st.stop()
 
     if compare_sessions:
@@ -2142,6 +2145,7 @@ if load_btn:
                     f"FastF1 could not load the lap data: {e}.\n\n"
                     "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
                 )
+                _render_footer()
                 st.stop()
     else:
         st.session_state["session2"] = None
@@ -2222,6 +2226,7 @@ except Exception as e:
     st.session_state["session2"] = None
     st.session_state["sess_key"] = None
     st.session_state["sess_key2"] = None
+    _render_footer()
     st.stop()
 
 # ── Laps snapshot ─────────────────────────────────────────────────────────────
@@ -3429,6 +3434,7 @@ st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True
 
 if tel1 is None:
     st.warning("No telemetry available for the selected lap.")
+    _render_footer()
     st.stop()
 
 # channel definitions: (subplot_title, df_col, y_label, special_flag)
@@ -4592,6 +4598,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
 
                     if not all_data:
                         st.warning("No position data available for this session.")
+                        _render_footer()
                         st.stop()
 
                     # ── Build common time grid
@@ -4620,6 +4627,7 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
 
                     if not valid_drvs:
                         st.warning("Insufficient position data for animation.")
+                        _render_footer()
                         st.stop()
 
                     # ── Track outline from the driver with most data points
