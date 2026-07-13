@@ -91,7 +91,7 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 ### 2. CSS injection over Streamlit theming
 The app injects raw CSS via `st.markdown(..., unsafe_allow_html=True)` to override Streamlit's BaseWeb components. This is necessary because Streamlit's native theme API does not expose enough hooks for full dark/light mode control. Maintain this approach.
 
-When customizing or animating the sidebar (`[data-testid="stSidebar"]`), do not apply transform keyframe animations directly to the base `[data-testid="stSidebar"]` container using `forwards` or `infinite` fill-mode. Doing so overrides Streamlit's native inline collapsed state `transform` translation, preventing the sidebar from sliding off-screen on mobile. Always scope entry transitions to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`).
+When customising or animating the sidebar (`[data-testid="stSidebar"]`), do not apply transform keyframe animations directly to the base `[data-testid="stSidebar"]` container using `forwards` or `infinite` fill-mode. Doing so overrides Streamlit's native inline collapsed state `transform` translation, preventing the sidebar from sliding off-screen on mobile. Always scope entry transitions to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`).
 
 
 ### 3. `format_func` for all driver selectboxes
@@ -123,7 +123,7 @@ The official classification results are fetched from `sess.results` and cached u
 - Practice sessions (`FP1`, `FP2`, `FP3`) do not contain official standings in `results.Position` (all values are NaN). The app detects this and prints a clean warning pointing the user to the Fastest Laps Leaderboard.
 - Race/Sprint sessions format absolute time for the winner, relative gaps for subsequent finishers, and DNFs/laps using their status value.
 - Qualifying/Shootout sessions display `Q1`, `Q2`, and `Q3` lap times.
-- Selected drivers in the telemetry selector are highlighted in the classification table with their driver colors.
+- Selected drivers in the telemetry selector are highlighted in the classification table with their driver colours.
 - To prevent Streamlit's cache manager from throwing an `UnhashableParamError`, the results DataFrame argument must be prefixed with a leading underscore in the function signature (e.g. `_results_df`), telling Streamlit to skip hashing this complex Pandas subclass object.
 
 ### 7. Track Map Telemetry Fallback
@@ -137,8 +137,8 @@ When telemetry data is incomplete (e.g., missing `Speed` or `Throttle`/`Brake` c
 To provide seasonal championship context, a Constructors' Championship standings table is rendered directly above the official session classification table at the bottom of the page.
 - The standings data is fetched dynamically from the Jolpi (Ergast) API for the season and round being viewed: `https://api.jolpi.ca/ergast/f1/{year}/{round_no}/constructorStandings.json`.
 - Standings are fetched and cached using `@st.cache_data(show_spinner=False, ttl=3600)` to prevent excessive network requests.
-- Suffix cleaning (`F1 Team`, `Racing`) and substring matching are used to match team names dynamically against `TEAM_COLOURS` for colored row indicators.
-- The row corresponding to the selected driver's team is highlighted using their constructor color.
+- Suffix cleaning (`F1 Team`, `Racing`) and substring matching are used to match team names dynamically against `TEAM_COLOURS` for coloured row indicators.
+- The row corresponding to the selected driver's team is highlighted using their constructor colour.
 - If the API call fails or there are no standings (e.g., pre-season testing), the dashboard recovers gracefully by displaying an informational warning instead of crashing.
 
 ### 9. Driver Standing Points in Session Classification Table
@@ -156,7 +156,7 @@ To ensure the dashboard loads displaying the most relevant driver first, the def
 - The default index falls back to Norris ("NOR" / "4") or index 0 if the winner cannot be resolved.
 
 ### 11. Default Season and Session/Event Selection to the Most Recent Ones
-To improve user experience, the dashboard initializes both Season 1 and Season 2 selectors to the most recent season (the first entry in the descending list of years, currently 2026).
+To improve user experience, the dashboard initialises both Season 1 and Season 2 selectors to the most recent season (the first entry in the descending list of years, currently 2026).
 Furthermore, the default Grand Prix index is resolved dynamically by filtering the season's calendar schedule to locate the most recent completed Grand Prix (where the event date is less than or equal to the current system date).
 If no races have occurred yet in the selected season, the dashboard falls back gracefully to the first event of the calendar (Round 1).
 
