@@ -4275,69 +4275,60 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
             warning_msg = None if has_speed else "Speed telemetry is not available; showing track outline only."
 
             if l_obj2 is not None and drv2:
-                # ── Compare mode: Sector dominance map
-                def get_winner(sec_key):
-                    try:
-                        t1 = l_obj.get(sec_key)
-                        t2 = l_obj2.get(sec_key)
-                        if pd.isna(t1) or pd.isna(t2):
-                            return "gray"
-                        return col if t1 < t2 else col2
-                    except Exception:
-                        return "gray"
+                # ── Compare mode: AWS-Style Mini-Sector Speed Dominance Map
+                tel2 = _get_telemetry_for_map(l_obj2, drv2, sess_k)
+                has_speed2 = tel2 is not None and "Speed" in tel2.columns and tel2["Speed"].notna().any()
+                has_distance = "Distance" in tel.columns and tel2 is not None and "Distance" in tel2.columns
 
-                c_s1 = get_winner("Sector1Time")
-                c_s2 = get_winner("Sector2Time")
-                c_s3 = get_winner("Sector3Time")
+                if has_speed and has_speed2 and has_distance:
+                    NUM_MINISECTORS = 25
+                    max_dist = max(tel["Distance"].max(), tel2["Distance"].max())
+                    bin_edges = np.linspace(0, max_dist, NUM_MINISECTORS + 1)
 
-                def get_driver_name(c):
-                    if c == col: return drv
-                    if c == col2: return drv2
-                    return "Unknown"
-
-                # Check if sector dominance mapping can be done (requires SessionTime and Sector1SessionTime)
-                has_sectors = (
-                    "SessionTime" in tel.columns 
-                    and "Sector1SessionTime" in l_obj 
-                    and pd.notna(l_obj["Sector1SessionTime"])
-                    and "Sector2SessionTime" in l_obj
-                    and pd.notna(l_obj["Sector2SessionTime"])
-                )
-
-                if has_sectors:
-                    s1_time = l_obj["Sector1SessionTime"]
-                    s2_time = l_obj["Sector2SessionTime"]
-                    
-                    s1_mask = tel["SessionTime"] <= s1_time
-                    s2_mask = (tel["SessionTime"] > s1_time) & (tel["SessionTime"] <= s2_time)
-                    s3_mask = tel["SessionTime"] > s2_time
-
-                    def add_sector(mask, sector_col, sector_name):
-                        if not mask.any(): return
-                        seg = tel[mask]
-                        fastest = get_driver_name(sector_col)
-                        fig.add_trace(go.Scatter(
-                            x=seg["X"], y=seg["Y"],
-                            mode="lines",
-                            line=dict(color=sector_col, width=16),
-                            name=sector_name,
-                            hovertemplate=f"<b>{sector_name}</b><br>Fastest: {fastest}<extra></extra>"
-                        ))
-
-                    add_sector(s1_mask, c_s1, "Sector 1")
-                    add_sector(s2_mask, c_s2, "Sector 2")
-                    add_sector(s3_mask, c_s3, "Sector 3")
+                    for i in range(NUM_MINISECTORS):
+                        d_start = bin_edges[i]
+                        d_end = bin_edges[i+1]
+                        
+                        mask1 = (tel["Distance"] >= d_start) & (tel["Distance"] <= d_end)
+                        mask2 = (tel2["Distance"] >= d_start) & (tel2["Distance"] <= d_end)
+                        
+                        if not mask1.any():
+                            continue
+                            
+                        s1_mean = tel.loc[mask1, "Speed"].mean() if not tel.loc[mask1, "Speed"].empty else 0
+                        s2_mean = tel2.loc[mask2, "Speed"].mean() if not tel2.loc[mask2, "Speed"].empty else 0
+                        
+                        fastest_color = col if s1_mean >= s2_mean else col2
+                        fastest_drv = drv if s1_mean >= s2_mean else drv2
+                        
+                        # Grab the segment and include the next point to prevent visual gaps
+                        idx = tel[mask1].index
+                        if len(idx) > 0:
+                            last_idx = idx[-1]
+                            next_idx = last_idx + 1 if (last_idx + 1) in tel.index else last_idx
+                            seg_indices = list(idx)
+                            if next_idx not in seg_indices:
+                                seg_indices.append(next_idx)
+                                
+                            seg = tel.loc[seg_indices]
+                            
+                            fig.add_trace(go.Scatter(
+                                x=seg["X"], y=seg["Y"],
+                                mode="lines",
+                                line=dict(color=fastest_color, width=16),
+                                name=f"Sector {i+1}",
+                                hovertemplate=f"<b>Mini-Sector {i+1}</b><br>Fastest: {fastest_drv} ({max(s1_mean, s2_mean):.0f} km/h)<extra></extra>"
+                            ))
                 else:
-                    # Fallback to gray if session time / sectors missing
+                    # Fallback to gray if speed or distance is missing
                     fig.add_trace(go.Scatter(
                         x=tel["X"], y=tel["Y"], mode="lines",
                         line=dict(color="gray", width=16), showlegend=False, hoverinfo="skip"
                     ))
                     if not warning_msg:
-                        warning_msg = "Sector timing data is incomplete; showing single track outline."
+                        warning_msg = "Speed/Distance telemetry is incomplete; showing single track outline."
 
                 # Driver 2 path overlay
-                tel2 = _get_telemetry_for_map(l_obj2, drv2, sess_k)
                 if tel2 is not None and {"X", "Y"}.issubset(tel2.columns) and not tel2["X"].dropna().empty:
                     fig.add_trace(go.Scatter(
                         x=tel2["X"], y=tel2["Y"],
