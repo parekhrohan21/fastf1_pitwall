@@ -479,8 +479,9 @@ Each chart section follows the same pattern:
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
 | Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
-| Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colours sectors by dominance. |
+| Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colours mini-sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |
+| Corner Analysis | Plotly subplots | `_get_telemetry_for_map` | inline (`with map_tab4`) | `lap.get_car_data()`. Displays racing line overlay with apex/braking markers + Speed profile. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
 | Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `laps_df` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
