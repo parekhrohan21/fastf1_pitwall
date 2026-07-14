@@ -4255,7 +4255,7 @@ def _get_telemetry_for_map(_lap, driver: str, sess_k: str):
         return None
 
 def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, other_driver=None, other_colour=None, other_lap=None, fmt_func=None):
-    map_tab1, map_tab2, map_tab3 = st.tabs(["🎨  Track Map", "🕹️  Driver Inputs", "🎬  Race Replay"])
+    map_tab1, map_tab2, map_tab3, map_tab4 = st.tabs(["🎨  Track Map", "🕹️  Driver Inputs", "🎬  Race Replay", "🔍  Corner Analysis"])
 
     # ────────────────────────────────────────────────────────────────────────────
     # TAB 1 — Static speed-coloured track map
@@ -4778,14 +4778,258 @@ def render_maps_block(session_obj, sess_k, driver, colour, lap, key_suffix, othe
                     with st.expander("Full traceback"):
                         st.code(traceback.format_exc())
 
-        if st.session_state[replay_key] is not None:
-            st.plotly_chart(st.session_state[replay_key], width="stretch", config={"displayModeBar": False})
-            n_frames = len(st.session_state[replay_key].frames)
-            session_secs = n_frames * 5
             st.caption(
                 f"⏱  {n_frames} frames · {session_secs // 60} min {session_secs % 60} s covered · "
                 "5 s per frame · Click ▶ Play or drag the slider"
             )
+
+    # ────────────────────────────────────────────────────────────────────────────
+    # TAB 4 — Corner Analysis
+    # ────────────────────────────────────────────────────────────────────────────
+    with map_tab4:
+        st.markdown("<h4 style='margin-top:0;'>Corner-by-Corner Performance Analysis</h4>", unsafe_allow_html=True)
+        if lap is not None:
+            circuit_info = None
+            try:
+                circuit_info = session_obj.get_circuit_info()
+            except Exception:
+                pass
+
+            if circuit_info is None or not hasattr(circuit_info, "corners") or circuit_info.corners is None or circuit_info.corners.empty:
+                st.warning("Track layout or corner data is not available for this session.")
+            else:
+                corners_df = circuit_info.corners.copy()
+                corners_df["Number_str"] = corners_df["Number"].astype(str)
+                corner_list = corners_df["Number_str"].tolist()
+                
+                sel_col, _ = st.columns([2, 3])
+                with sel_col:
+                    selected_corner = st.selectbox(
+                        "Select Corner",
+                        corner_list,
+                        key=f"corner_sel_{key_suffix}",
+                    )
+
+                corner_row = corners_df[corners_df["Number_str"] == selected_corner].iloc[0]
+                apex_dist = corner_row["Distance"]
+                corner_letter = corner_row.get("Letter", "")
+                corner_label = f"Turn {selected_corner}{corner_letter}" if pd.notna(corner_letter) and corner_letter else f"Turn {selected_corner}"
+
+                tel1 = _get_telemetry_for_map(lap, driver, sess_k)
+                tel2 = None
+                if other_driver and other_lap is not None:
+                    tel2 = _get_telemetry_for_map(other_lap, other_driver, sess_k)
+
+                has_tel1 = tel1 is not None and not tel1.empty and {"X", "Y", "Distance", "Speed"}.issubset(tel1.columns)
+                
+                if not has_tel1:
+                    st.warning(f"Telemetry data is not available for {fmt_func(driver) if fmt_func else driver} to perform corner analysis.")
+                else:
+                    WINDOW_BEFORE = 200
+                    WINDOW_AFTER = 100
+                    
+                    win1 = tel1[(tel1["Distance"] >= apex_dist - WINDOW_BEFORE) & (tel1["Distance"] <= apex_dist + WINDOW_AFTER)]
+                    win2 = None
+                    if tel2 is not None and not tel2.empty and {"X", "Y", "Distance", "Speed"}.issubset(tel2.columns):
+                        win2 = tel2[(tel2["Distance"] >= apex_dist - WINDOW_BEFORE) & (tel2["Distance"] <= apex_dist + WINDOW_AFTER)]
+
+                    def compute_stats(df):
+                        if df is None or df.empty:
+                            return None
+                        
+                        apex_speed = df["Speed"].min()
+                        apex_rows = df[df["Speed"] == apex_speed]
+                        if apex_rows.empty:
+                            return None
+                        
+                        apex_row_data = apex_rows.iloc[0]
+                        apex_d = apex_row_data["Distance"]
+                        apex_x = apex_row_data["X"]
+                        apex_y = apex_row_data["Y"]
+                        
+                        braking_d = None
+                        braking_x = None
+                        braking_y = None
+                        
+                        pre_apex_df = df[df["Distance"] <= apex_d]
+                        
+                        if "Brake" in df.columns and (pre_apex_df["Brake"] > 0).any():
+                            brk_row = pre_apex_df[pre_apex_df["Brake"] > 0].iloc[0]
+                            braking_d = brk_row["Distance"]
+                            braking_x = brk_row["X"]
+                            braking_y = brk_row["Y"]
+                        else:
+                            if len(pre_apex_df) > 1:
+                                ds = pre_apex_df["Speed"].diff()
+                                decel_mask = ds < -1
+                                if decel_mask.any():
+                                    brk_row = pre_apex_df[decel_mask].iloc[0]
+                                    braking_d = brk_row["Distance"]
+                                    braking_x = brk_row["X"]
+                                    braking_y = brk_row["Y"]
+                        
+                        dist_to_apex = None
+                        if braking_d is not None:
+                            dist_to_apex = apex_d - braking_d
+                            
+                        return {
+                            "apex_speed": apex_speed,
+                            "apex_dist": apex_d,
+                            "apex_x": apex_x,
+                            "apex_y": apex_y,
+                            "braking_dist": braking_d,
+                            "braking_x": braking_x,
+                            "braking_y": braking_y,
+                            "dist_to_apex": dist_to_apex
+                        }
+
+                    stats1 = compute_stats(win1)
+                    stats2 = compute_stats(win2) if win2 is not None else None
+
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown(
+                            f"<div style='border-left: 4px solid {colour}; padding-left: 12px; margin-bottom: 16px;'>"
+                            f"<div style='font-size: 13px; opacity: 0.7;'>Driver 1</div>"
+                            f"<div style='font-size: 18px; font-weight: bold; color: {colour};'>{fmt_func(driver) if fmt_func else driver}</div>"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+                        if stats1:
+                            m1, m2 = st.columns(2)
+                            m1.metric("Apex Speed", f"{stats1['apex_speed']:.0f} km/h")
+                            if stats1['dist_to_apex'] is not None:
+                                m2.metric("Braking Distance", f"{stats1['dist_to_apex']:.0f} m before apex")
+                            else:
+                                m2.metric("Braking Distance", "No braking detected")
+                        else:
+                            st.caption("No corner telemetry available.")
+                            
+                    with col2:
+                        if other_driver and other_lap is not None:
+                            st.markdown(
+                                f"<div style='border-left: 4px solid {other_colour}; padding-left: 12px; margin-bottom: 16px;'>"
+                                f"<div style='font-size: 13px; opacity: 0.7;'>Driver 2</div>"
+                                f"<div style='font-size: 18px; font-weight: bold; color: {other_colour};'>{fmt_func(other_driver) if fmt_func else other_driver}</div>"
+                                f"</div>",
+                                unsafe_allow_html=True
+                            )
+                            if stats2:
+                                m1, m2 = st.columns(2)
+                                m1.metric("Apex Speed", f"{stats2['apex_speed']:.0f} km/h")
+                                if stats2['dist_to_apex'] is not None:
+                                    m2.metric("Braking Distance", f"{stats2['dist_to_apex']:.0f} m before apex")
+                                else:
+                                    m2.metric("Braking Distance", "No braking detected")
+                            else:
+                                st.caption("No corner telemetry available.")
+
+                    from plotly.subplots import make_subplots
+                    fig = make_subplots(
+                        rows=2, cols=1,
+                        shared_xaxes=False,
+                        vertical_spacing=0.15,
+                        subplot_titles=(f"Racing Line Overlay ({corner_label})", "Speed Profile (km/h vs Distance)")
+                    )
+
+                    fig.add_trace(go.Scatter(
+                        x=win1["X"], y=win1["Y"],
+                        mode="lines",
+                        line=dict(color=colour, width=4),
+                        name=driver,
+                        legendgroup=driver,
+                        hovertemplate=f"<b>{driver}</b><br>X: %{{x:.0f}}<br>Y: %{{y:.0f}}<extra></extra>"
+                    ), row=1, col=1)
+
+                    if win2 is not None:
+                        fig.add_trace(go.Scatter(
+                            x=win2["X"], y=win2["Y"],
+                            mode="lines",
+                            line=dict(color=other_colour, width=4),
+                            name=other_driver,
+                            legendgroup=other_driver,
+                            hovertemplate=f"<b>{other_driver}</b><br>X: %{{x:.0f}}<br>Y: %{{y:.0f}}<extra></extra>"
+                        ), row=1, col=1)
+
+                    if stats1:
+                        fig.add_trace(go.Scatter(
+                            x=[stats1["apex_x"]], y=[stats1["apex_y"]],
+                            mode="markers",
+                            marker=dict(symbol="star", size=12, color=colour, line=dict(color="white", width=1)),
+                            name=f"{driver} Apex",
+                            legendgroup=driver,
+                            hovertemplate=f"<b>{driver} Apex</b><br>Speed: {stats1['apex_speed']:.0f} km/h<extra></extra>",
+                            showlegend=False
+                        ), row=1, col=1)
+                    if stats2:
+                        fig.add_trace(go.Scatter(
+                            x=[stats2["apex_x"]], y=[stats2["apex_y"]],
+                            mode="markers",
+                            marker=dict(symbol="star", size=12, color=other_colour, line=dict(color="white", width=1)),
+                            name=f"{other_driver} Apex",
+                            legendgroup=other_driver,
+                            hovertemplate=f"<b>{other_driver} Apex</b><br>Speed: {stats2['apex_speed']:.0f} km/h<extra></extra>",
+                            showlegend=False
+                        ), row=1, col=1)
+
+                    if stats1 and stats1["braking_x"] is not None:
+                        fig.add_trace(go.Scatter(
+                            x=[stats1["braking_x"]], y=[stats1["braking_y"]],
+                            mode="markers",
+                            marker=dict(symbol="x", size=10, color=colour, line=dict(color="white", width=1)),
+                            name=f"{driver} Braking Point",
+                            legendgroup=driver,
+                            hovertemplate=f"<b>{driver} Braking</b><br>Dist to Apex: {stats1['dist_to_apex']:.0f} m<extra></extra>",
+                            showlegend=False
+                        ), row=1, col=1)
+                    if stats2 and stats2["braking_x"] is not None:
+                        fig.add_trace(go.Scatter(
+                            x=[stats2["braking_x"]], y=[stats2["braking_y"]],
+                            mode="markers",
+                            marker=dict(symbol="x", size=10, color=other_colour, line=dict(color="white", width=1)),
+                            name=f"{other_driver} Braking Point",
+                            legendgroup=other_driver,
+                            hovertemplate=f"<b>{other_driver} Braking</b><br>Dist to Apex: {stats2['dist_to_apex']:.0f} m<extra></extra>",
+                            showlegend=False
+                        ), row=1, col=1)
+
+                    fig.add_trace(go.Scatter(
+                        x=win1["Distance"] - apex_dist, y=win1["Speed"],
+                        mode="lines",
+                        line=dict(color=colour, width=3),
+                        name=driver,
+                        legendgroup=driver,
+                        showlegend=False,
+                        hovertemplate=f"<b>{driver}</b><br>Dist: %{{x:.1f}} m from apex<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+                    ), row=2, col=1)
+
+                    if win2 is not None:
+                        fig.add_trace(go.Scatter(
+                            x=win2["Distance"] - apex_dist, y=win2["Speed"],
+                            mode="lines",
+                            line=dict(color=other_colour, width=3),
+                            name=other_driver,
+                            legendgroup=other_driver,
+                            showlegend=False,
+                            hovertemplate=f"<b>{other_driver}</b><br>Dist: %{{x:.1f}} m from apex<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+                        ), row=2, col=1)
+
+                    fig.update_xaxes(title_text="Distance relative to apex (m)", row=2, col=1)
+                    fig.update_yaxes(title_text="Speed (km/h)", row=2, col=1)
+                    fig.update_xaxes(visible=False, scaleanchor="y", scaleratio=1, row=1, col=1)
+                    fig.update_yaxes(visible=False, row=1, col=1)
+
+                    fig.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        height=640,
+                        margin=dict(l=0, r=40, t=40, b=10),
+                        showlegend=True,
+                    )
+                    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        else:
+            st.info("Load a session and select a lap to view corner analysis.")
 
 if sess2 is not None:
     session_map_tabs = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])

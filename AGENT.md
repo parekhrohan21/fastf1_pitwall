@@ -78,8 +78,8 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 3755–3959 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
 | 3960–4113 | Gap to Leader | Plotly gap analysis over the race distance |
 | 4114–4235 | Race Position Chart | Track positions over all laps |
-| 4236–4800 | Track Map & Driver Inputs Map & Race Replay | Sector dominance, telemetry inputs, and animated replay map |
-| 4801–end | Championship Standings & Classification | Constructors' Championship standings table, official session classification leaderboard, and footer |
+| 4236–5047 | Track Map & Driver Inputs Map & Race Replay & Corner Analysis | Sector dominance, telemetry inputs, animated replay, and corner-by-corner analysis |
+| 5048–end | Championship Standings & Classification | Constructors' Championship standings table, official session classification leaderboard, and footer |
 
 ---
 
