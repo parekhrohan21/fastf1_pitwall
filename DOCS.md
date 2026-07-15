@@ -813,7 +813,8 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Pit stop counts in classification**~~ | ✅ **Done** — Renders a `Stops` column in the session classification table, calculated by counting laps with both non-null `PitInTime` and `PitOutTime`. |
 | ~~Low~~ | ~~**Design origin footer**~~ | ✅ **Done** — Renders a styled, theme-friendly footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of the page and welcome states. |
 | ~~Medium~~ | ~~**Responsive mobile telemetry**~~ | ✅ **Done** — Matplotlib telemetry charts scale dynamically to fit mobile viewports without horizontal scrolling or clipping. |
-| High | **Mini-Sector Dominance Map** | AWS-style micro-sector track map colouring based on interpolated telemetry distance/speed arrays. |
+| ~~High~~ | ~~**Mini-Sector Dominance Map**~~ | ✅ **Done** — AWS-style micro-sector track map colouring based on interpolated telemetry distance/speed arrays. |
+| ~~Medium~~ | ~~**Corner-by-Corner Analysis**~~ | ✅ **Done** — Extracts corner coordinates via `get_circuit_info()`, detects braking point and apex speed, and renders racing line and speed profile comparisons. |
 
 ---
 

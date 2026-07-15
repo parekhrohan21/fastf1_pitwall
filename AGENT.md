@@ -166,6 +166,16 @@ To provide clear mappings between driver numbers and full names, the Driver colu
 ### 13. Pit Stop Count in Session Classification Table
 To provide a complete overview of the race strategy alongside results, a `Stops` column is displayed in the final official session classification table for Race and Sprint sessions. The number of stops is calculated dynamically by filtering the session's laps DataFrame for each driver and counting the number of laps containing both non-null `PitInTime` and `PitOutTime` values.
 
+### 14. AWS-Style Mini-Sector Speed Dominance Map
+In compare mode, the track map is divided into `NUM_MINISECTORS = 25` micro-sectors based on distance telemetry (roughly 150-250m per segment). Average speeds of both drivers are calculated in each distance interval, and the segment line is drawn using the colour of the fastest driver. To prevent visual gaps, each segment includes the first coordinate of the subsequent segment.
+
+### 15. Corner-by-Corner Performance Analysis
+An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block` to compare driver performance through specific turns:
+- Retrives corner coordinates and apex distances via `session_obj.get_circuit_info()`.
+- Slices telemetry to a distance window `[apex_distance - 200, apex_distance + 100]` around the apex.
+- Calculates apex speed (minimum speed) and braking point (first frame with `Brake > 0`, falling back to maximum deceleration `ds < -1` before the apex).
+- Displays metrics side-by-side and plots a Plotly figure with two subplots: Racing Line Overlay (X/Y coordinates with star/cross markers for apex/braking) and Speed Profile (Speed vs Distance relative to apex).
+
 ---
 
 ## Running the Project
