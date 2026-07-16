@@ -71,15 +71,17 @@ The file is structured as a linear top-to-bottom Streamlit script. Sections run 
 | 2675–2846 | Lap Time History | `_build_lap_history`, `_lap_history_fig` with compound filter |
 | 2847–3200 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
 | 3201–3318 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
-| 3319–3536 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
-| 3537–3608 | Export Telemetry | CSV export widget for driver lap data |
-| 3609–3639 | Speed Delta | Matplotlib comparison chart |
-| 3640–3754 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
-| 3755–3959 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
-| 3960–4113 | Gap to Leader | Plotly gap analysis over the race distance |
-| 4114–4235 | Race Position Chart | Track positions over all laps |
-| 4236–5047 | Track Map & Driver Inputs Map & Race Replay & Corner Analysis | Sector dominance, telemetry inputs, animated replay, and corner-by-corner analysis |
-| 5048–end | Championship Standings & Classification | Constructors' Championship standings table, official session classification leaderboard, and footer |
+| 3319–3430 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
+| 3431–3631 | Tyre Degradation | Tyre degradation scatter plot and OLS regression slopes summary table |
+| 3632–3745 | Telemetry | 6-channel Matplotlib telemetry charts |
+| 3746–3817 | Export Telemetry | CSV export widget for driver lap data |
+| 3818–3848 | Speed Delta | Matplotlib comparison chart |
+| 3849–3963 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
+| 3964–4168 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
+| 4169–4322 | Gap to Leader | Plotly gap analysis over the race distance |
+| 4323–4444 | Race Position Chart | Track positions over all laps |
+| 4445–5246 | Track Map & Driver Inputs Map & Race Replay & Corner Analysis | Sector dominance, telemetry inputs, animated replay, and corner-by-corner analysis |
+| 5247–end | Championship Standings & Classification | Constructors' Championship standings table, official session classification leaderboard, and footer |
 
 ---
 
