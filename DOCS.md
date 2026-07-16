@@ -472,6 +472,7 @@ Each chart section follows the same pattern:
 | Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `laps_df` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
+| Tyre Degradation | Plotly | `_build_tyre_deg_data` | inline | `laps_df` filtered by driver; OLS regression of LapTime vs TyreLife per stint. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
@@ -801,6 +802,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Compound filter on lap history**~~ | ✅ **Done** — `st.multiselect` above `_lap_history_fig` filters by compound. Options derived live from session data. All compounds selected by default; uses `COMPOUND_COLOURS` letter badges in labels. |
 | ~~Low~~ | ~~**Export adds sector times**~~ | ✅ **Done** — `_build_export_csv` now inserts `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s` (float seconds, 3 dp) after `Compound` column. Empty string fallback if sector time is null. |
 | ~~Medium~~ | ~~**Driver Input Track Map**~~ | ✅ **Done** — `_input_map_fig()` visualises throttle/brake/coasting telemetry as coloured markers on the track path. Supports side-by-side comparison. |
+| ~~Medium~~ | ~~**Tyre Degradation Modeling**~~ | ✅ **Done** — `_build_tyre_deg_data()` and OLS regression plots track pace drop-off vs tyre age per stint. |
 | Low | **Multi-session comparison** | Add a second set of year/GP/session selectors; load two sessions and pass both to chart builders |
 | ~~Low~~ | ~~**Fuel-corrected qualifying sim**~~ | ✅ **Done** — Use fuel-adjusted pace median as a synthetic "single-lap pace" to simulate qualification order |
 | ~~Tech debt~~ | ~~**Fix cache isolation**~~ | ✅ **Done** — All 7 data-builder functions (`_build_lap_history`, `_build_fuel_adjusted`, `_build_stints`, `_build_pit_stops`, `_build_leaderboard`, `_build_gap_data`, `_build_position_data`) now receive `laps_df: pd.DataFrame` as an explicit argument. `_all_laps = sess.laps.copy()` is extracted once after session load and passed to every builder. |

@@ -3430,6 +3430,205 @@ else:
         st.info("No pit stops recorded for the selected driver(s).")
 
 
+# ── Tyre Degradation Analysis ──────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Tyre Degradation Analysis</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='font-size:11px; opacity:0.55; margin:-6px 0 10px; letter-spacing:0.3px;'>"
+    "Analyses tyre wear and pace drop-off by performing linear regression (OLS) on valid flyer laps. "
+    "Out-laps, in-laps, and laps under Safety Car / VSC are excluded. "
+    "Note: Fuel burn-off naturally masks tyre degradation by making the car lighter (~0.03 s per lap), "
+    "which may result in flat or negative slopes on highly durable compounds."
+    "</div>",
+    unsafe_allow_html=True,
+)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | None:
+    try:
+        laps = laps_df[laps_df["Driver"] == driver].copy()
+        if laps.empty:
+            return None
+
+        # Filter out in-laps, out-laps and safety car periods
+        clean_laps = laps[
+            (laps["IsAccurate"] == True) &
+            (~laps["TrackStatus"].astype(str).str.contains("4|5|6|7")) &
+            (laps["LapTime"].notna())
+        ].copy()
+
+        if clean_laps.empty:
+            return None
+
+        clean_laps["LapTime_s"] = clean_laps["LapTime"].dt.total_seconds()
+
+        stints_data = []
+        for (stint, compound), group in clean_laps.groupby(["Stint", "Compound"]):
+            group = group.sort_values("LapNumber")
+            # Only consider stints with at least 4 valid laps
+            if len(group) >= 4:
+                stints_data.append({
+                    "stint": int(stint),
+                    "compound": str(compound),
+                    "laps": group[["TyreLife", "LapTime_s"]].to_dict(orient="records"),
+                })
+        return stints_data if stints_data else None
+    except Exception:
+        return None
+
+
+_deg_d1 = _build_tyre_deg_data(driver1, _all_laps1)
+_deg_d2 = _build_tyre_deg_data(driver2, _all_laps2 if _all_laps2 is not None else _all_laps1) if compare and driver2 else None
+
+if not _deg_d1 and not _deg_d2:
+    st.info("Insufficient stint telemetry (minimum 4 consecutive green-flag laps per stint) to model tyre degradation.")
+else:
+    import plotly.graph_objects as go
+    fig_deg = go.Figure()
+    table_rows = []
+
+    def process_driver_deg(deg_data, drv_name, drv_colour, is_primary):
+        if not deg_data:
+            return
+        marker_symbol = "circle" if is_primary else "square"
+        line_dash = "solid" if is_primary else "dash"
+
+        for s in deg_data:
+            stint_num = s["stint"]
+            compound = s["compound"]
+            laps_list = s["laps"]
+
+            x_vals = np.array([l["TyreLife"] for l in laps_list])
+            y_vals = np.array([l["LapTime_s"] for l in laps_list])
+
+            # Fit linear regression
+            slope, intercept = np.polyfit(x_vals, y_vals, 1)
+            label_str = f"{drv_name} - Stint {stint_num} ({compound})"
+
+            # Scatter points
+            fig_deg.add_trace(go.Scatter(
+                x=x_vals, y=y_vals,
+                mode="markers",
+                marker=dict(
+                    color=drv_colour,
+                    symbol=marker_symbol,
+                    size=8,
+                    line=dict(color="rgba(255,255,255,0.4)", width=1)
+                ),
+                name=label_str,
+                legendgroup=label_str,
+                hovertemplate=(
+                    f"<b>{drv_name}</b> (Stint {stint_num} - {compound})<br>"
+                    "Tyre Age: %{x} laps<br>"
+                    "Lap Time: %{customdata:.3f} s<br>"
+                    f"Deg Rate: {slope:+.3f} s/lap<extra></extra>"
+                ),
+                customdata=y_vals
+            ))
+
+            # Regression Line
+            x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
+            y_line = slope * x_line + intercept
+            fig_deg.add_trace(go.Scatter(
+                x=x_line, y=y_line,
+                mode="lines",
+                line=dict(color=drv_colour, width=2, dash=line_dash),
+                name=f"{label_str} Trend",
+                legendgroup=label_str,
+                showlegend=False,
+                hoverinfo="skip"
+            ))
+
+            # Store stats for the table
+            table_rows.append({
+                "driver": drv_name,
+                "colour": drv_colour,
+                "stint": stint_num,
+                "compound": compound,
+                "laps": len(x_vals),
+                "deg_rate": slope,
+                "base_pace": intercept
+            })
+
+    process_driver_deg(_deg_d1, driver1, colour1, is_primary=True)
+    if _deg_d2:
+        process_driver_deg(_deg_d2, driver2, colour2, is_primary=False)
+
+    fig_deg.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Tyre Age (Laps)",
+            gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Lap Time (Seconds)",
+            gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False
+        ),
+        height=450,
+        margin=dict(l=0, r=40, t=20, b=10),
+        showlegend=True,
+        legend=dict(
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=11),
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    st.plotly_chart(fig_deg, width="stretch", config={"displayModeBar": False})
+
+    # Summary Table
+    table_html = ""
+    for idx, row in enumerate(table_rows):
+        row_bg = "rgba(255,255,255,0.03)" if idx % 2 == 0 else "transparent"
+        comp = row["compound"].title()
+        comp_pal = COMPOUND_COLOURS.get(comp.upper(), COMPOUND_COLOURS["UNKNOWN"])
+        comp_dot = (
+            f"<span style='display:inline-block; width:8px; height:8px; border-radius:50%; "
+            f"background:{comp_pal['fill']}; margin-right:5px; vertical-align:middle;'></span>"
+        )
+        
+        deg_rate_str = f"{row['deg_rate']:+.3f} s/lap"
+        deg_color = "#00e400" if row["deg_rate"] <= 0 else "#ff2200"
+        
+        fmt_name = _fmt_driver1(row["driver"]) if row["driver"] == driver1 else _fmt_driver2(row["driver"])
+        
+        table_html += (
+            f"<tr style='background:{row_bg};'>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{row['colour']};'>{fmt_name}</td>"
+            f"<td style='padding:7px 10px;'>Stint {row['stint']}</td>"
+            f"<td style='padding:7px 10px;'>{comp_dot}{comp}</td>"
+            f"<td style='padding:7px 10px;'>{row['laps']} laps</td>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{deg_color};'>{deg_rate_str}</td>"
+            f"</tr>"
+        )
+        
+    st.markdown(
+        f"<div style='background:var(--secondary-background-color); "
+        f"border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
+        f"padding:16px 20px; margin-top:16px;'>"
+        f"<div style='font-size:12px; font-weight:600; letter-spacing:0.5px; margin-bottom:8px; opacity:0.8;'>Degradation Rates Summary</div>"
+        f"<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        f"<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
+        f"font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
+        f"<th style='padding:5px 10px; text-align:left;'>Driver</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Stint</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Compound</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Sample Size</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Degradation Rate</th>"
+        f"</tr></thead>"
+        f"<tbody>{table_html}</tbody>"
+        f"</table></div>",
+        unsafe_allow_html=True
+    )
+
+
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
 if tel1 is None:
