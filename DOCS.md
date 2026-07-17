@@ -169,6 +169,7 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_fuel_sim_leaderboard(sess_k, fuel_effect, laps_df)` | `sess_key, fuel_effect, laps_df` |
 | `_build_stints(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
+| `_build_tyre_deg_data(driver, laps_df)` | `driver, laps_df` |
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
