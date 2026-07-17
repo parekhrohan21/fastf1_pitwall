@@ -178,6 +178,13 @@ An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block`
 - Calculates apex speed (minimum speed) and braking point (first frame with `Brake > 0`, falling back to maximum deceleration `ds < -1` before the apex).
 - Displays metrics side-by-side and plots a Plotly figure with two subplots: Racing Line Overlay (X/Y coordinates with star/cross markers for apex/braking) and Speed Profile (Speed vs Distance relative to apex).
 
+### 16. Tyre Degradation Modeling and Pace Drop-off
+To model pace drop-off and tyre wear characteristics:
+- The data builder function `_build_tyre_deg_data` filters for valid flyer laps using `IsAccurate == True` and filters out yellow flags/safety car/virtual safety car periods.
+- Linear regression (OLS) is performed using `np.polyfit` for stints with at least 4 valid laps to compute stint slope (degradation rate in seconds lost/gained per lap) and base pace.
+- Laps are plotted on a Plotly scatter chart, overlaying stint OLS regression trendlines. Points and lines are coloured in driver team constructor colours (circular points and solid lines for primary driver, square points and dashed lines for secondary driver).
+- Stint lengths and degradation rates are summarised in an HTML table, colour-coded to highlight positive or negative degradation trends.
+
 ---
 
 ## Running the Project
