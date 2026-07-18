@@ -33,7 +33,7 @@ The Pit Wall dashboard is built around three principles:
 
 | Principle | What it means in practice |
 |---|---|
-| **Single source of truth** | One file (`app.py`) contains everything. No hidden config, no scattered modules. |
+| **Modular Architecture** | Monolithic `app.py` has been refactored into a modular layout under `src/` to separate data loading, UI widgets, and plotting logic. |
 | **Data first** | All UI derives from FastF1 data — no hardcoded lap times, driver stats, or team info. |
 | **Zero backend** | Streamlit *is* the server. No Flask, no REST API, no database. FastF1 caching replaces a database. |
 
@@ -566,12 +566,13 @@ f"<td>{_fmt_driver(drv)}</td>"
 
 ### Step 1 — Identify the insertion point
 
-Use the section map in `AGENT.md` to find where in `app.py` your new section belongs. Insert after the closest related existing section.
+Add your data loading / data processing function to `src/data/loader.py`, chart builders to `src/charts/` (either `plotly.py` or `matplotlib.py`), and the UI rendering widgets to `src/ui/components.py`. Import and coordinate them in the main entry point `app.py`.
 
 ### Step 2 — Add a section header
 
+In the UI components module, use the standard section title format:
+
 ```python
-# ── My New Section ────────────────────────────────────────────────────────────
 st.markdown("<div class='section-title'>My New Section</div>", unsafe_allow_html=True)
 ```
 

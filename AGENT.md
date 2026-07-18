@@ -19,7 +19,7 @@ Your primary responsibilities are:
 | Property | Value |
 |---|---|
 | **Stack** | Python 3.11+ · Streamlit ≥ 1.44 · FastF1 ≥ 3.3 |
-| **Entry point** | `app.py` (4 000 + lines, single-file monolith) |
+| **Entry point** | `app.py` (orchestrating `src/` package modules) |
 | **Data source** | FastF1 library → official F1 timing API + Ergast |
 | **Port** | `8501` (local and Docker) |
 | **Cache dir** | `./cache/` (FastF1 disk cache, gitignored) |
@@ -31,7 +31,20 @@ Your primary responsibilities are:
 
 ```
 fastf1_pitwall/
-├── app.py              ← entire application (do NOT split without agreement)
+├── app.py              ← application entry point (orchestrates src/ packages)
+├── src/                ← modular source package
+│   ├── __init__.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   └── loader.py   ← data fetching, caching, and proxy patching
+│   ├── charts/
+│   │   ├── __init__.py
+│   │   ├── matplotlib.py ← Matplotlib figure builders (6-channel, speed delta)
+│   │   └── plotly.py     ← Plotly figure builders (History, stints, gap, replay, maps, corner analysis)
+│   └── ui/
+│       ├── __init__.py
+│       ├── styles.py    ← styling sheets, constants, PWA headers, dark/light injection
+│       └── components.py ← layout rendering components (Summary, stats, classifications, map tabs, footer)
 ├── requirements.txt    ← pinned dependencies
 ├── Dockerfile          ← containerisation
 ├── .dockerignore
@@ -44,51 +57,25 @@ fastf1_pitwall/
 
 ---
 
-## `app.py` Architecture Map
+## Codebase Architecture Map
 
-The file is structured as a linear top-to-bottom Streamlit script. Sections run in this order on every rerender:
+The application logic is modularised into individual packages under `src/` to separate data loading, UI layouts, and charts:
 
-| Lines (approx) | Section | Purpose |
-|---|---|---|
-| 1–21 | Imports & warnings | All `import` statements |
-| 22–254 | FastF1 cache + requests patch | `fastf1.Cache.enable_cache`, requests monkey-patch via `curl_cffi` |
-| 255–262 | Page config | `st.set_page_config` |
-| 263–406 | PWA injection | Injects Web Manifest + Apple meta tags via `components.html` |
-| 407–449 | Page-transition JS | `MutationObserver` replays `pageEnter` CSS on every rerender |
-| 450–1070 | Custom CSS | Full design system — keyframes, typography, layout, cards, banner |
-| 1071–1240 | Theme CSS override | Dark / light mode CSS injection driven by `st.session_state["dark_mode"]` |
-| 1241–1322 | Constants | `TEAM_COLOURS`, `COMPOUND_COLOURS`, `TRACK_STATUS_MAP` |
-| 1323–1960 | Helper functions | `hex_to_rgb`, `_team_logo`, `_team_colour`, `format_laptime`, `driver_colour`, `_build_driver_labels`, `_fmt_driver`, `get_telemetry_cached`, `_format_classification_time`, `_build_constructor_standings`, `_render_constructor_standings`, `_build_driver_standings`, `_build_final_classification`, `_render_final_classification`, `_render_footer` |
-| 1961–2091 | Sidebar | Year / GP / session selectors, theme toggle, Load Session button, and connection diagnostics |
-| 2092–2153 | Session state | Initialises session variables in Streamlit state |
-| 2154–2185 | Landing page | Welcome panel with features summary if no session is loaded, plus design origin footer |
-| 2186–2241 | Driver & lap controls & labels | `all_drivers` extraction, `_fmt_driver` mapping, `_all_laps` extraction |
-| 2242–2355 | Session Info Header | `_session_info_header()` — circuit, flag, round, session type, event date |
-| 2356–2418 | Driver Selection & lap selector | Selection inputs, `lap_selector()`, telemetry caching |
-| 2419–2428 | Telemetry data loader | Loads telemetry for charts |
-| 2429–2592 | Lap summary banner | `render_summary()` — headshot, team logo, metric cards, tyre badge, weather |
-| 2593–2674 | Session Statistics | `render_session_stats()` — Grid position, finish position, best lap, race pace, top speed |
-| 2675–2846 | Lap Time History | `_build_lap_history`, `_lap_history_fig` with compound filter |
-| 2847–3200 | Fuel-Adjusted Pace | `_build_fuel_adjusted`, `_fuel_pace_fig`, simulated qualifying leaderboard |
-| 3201–3318 | Tyre Stint Timeline | `_build_stints`, stint timeline Gantt chart |
-| 3319–3430 | Pit Stop Summary | HTML pit stop summary table with selection highlighting |
-| 3431–3631 | Tyre Degradation | Tyre degradation scatter plot and OLS regression slopes summary table |
-| 3632–3745 | Telemetry | 6-channel Matplotlib telemetry charts |
-| 3746–3817 | Export Telemetry | CSV export widget for driver lap data |
-| 3818–3848 | Speed Delta | Matplotlib comparison chart |
-| 3849–3963 | Fastest Laps Leaderboard | Ranked leaderboard of best lap times |
-| 3964–4168 | Ideal Lap vs Actual Lap | Theoretical best lap sector analysis |
-| 4169–4322 | Gap to Leader | Plotly gap analysis over the race distance |
-| 4323–4444 | Race Position Chart | Track positions over all laps |
-| 4445–5246 | Track Map & Driver Inputs Map & Race Replay & Corner Analysis | Sector dominance, telemetry inputs, animated replay, and corner-by-corner analysis |
-| 5247–end | Championship Standings & Classification | Constructors' Championship standings table, official session classification leaderboard, and footer |
+| Module | Purpose |
+|---|---|
+| `app.py` | Streamlit entry point. Initialises page configurations, loads UI sidebars, invokes data builders, and renders layout blocks. |
+| `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, and hosts all `@st.cache_data` session fetching and statistical data-builders. |
+| `src/ui/styles.py` | Housed with team/compound color constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
+| `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, layout maps block tabs, and footer. |
+| `src/charts/plotly.py` | Construct and return interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, animated replays, and corner analysis subplots. |
+| `src/charts/matplotlib.py` | Creates static Matplotlib figures for 6-channel telemetry profiles and speed delta overlays. |
 
 ---
 
 ## Key Design Decisions
 
-### 1. Single-file monolith
-`app.py` is intentionally kept as one file for simplicity and Streamlit Cloud compatibility. Do **not** split into modules unless explicitly instructed by the project owner.
+### 1. Modular Architecture
+The app has been refactored into a modular layout under `src/` to isolate data loading, UI layout rendering, and chart figures. All state variables (like `driver1`, `compare`, `sess_key`) must be passed explicitly into functions to prevent circular import loops.
 
 ### 2. CSS injection over Streamlit theming
 The app injects raw CSS via `st.markdown(..., unsafe_allow_html=True)` to override Streamlit's BaseWeb components. This is necessary because Streamlit's native theme API does not expose enough hooks for full dark/light mode control. Maintain this approach.
@@ -184,6 +171,16 @@ To model pace drop-off and tyre wear characteristics:
 - Linear regression (OLS) is performed using `np.polyfit` for stints with at least 4 valid laps to compute stint slope (degradation rate in seconds lost/gained per lap) and base pace.
 - Laps are plotted on a Plotly scatter chart, overlaying stint OLS regression trendlines. Points and lines are coloured in driver team constructor colours (circular points and solid lines for primary driver, square points and dashed lines for secondary driver).
 - Stint lengths and degradation rates are summarised in an HTML table, colour-coded to highlight positive or negative degradation trends.
+
+### 17. Monolithic app.py Refactoring & Modular Structure
+To resolve technical debt and maintainability issues:
+- The monolithic `app.py` has been split into a modular directory structure under the `src/` directory.
+- `src/data/loader.py` handles F1 data caching, proxy bypass patching, and raw telemetry wrangling.
+- `src/ui/styles.py` encapsulates stylesheet injections, custom CSS classes, and team/tyre color constants.
+- `src/ui/components.py` encapsulates user interface panels, final classification tables, weather widgets, and map layout wrappers.
+- `src/charts/plotly.py` hosts interactive Plotly chart builders (strategy timelines, gap charts, race replays, corner analysis subplots).
+- `src/charts/matplotlib.py` hosts static Matplotlib telemetry and speed delta charts.
+- Function arguments are explicitly passed between modules to bypass circular imports while adhering strictly to British English spellings across all comments, documentation, and user interfaces.
 
 ---
 
