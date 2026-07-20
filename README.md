@@ -1,7 +1,5 @@
 # 🏎 Pit Wall — F1 Telemetry Dashboard
 
-update readme file
-
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry from any Formula 1 session since 2018.
 
 Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
@@ -45,6 +43,29 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Connection Diagnostics & Bypass**: Bypasses anti-bot/CloudFront datacenter blockades automatically on cloud hosting platforms using unconditional TLS handshake emulation (via `curl_cffi`) impersonating a genuine browser signature. Includes a sidebar **Connection Diagnostics** widget to test connectivity and optional proxy configuration (`F1_PROXY`).
 - **Design Origin Footer**: A subtle, beautifully styled bottom footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of all pages and states.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
+
+---
+
+## 📁 Project Structure
+
+```
+fastf1_pitwall/
+├── app.py              # Main Streamlit entry point & orchestration
+├── src/                # Modular source package
+│   ├── data/
+│   │   └── loader.py   # FastF1 data loaders, caching & proxy bypass
+│   ├── charts/
+│   │   ├── plotly.py   # Interactive Plotly chart builders
+│   │   └── matplotlib.py # Static Matplotlib telemetry charts
+│   └── ui/
+│       ├── styles.py    # CSS design system, constants & themes
+│       └── components.py # UI cards, headers, tables & map blocks
+├── requirements.txt    # Pinned Python dependencies
+├── Dockerfile          # Containerisation setup
+├── README.md           # User documentation
+├── AGENT.md            # AI developer agent guidelines
+└── DOCS.md             # Developer manual
+```
 
 ---
 
@@ -203,15 +224,15 @@ When modifying `app.py`, adhere to the following safety patterns:
   ```
 
 ### Step 4 — Verify Syntax
-Before staging or committing any code, always run a python syntax compilation check to ensure there are no syntax errors:
+Before staging or committing any code, always run a python syntax compilation check across all source modules:
 ```bash
-python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"
+python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py
 ```
 
 ### Step 5 — Commit, Push and Open a PR
 1. Stage and commit your changes referencing the issue number:
    ```bash
-   git add app.py
+   git add .
    git commit -m "<type>: <short summary>
 
    Closes #<issue_number>"
