@@ -242,7 +242,7 @@ This ensures the CSS injection block reads the updated value on the same rerun r
 
 ## 6b. Compound Colour System
 
-`COMPOUND_COLOURS` in the Constants block (~line 1296) is the **single source of truth** for all compound colours. Every consumer in the codebase derives from it — no inline dicts anywhere.
+`COMPOUND_COLOURS` in `src/ui/styles.py` is the **single source of truth** for all compound colours. Every consumer in the codebase derives from it — no inline dicts anywhere.
 
 ```python
 COMPOUND_COLOURS = {
