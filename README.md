@@ -208,7 +208,7 @@ git checkout -b <prefix>/<short-description>  # e.g., fix/session-data-unavailab
 ```
 
 ### Step 3 — Implementation Guidelines
-When modifying `app.py`, adhere to the following safety patterns:
+When modifying modules in `src/` or `app.py`, adhere to the following safety patterns:
 - **Immediate Data Validation**: When loading F1 session data via `load_session()`, always check that the loaded session object contains valid lap data immediately after loading:
   ```python
   sess = load_session(year, gp, session_type)
