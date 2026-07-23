@@ -223,8 +223,13 @@ When modifying modules in `src/` or `app.py`, adhere to the following safety pat
   st.session_state["sess_key2"] = None
   ```
 
-### Step 4 — Verify Syntax
-Before staging or committing any code, always run a python syntax compilation check across all source modules:
+### Step 4 — Run Unit Tests & Verify Syntax
+Before staging or committing any code, always run the pytest automated test suite to ensure that data wrangling functions have no regressions:
+```bash
+python3.11 -m pytest tests/
+```
+
+Then run a python syntax compilation check across all source modules:
 ```bash
 python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py
 ```
