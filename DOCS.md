@@ -742,28 +742,25 @@ The heaviest single operation is `sess.load()` on first call. Everything else is
 
 ## 16. Testing
 
-There are currently no automated tests. The following are recommended additions:
+The dashboard contains an automated unit testing suite targeting data-wrangling functions to prevent regressions when dependencies or the upstream FastF1 library update.
 
-### Unit tests (suggested with `pytest`)
+### Unit Tests (`pytest`)
 
-```python
-# tests/test_helpers.py
-from app import format_laptime, hex_to_rgb
-import pandas as pd
+The tests reside in the `tests/` directory:
+- `tests/__init__.py`: Package initialisation.
+- `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames. These fixtures allow testing the data wrangling pipeline entirely offline, avoiding slow API calls.
+- `tests/test_data_wrangling.py`: Tests the following core data-wrangling components:
+  - `_build_final_classification` under race (sorting and index conversion), qualifying (sector split-time validation), and practice (returning `"PRACTICE"` indicator code for NaN results) configurations.
+  - `_build_fuel_adjusted` checking fuel-load adjustments, exclusion of in-laps and out-laps (`PitInTime` and `PitOutTime`), and exclusion of outlier laps (>2.5x median pace).
 
-def test_format_laptime_normal():
-    td = pd.Timedelta(seconds=86.543)
-    assert format_laptime(td) == "1:26.543"
-
-def test_format_laptime_null():
-    assert format_laptime(pd.NaT) == "N/A"
-
-def test_hex_to_rgb():
-    assert hex_to_rgb("#FF8700") == "255,135,0"
-
-def test_hex_to_rgb_short():
-    assert hex_to_rgb("#FFF") == "255,255,255"
+To run the automated tests locally:
+```bash
+python3.11 -m pytest tests/
 ```
+
+### CI/CD Integration
+
+Automated tests are integrated via GitHub Actions in `.github/workflows/test.yml`. The test suite runs automatically on Python 3.11 for every push or pull request targeting the `main` branch.
 
 ### Manual smoke test checklist
 

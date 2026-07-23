@@ -495,6 +495,7 @@ Motivation or context for the change.
 - `DOCS.md` — [if applicable]
 
 ## Testing done
+- [ ] Pytest unit tests pass (`python3.11 -m pytest tests/`)
 - [ ] Syntax check passes
 - [ ] App starts without error
 - [ ] Affected section renders correctly
@@ -533,8 +534,9 @@ Run this checklist before merging any PR or pushing a significant change directl
 - [ ] `AGENT.md` architecture map line ranges updated if sections shifted
 - [ ] `DOCS.md` roadmap item marked ✅ Done if it was implemented
 
-**Syntax**
-- [ ] `python3 -c "import ast; ast.parse(open('app.py').read()); print('Syntax OK')"` passes
+**Syntax & Testing**
+- [ ] Pytest unit tests pass (`python3.11 -m pytest tests/`)
+- [ ] Codebase compile check passes (`python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py`)
 
 ---
 
