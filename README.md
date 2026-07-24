@@ -42,6 +42,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Driver Name Mapping**: All driver dropdowns, lap selectors, and the fastest laps leaderboard display full formatted names (e.g. `NOR · Norris`) instead of raw FastF1 driver numbers. Built dynamically from FastF1 session data so it works correctly for any season, with a raw-number fallback for any driver whose info is unavailable.
 - **Connection Diagnostics & Bypass**: Bypasses anti-bot/CloudFront datacenter blockades automatically on cloud hosting platforms using unconditional TLS handshake emulation (via `curl_cffi`) impersonating a genuine browser signature. Includes a sidebar **Connection Diagnostics** widget to test connectivity and optional proxy configuration (`F1_PROXY`).
 - **Design Origin Footer**: A subtle, beautifully styled bottom footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of all pages and states.
+- **Real-Time Live Timing Mode**: Connects directly to F1's live timing WebSocket stream using `fastf1.livetiming.client.SignalRClient` and `fastf1.livetiming.data.LiveTimingData`. Allows recording live race weekend sessions to disk, auto-refreshing UI visuals (5s, 10s, 15s, 30s rate options), and loading live telemetry stream files (`.txt`). Includes a broadcast-grade Live Status Banner displaying stream packet counts, file sizes, and update timestamps.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---

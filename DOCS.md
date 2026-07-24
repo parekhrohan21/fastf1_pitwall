@@ -125,6 +125,13 @@ fastf1.Cache.enable_cache("./cache")
 ```
 Persists raw API responses to disk. Lives in `./cache/` (gitignored). Survives app restarts. Mount as a Docker volume to persist across container restarts.
 
+### Layer 1b — Real-Time Live Timing Stream Data (`fastf1.livetiming`)
+```python
+start_live_recorder(filename="live_timing.txt")
+load_live_session(year, gp, session_type, live_filename="live_timing.txt")
+```
+Streams and records active SignalR WebSocket packets directly from F1's live timing server. Uses `fastf1.livetiming.client.SignalRClient` in a background thread to record raw text messages, and parses saved `.txt` streams into structured FastF1 session objects via `fastf1.livetiming.data.LiveTimingData`.
+
 #### Monkey-Patch Caching Compatibility (`requests_cache` serialization)
 FastF1 uses `requests_cache` to cache raw API calls. Because we monkey-patched `requests.adapters.HTTPAdapter.send` using `curl_cffi` (to rotate proxies and bypass CloudFront blocks), we bypass the standard `requests` response instantiation.
 If the mock response object returned by our patch does not have a properly populated `response.raw` attribute, the `requests_cache` SQLite serializer crashes with an `AttributeError: 'NoneType' object has no attribute '_request_url'`.
