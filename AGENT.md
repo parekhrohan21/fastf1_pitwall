@@ -177,10 +177,10 @@ To resolve technical debt and maintainability issues:
 - The monolithic `app.py` has been split into a modular directory structure under the `src/` directory.
 - `src/data/loader.py` handles F1 data caching, proxy bypass patching, and raw telemetry wrangling.
 - `src/ui/styles.py` encapsulates stylesheet injections, custom CSS classes, and team/tyre color constants.
-- `src/ui/components.py` encapsulates user interface panels, final classification tables, weather widgets, and map layout wrappers.
+- `src/ui/components.py` encapsulates user interface panels, final classification tables, weather widgets, live status banners, and map layout wrappers.
 - `src/charts/plotly.py` hosts interactive Plotly chart builders (strategy timelines, gap charts, race replays, corner analysis subplots).
 - `src/charts/matplotlib.py` hosts static Matplotlib telemetry and speed delta charts.
-- Function arguments are explicitly passed between modules to bypass circular imports while adhering strictly to British English spellings across all comments, documentation, and user interfaces.
+- **Decision #18**: *Real-Time Live Timing Stream Integration (`fastf1.livetiming`)* — Added support for recording and parsing live SignalR WebSocket streams via background threads (`start_live_recorder`, `stop_live_recorder`, `get_live_recorder_status`) and `load_live_session`. Included broadcast-grade live banner indicators and auto-refresh controls while adhering strictly to British English spellings across all comments, documentation, and user interfaces.
 
 ---
 

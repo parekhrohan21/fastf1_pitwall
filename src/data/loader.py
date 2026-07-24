@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import urllib3
 import logging
+import threading
 from datetime import datetime
 from curl_cffi import requests as curl_requests
 from src.ui.styles import TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP
@@ -333,6 +334,106 @@ def load_session(year: int, gp: str, session_type: str = "R"):
 
     # Try 5: Final fallback check/raise
     raise ValueError("No lap timing data is available for this session on F1 servers.")
+
+
+# ── Live Timing SignalR Recorder Management ───────────────────────────────────
+_LIVE_RECORDERS = {}
+_LIVE_THREADS = {}
+
+
+def start_live_recorder(filename: str = "live_timing.txt", timeout: int = 60) -> dict:
+    """Start a background SignalRClient recording thread saving live WebSocket timing stream data."""
+    try:
+        from fastf1.livetiming.client import SignalRClient
+        
+        filepath = os.path.join(CACHE_DIR, filename) if not os.path.isabs(filename) else filename
+        
+        if filepath in _LIVE_THREADS and _LIVE_THREADS[filepath].is_alive():
+            return {"success": True, "message": "Live SignalR recorder is already running.", "filepath": filepath}
+            
+        client = SignalRClient(filepath, timeout=timeout)
+        _LIVE_RECORDERS[filepath] = client
+        
+        def _run_recorder():
+            try:
+                client.start()
+            except Exception as exc:
+                logging.error(f"Live SignalR recorder error: {exc}")
+                
+        thread = threading.Thread(target=_run_recorder, daemon=True)
+        _LIVE_THREADS[filepath] = thread
+        thread.start()
+        
+        return {"success": True, "message": "Live SignalR recorder started successfully.", "filepath": filepath}
+    except Exception as e:
+        return {"success": False, "message": f"Failed to start live recorder: {e}", "filepath": filename}
+
+
+def stop_live_recorder(filename: str = "live_timing.txt") -> dict:
+    """Stop live recorder instance if running."""
+    filepath = os.path.join(CACHE_DIR, filename) if not os.path.isabs(filename) else filename
+    if filepath in _LIVE_THREADS:
+        _LIVE_RECORDERS.pop(filepath, None)
+        _LIVE_THREADS.pop(filepath, None)
+        return {"success": True, "message": "Live recorder stopped successfully."}
+    return {"success": False, "message": "No active live recorder found for specified file."}
+
+
+def get_live_recorder_status(filename: str = "live_timing.txt") -> dict:
+    """Return dictionary containing active state, file existence, size, line count, and timestamp."""
+    filepath = os.path.join(CACHE_DIR, filename) if not os.path.isabs(filename) else filename
+    is_active = filepath in _LIVE_THREADS and _LIVE_THREADS[filepath].is_alive()
+    
+    if not os.path.exists(filepath):
+        return {
+            "active": is_active,
+            "exists": False,
+            "filepath": filepath,
+            "size_bytes": 0,
+            "line_count": 0,
+            "last_modified": "N/A"
+        }
+        
+    try:
+        size = os.path.getsize(filepath)
+        mtime = datetime.fromtimestamp(os.path.getmtime(filepath)).strftime("%Y-%m-%d %H:%M:%S")
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            lines = sum(1 for _ in f)
+        return {
+            "active": is_active,
+            "exists": True,
+            "filepath": filepath,
+            "size_bytes": size,
+            "line_count": lines,
+            "last_modified": mtime
+        }
+    except Exception:
+        return {
+            "active": is_active,
+            "exists": True,
+            "filepath": filepath,
+            "size_bytes": 0,
+            "line_count": 0,
+            "last_modified": "Error reading file"
+        }
+
+
+def load_live_session(year: int, gp: str, session_type: str, live_filename: str = "live_timing.txt"):
+    """Load a session using live stream data parsed via LiveTimingData(live_filename)."""
+    try:
+        from fastf1.livetiming.data import LiveTimingData
+        
+        filepath = os.path.join(CACHE_DIR, live_filename) if not os.path.isabs(live_filename) else live_filename
+        
+        if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+            return None, f"Live timing data file '{live_filename}' is empty or does not exist."
+            
+        livedata = LiveTimingData(filepath)
+        sess = fastf1.get_session(year, gp, session_type)
+        sess.load(livedata=livedata)
+        return sess, None
+    except Exception as e:
+        return None, f"Failed to load live session data: {e}"
 
 
 def clear_session_cache(year: int, gp: str):

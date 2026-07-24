@@ -390,6 +390,44 @@ def weather_strip_html(lap) -> str:
         return ""
 
 
+def render_live_status_banner(status_info: dict, auto_refresh: bool = False, interval_sec: int = 10):
+    """Render broadcast-grade live timing status header banner."""
+    active = status_info.get("active", False)
+    exists = status_info.get("exists", False)
+    size_kb = status_info.get("size_bytes", 0) / 1024.0
+    line_count = status_info.get("line_count", 0)
+    last_mod = status_info.get("last_modified", "N/A")
+    
+    badge_color = "#e53e3e" if active else ("#319795" if exists else "#718096")
+    badge_text = "LIVE STREAMING" if active else ("LIVE FILE LOADED" if exists else "LIVE MODE IDLE")
+    pulse_dot = "<span style='display:inline-block; width:8px; height:8px; border-radius:50%; background:#fff; margin-right:6px;'></span>" if active else ""
+    refresh_str = f"ON ({interval_sec}s)" if auto_refresh else "OFF"
+    
+    st.markdown(
+        f"""
+        <div style="background: rgba(26, 26, 26, 0.85); border: 1px solid rgba(255,255,255,0.1);
+                    border-left: 4px solid {badge_color}; border-radius: 8px; padding: 12px 16px;
+                    margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;
+                    backdrop-filter: blur(10px);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: {badge_color}; color: #ffffff; font-size: 11px; font-weight: 700;
+                            letter-spacing: 1px; padding: 4px 8px; border-radius: 4px; display: flex;
+                            align-items: center;">
+                    {pulse_dot}{badge_text}
+                </div>
+                <div style="color: #ccc; font-size: 13px;">
+                    Packets: <strong>{line_count:,}</strong> | Size: <strong>{size_kb:.1f} KB</strong> | Last Update: <strong>{last_mod}</strong>
+                </div>
+            </div>
+            <div style="color: #888; font-size: 12px;">
+                Auto-Refresh: <strong>{refresh_str}</strong>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 def render_summary(lap, driver: str, colour: str = "#FF8700", session_obj=None, session_year=None):
     if lap is None:
         return

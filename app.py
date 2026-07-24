@@ -23,14 +23,16 @@ from src.data.loader import (
     _fmt_driver1, _fmt_driver2, _build_lap_history, _build_fuel_adjusted,
     _build_fuel_sim_leaderboard, _build_stints, _build_pit_stops, _build_tyre_deg_data,
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
-    _get_telemetry_for_map, _get_round
+    _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
+    get_live_recorder_status, load_live_session
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
     _session_info_header, lap_selector, tyre_badge_html, weather_strip_html,
     render_summary, render_session_stats, _render_fuel_sim_leaderboard,
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
-    _render_gap_to_leader_section, _render_position_section, render_maps_block
+    _render_gap_to_leader_section, _render_position_section, render_maps_block,
+    render_live_status_banner
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -138,10 +140,40 @@ with st.sidebar:
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
     mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
-    st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, width="stretch")
+    st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, use_container_width=True)
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
-    load_btn = st.button("⬇️  Load Session(s)", width="stretch")
+    live_mode = st.toggle("🔴 Real-Time Live Timing Mode", value=False, key="live_mode_toggle")
+
+    live_filename = "live_timing.txt"
+    auto_refresh_sec = 0
+
+    if live_mode:
+        with st.expander("📡 Live Streamer Controls", expanded=True):
+            live_filename = st.text_input("Live Timing File", value="live_timing.txt", key="live_filename_input")
+            col_rec1, col_rec2 = st.columns(2)
+            if col_rec1.button("▶ Start Stream", use_container_width=True):
+                res = start_live_recorder(live_filename)
+                if res["success"]:
+                    st.success("Recorder started.")
+                else:
+                    st.error(res["message"])
+            if col_rec2.button("⏹ Stop Stream", use_container_width=True):
+                res = stop_live_recorder(live_filename)
+                if res["success"]:
+                    st.info("Recorder stopped.")
+                else:
+                    st.warning(res["message"])
+
+            auto_refresh_choice = st.selectbox("Auto-Refresh Rate", ["OFF", "5s", "10s", "15s", "30s"], index=0, key="auto_refresh_choice")
+            if auto_refresh_choice != "OFF":
+                auto_refresh_sec = int(auto_refresh_choice.replace("s", ""))
+
+            live_status = get_live_recorder_status(live_filename)
+            st.caption(f"Status: {'Active Stream' if live_status['active'] else 'Idle'} | Packets: {live_status['line_count']:,} | Size: {live_status['size_bytes']/1024:.1f} KB")
+
+    st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+    load_btn = st.button("⬇️  Load Session(s)", use_container_width=True)
 
     # ── Diagnostics expander ──────────────────────────────────────────────────
     with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
@@ -187,25 +219,40 @@ sess_key = f"{year}_{gp}_{session_type}"
 sess_key2 = f"{year2}_{gp2}_{session_type2}" if compare_sessions else None
 
 if load_btn:
-    with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~30 s)"):
-        try:
-            sess = load_session(year, gp, session_type)
-            if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
-                raise ValueError("No lap data available for this session.")
-            st.session_state["session"] = sess
-            st.session_state["sess_key"] = sess_key
+    if live_mode:
+        with st.spinner(f"Loading Live Stream Data from '{live_filename}'…"):
+            live_sess, err_msg = load_live_session(year, gp, session_type, live_filename)
+            if err_msg or live_sess is None or not hasattr(live_sess, "laps") or live_sess.laps is None or live_sess.laps.empty:
+                st.error(
+                    f"**Live Timing Stream Error**\n\n"
+                    f"{err_msg or 'No lap data found in live stream file.'}\n\n"
+                    "Ensure you have started the SignalR recorder during an active session or selected a valid `.txt` stream recording."
+                )
+                _render_footer()
+                st.stop()
+            st.session_state["session"] = live_sess
+            st.session_state["sess_key"] = f"LIVE_{live_filename}_{sess_key}"
             st.session_state["year1"] = year
-        except Exception as e:
-            clear_session_cache(year, gp)
-            st.error(
-                f"**Session Loading Error**\n\n"
-                f"FastF1 could not load the lap data: {e}.\n\n"
-                "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
-            )
-            _render_footer()
-            st.stop()
+    else:
+        with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~30 s)"):
+            try:
+                sess = load_session(year, gp, session_type)
+                if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
+                    raise ValueError("No lap data available for this session.")
+                st.session_state["session"] = sess
+                st.session_state["sess_key"] = sess_key
+                st.session_state["year1"] = year
+            except Exception as e:
+                clear_session_cache(year, gp)
+                st.error(
+                    f"**Session Loading Error**\n\n"
+                    f"FastF1 could not load the lap data: {e}.\n\n"
+                    "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+                )
+                _render_footer()
+                st.stop()
 
-    if compare_sessions:
+    if compare_sessions and not live_mode:
         with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~30 s)"):
             try:
                 sess2 = load_session(year2, gp2, session_type2)
@@ -234,6 +281,10 @@ sess_key = st.session_state.get("sess_key")
 sess_key2 = st.session_state.get("sess_key2")
 year1 = st.session_state.get("year1")
 year2 = st.session_state.get("year2")
+
+if live_mode:
+    live_status = get_live_recorder_status(live_filename)
+    render_live_status_banner(live_status, auto_refresh_sec > 0, auto_refresh_sec)
 
 # ── Landing ───────────────────────────────────────────────────────────────────
 if sess is None:
