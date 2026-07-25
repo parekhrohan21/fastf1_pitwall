@@ -24,7 +24,7 @@ from src.data.loader import (
     _build_fuel_sim_leaderboard, _build_stints, _build_pit_stops, _build_tyre_deg_data,
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
-    get_live_recorder_status, load_live_session
+    get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
