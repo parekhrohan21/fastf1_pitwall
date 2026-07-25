@@ -170,6 +170,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 13. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
 14. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map, driver input pedal traces, or build the full multi-car Race Replay animation!
 15. **Championship Standings & Classification** — Scroll to the very bottom to view the Constructors' Championship standings (dynamically matched to constructor colours) and the official final standings table (with points, retirements/laps, stops, and Q1/Q2/Q3 split times where applicable).
+16. **Real-Time Live Timing Mode** — Enable **🔴 Real-Time Live Timing Mode** in the sidebar during a live race weekend. Start the SignalR stream recorder to save WebSocket stream packets to disk, select an auto-refresh rate (5s, 10s, 15s, 30s), and click **⬇️ Load Session(s)** to view live streaming telemetry and lap times!
 
 ---
 
