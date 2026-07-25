@@ -759,6 +759,10 @@ The tests reside in the `tests/` directory:
 - `tests/test_data_wrangling.py`: Tests the following core data-wrangling components:
   - `_build_final_classification` under race (sorting and index conversion), qualifying (sector split-time validation), and practice (returning `"PRACTICE"` indicator code for NaN results) configurations.
   - `_build_fuel_adjusted` checking fuel-load adjustments, exclusion of in-laps and out-laps (`PitInTime` and `PitOutTime`), and exclusion of outlier laps (>2.5x median pace).
+- `tests/test_live_timing.py`: Tests the following live timing components:
+  - `get_live_recorder_status`: Verifies status calculation, stream file existence, line counts, and file size formatting for missing vs mock stream files.
+  - `stop_live_recorder`: Validates inactive stream recorder shutdown handling.
+  - `load_live_session`: Verifies graceful fallback and error message handling for missing or empty live stream text files.
 
 To run the automated tests locally:
 ```bash
