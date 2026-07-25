@@ -832,18 +832,26 @@ Items agreed by the project owner as desirable but not yet implemented:
 
 ## 18. Solved Issues & Changelog
 
-Every resolved GitHub issue in the repository is logged below with a concise 1-line explanation of the solution or feature update:
+Every resolved GitHub issue and pull request in the repository is logged below in strict reverse-chronological order:
 
-- **Issue #100** (`fix: NameError _PATCH_STATUS is not defined in app.py`): Imported `_PATCH_STATUS` and `test_curl_cffi_request` into `app.py` to fix NameError in sidebar diagnostics.
-- **Issue #84** (`feat: Real-Time Live Timing Mode via FastF1 SignalR client`): Added background WebSocket stream recording via `SignalRClient`, `LiveTimingData` session parsing, broadcast status banner, and auto-refresh controls.
-- **Issue #83** (`test: Introduce pytest automated testing suite for data wrangling`): Implemented a `pytest` unit test suite in `tests/` with mock fixtures and GitHub Actions CI workflow integration.
-- **Issue #82** (`tech-debt: Refactor monolithic app.py into modular directory structure`): Modularised `app.py` into `src/data/loader.py`, `src/ui/styles.py`, `src/ui/components.py`, `src/charts/plotly.py`, and `src/charts/matplotlib.py`.
-- **Issue #81** (`feat: Tyre Degradation Modeling and Pace Drop-off`): Added OLS linear regression stint degradation scatter charts and pace drop-off summary tables.
-- **Issue #80** (`feat: Corner-by-Corner Analysis (Braking & Apex telemetry)`): Introduced interactive corner telemetry subplots mapping minimum speed, apex throttle, and braking points.
-- **Issue #78** (`feat: AWS-Style Mini-Sector Speed Dominance Map`): Divided track maps into 25 micro-sectors coloured by the fastest driver's pace dominance.
-- **Issue #76** (`docs: update all documentation files for recent features and footer sync`): Synchronised `README.md`, `DOCS.md`, and `AGENT.md` to cover latest telemetry features and footer rules.
-- **Issue #75** (`fix: sync bottom footer across all early exit states and pages`): Ensured `_render_footer()` is called across all error boundaries and early exit states.
-- **Issue #73** (`style: adjust telemetry graphs to fit mobile screens dynamically`): Removed static minimum width CSS bounds from Matplotlib images to enable responsive scaling on mobile viewports.
+> [!NOTE]
+> **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
+
+- **PR #103** / **Issue #102** (`docs: Add Solved Issues Changelog & Summary List to Documentation`): Added Section 18 to `DOCS.md` and anchor link in `README.md` logging all historical closed issues with 1-line explanations.
+- **PR #101** / **Issue #100** (`fix: NameError _PATCH_STATUS is not defined in app.py`): Imported `_PATCH_STATUS` and `test_curl_cffi_request` into `app.py` to fix NameError in sidebar diagnostics.
+- **PR #99** (`docs: expand user guide & developer manual for Live Timing Mode`): Expanded `README.md` How to Use section and `DOCS.md` testing documentation for Live Timing Mode.
+- **PR #98** / **Issue #84** (`feat: Real-Time Live Timing Mode via FastF1 SignalR client`): Added background WebSocket stream recording via `SignalRClient`, `LiveTimingData` session parsing, broadcast status banner, and auto-refresh controls.
+- **PR #97** (`docs: update manuals for pytest automated tests`): Updated `README.md`, `DOCS.md`, and `AGENT.md` guidelines to require running pytest before code commits.
+- **PR #96** / **Issue #83** (`test: Introduce pytest automated testing suite for data wrangling`): Implemented a `pytest` unit test suite in `tests/` with mock fixtures and GitHub Actions CI workflow integration.
+- **PR #95** (`docs: refine README guidelines for modular structure`): Updated contributing guidelines in `README.md` to reference `src/` package modules.
+- **PR #94** (`docs: update documentation for issue 82 modular structure`): Synchronised `README.md`, `DOCS.md`, and `AGENT.md` for codebase modularisation.
+- **PR #93** / **Issue #82** (`tech-debt: Refactor monolithic app.py into modular directory structure`): Modularised `app.py` into `src/data/loader.py`, `src/ui/styles.py`, `src/ui/components.py`, `src/charts/plotly.py`, and `src/charts/matplotlib.py`.
+- **PR #91** / **Issue #81** (`feat: Tyre Degradation Modeling and Pace Drop-off`): Added OLS linear regression stint degradation scatter charts and pace drop-off summary tables.
+- **PR #90** / **Issue #80** (`feat: Corner-by-Corner Analysis (Braking & Apex telemetry)`): Introduced interactive corner telemetry subplots mapping minimum speed, apex throttle, and braking points.
+- **PR #89** / **Issue #78** (`feat: AWS-Style Mini-Sector Speed Dominance Map`): Divided track maps into 25 micro-sectors coloured by the fastest driver's pace dominance.
+- **PR #88** / **Issue #76** (`docs: update all documentation files for recent features and footer sync`): Synchronised `README.md`, `DOCS.md`, and `AGENT.md` to cover latest telemetry features and footer rules.
+- **PR #87** / **Issue #75** (`fix: sync bottom footer across all early exit states and pages`): Ensured `_render_footer()` is called across all error boundaries and early exit states.
+- **PR #86** / **Issue #73** (`style: adjust telemetry graphs to fit mobile screens dynamically`): Removed static minimum width CSS bounds from Matplotlib images to enable responsive scaling on mobile viewports.
 - **Issue #72** (`feat: add bottom footer with made proudly in great britain`): Added a styled footer displaying "Made proudly in Great Britain 🇬🇧" at the bottom of all pages.
 - **Issue #68** (`chore: clean up unused helper functions and redundant code comments`): Removed dead code, unused helper variables, and consolidated compound colour definitions.
 - **Issue #66** (`bug: driver name and abbreviation missing in official classification table`): Resolved driver name and team abbreviation lookup gaps in official session results.
