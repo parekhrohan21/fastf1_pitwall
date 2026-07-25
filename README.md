@@ -267,6 +267,13 @@ git fetch -p
 
 ---
 
+## 📜 Solved Issues & Changelog
+
+A full historical log of every resolved GitHub issue along with 1-line explanations is available in the developer manual:
+👉 **[DOCS.md — Section 18: Solved Issues & Changelog](DOCS.md#18-solved-issues--changelog)**
+
+---
+
 ## ⚖️ Data & Licensing
 
 Telemetry data is sourced via [FastF1](https://docs.fastf1.dev) from the official F1 timing stream and the Ergast API.  

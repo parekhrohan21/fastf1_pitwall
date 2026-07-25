@@ -830,4 +830,57 @@ Items agreed by the project owner as desirable but not yet implemented:
 
 ---
 
+## 18. Solved Issues & Changelog
+
+Every resolved GitHub issue in the repository is logged below with a concise 1-line explanation of the solution or feature update:
+
+- **Issue #100** (`fix: NameError _PATCH_STATUS is not defined in app.py`): Imported `_PATCH_STATUS` and `test_curl_cffi_request` into `app.py` to fix NameError in sidebar diagnostics.
+- **Issue #84** (`feat: Real-Time Live Timing Mode via FastF1 SignalR client`): Added background WebSocket stream recording via `SignalRClient`, `LiveTimingData` session parsing, broadcast status banner, and auto-refresh controls.
+- **Issue #83** (`test: Introduce pytest automated testing suite for data wrangling`): Implemented a `pytest` unit test suite in `tests/` with mock fixtures and GitHub Actions CI workflow integration.
+- **Issue #82** (`tech-debt: Refactor monolithic app.py into modular directory structure`): Modularised `app.py` into `src/data/loader.py`, `src/ui/styles.py`, `src/ui/components.py`, `src/charts/plotly.py`, and `src/charts/matplotlib.py`.
+- **Issue #81** (`feat: Tyre Degradation Modeling and Pace Drop-off`): Added OLS linear regression stint degradation scatter charts and pace drop-off summary tables.
+- **Issue #80** (`feat: Corner-by-Corner Analysis (Braking & Apex telemetry)`): Introduced interactive corner telemetry subplots mapping minimum speed, apex throttle, and braking points.
+- **Issue #78** (`feat: AWS-Style Mini-Sector Speed Dominance Map`): Divided track maps into 25 micro-sectors coloured by the fastest driver's pace dominance.
+- **Issue #76** (`docs: update all documentation files for recent features and footer sync`): Synchronised `README.md`, `DOCS.md`, and `AGENT.md` to cover latest telemetry features and footer rules.
+- **Issue #75** (`fix: sync bottom footer across all early exit states and pages`): Ensured `_render_footer()` is called across all error boundaries and early exit states.
+- **Issue #73** (`style: adjust telemetry graphs to fit mobile screens dynamically`): Removed static minimum width CSS bounds from Matplotlib images to enable responsive scaling on mobile viewports.
+- **Issue #72** (`feat: add bottom footer with made proudly in great britain`): Added a styled footer displaying "Made proudly in Great Britain 🇬🇧" at the bottom of all pages.
+- **Issue #68** (`chore: clean up unused helper functions and redundant code comments`): Removed dead code, unused helper variables, and consolidated compound colour definitions.
+- **Issue #66** (`bug: driver name and abbreviation missing in official classification table`): Resolved driver name and team abbreviation lookup gaps in official session results.
+- **Issue #64** (`feature: add number of pit stops to the official session classification table`): Added cumulative pit stop counts (`Stops`) to the session classification table.
+- **Issue #60** (`feature: show driver's name alongside driver number in official classification table`): Formatted driver numbers into `ABR · Full Name` display labels in classification tables.
+- **Issue #56** (`feature: add constructors championship standings table`): Integrated Ergast API constructor standings tables with team-colour accent highlighting.
+- **Issue #55** (`feature: add drivers championship points column to official classification table`): Added cumulative Drivers' Championship points (`CH Points`) to session classification tables.
+- **Issue #54** (`feature: set default selected driver to the race/session winner`): Automatically selected the session winner (or fastest flyer) as the default driver on page load.
+- **Issue #53** (`feature: set default season and session to the most recent ones`): Automatically defaulted season, Grand Prix, and session selectors to the latest completed event.
+- **Issue #49** (`Bug: Track map fails to display when telemetry/position data is missing`): Handled missing position telemetry gracefully without crashing track map renders.
+- **Issue #48** (`Bug: UnhashableParamError on 'results_df' in _build_final_classification`): Cast `FastF1` custom DataFrame subclasses to standard `pd.DataFrame` to prevent `@st.cache_data` hashing errors.
+- **Issue #46** (`Feature: Add a final classification leaderboard at the end of the session`): Rendered complete official session standings tables covering Race, Sprint, Qualifying, and Practice.
+- **Issue #44** (`bug: side navigation is not perfectly hidden in mobile view`): Fixed CSS transform rules to allow the Streamlit sidebar to collapse completely on mobile viewports.
+- **Issue #42** (`bug: FastF1 live timing stream is not supported for active sessions`): Added live timing CDN data stream fallback handling.
+- **Issue #40** (`bug: graphs fail to load due to requests_cache AttributeError`): Added `MockRaw` transport wrappers to fix `requests_cache` SQLite serialization during proxy requests.
+- **Issue #38** (`style: optimize mobile responsive layout for vertical screens`): Applied responsive CSS styles and media queries for vertical mobile viewports.
+- **Issue #36** (`bug: FastF1 data loading fails due to CloudFront 403 blocks`): Implemented `curl_cffi` TLS impersonation to bypass CloudFront and Cloudflare anti-bot blocks on datacenter IPs.
+- **Issue #33** (`fix: curl_cffi patch inactive on Streamlit Cloud due to IS_CLOUD detection failure`): Made the `curl_cffi` HTTPAdapter patch unconditional for all F1 domain requests.
+- **Issue #30** (`fix: curl_cffi monkey-patch intercepts wrong requests layer`): Intercepted `requests.adapters.HTTPAdapter.send` at the lowest transport level so all FastF1 requests bypass bot blocks.
+- **Issue #28** (`fix: UnhashableParamError on session_obj in _build_gap_data`): Replaced direct session object parameter passing with string session keys to fix cache hashing.
+- **Issue #26** (`fix: resolve F1 Timing API Cloudflare block on Streamlit Cloud`): Added fallback user-agent headers and mirror URL rotation.
+- **Issue #25** (`fix: bypass anti-bot filters on mirror by setting browser headers`): Injected Chrome 124 browser headers into outbound request sessions.
+- **Issue #23** (`fix: override fastf1._api.base_url to point to livetiming mirror`): Added automatic fallback to FastF1 livetiming mirror endpoints.
+- **Issue #21** (`fix: bypass Cloudflare bot-block on Streamlit Cloud`): Configured mirror URL fallback for live timing requests.
+- **Issue #19** (`fix: implement progressive fallback loading inside load_session`): Added multi-stage fallback attempts (full → no-messages → no-weather → laps-only) in `load_session`.
+- **Issue #17** (`fix: auto-clear cache when FastF1 session load raises data not loaded yet`): Implemented automatic local cache clearing when loading an incomplete or corrupt session.
+- **Issue #15** (`Session Data Unavailable: FastF1 could not load lap data`): Added user-friendly error banners and automatic cache reset buttons.
+- **Issue #13** (`feat: dynamically populate session selection dropdown based on event schedule`): Dynamically populated session dropdowns (FP, Quali, Sprint, Race) based on official event schedules.
+- **Issue #11** (`Improve mobile and vertical phone layout compatibility`): Added mobile viewport meta tags and responsive container styling.
+- **Issue #10** (`fix(pwa): Replace blob URL manifest with proper installable PWA manifest`): Embedded base64 PNG icons and W3C Web Manifest for installable PWA support.
+- **Issue #9** (`Fuel-corrected qualifying sim`): Built the fuel-adjusted pace calculation model and simulated qualifying leaderboard.
+- **Issue #8** (`Multi-session comparison`): Added Session 2 selector and head-to-head comparison mode.
+- **Issue #6** (`Driver Input Track Map`): Created driver pedal telemetry map tabs (Throttle, Brake, Gear).
+- **Issue #4** (`Sector Mini-map Colouring`): Added track map speed heatmap rendering.
+- **Issue #1** (`Adding historical team colours`): Configured historical constructor team colours from 2018 to present.
+
+
+---
+
 *Last updated: July 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
