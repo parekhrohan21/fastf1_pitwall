@@ -837,6 +837,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #106** / **Issue #105** (`docs: update README documentation for Live Timing Mode and troubleshooting fixes`): Updated `README.md` Troubleshooting section to document Real-Time Live Timing Mode and enforced British English spellings.
+- **PR #104** (`docs: clarify GitHub ID sequence & list PRs/Issues chronologically`): Added explanatory note on GitHub's unified ID sequence and formatted Section 18 of `DOCS.md` in strict reverse-chronological order.
 - **PR #103** / **Issue #102** (`docs: Add Solved Issues Changelog & Summary List to Documentation`): Added Section 18 to `DOCS.md` and anchor link in `README.md` logging all historical closed issues with 1-line explanations.
 - **PR #101** / **Issue #100** (`fix: NameError _PATCH_STATUS is not defined in app.py`): Imported `_PATCH_STATUS` and `test_curl_cffi_request` into `app.py` to fix NameError in sidebar diagnostics.
 - **PR #99** (`docs: expand user guide & developer manual for Live Timing Mode`): Expanded `README.md` How to Use section and `DOCS.md` testing documentation for Live Timing Mode.
