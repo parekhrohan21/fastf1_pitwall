@@ -244,9 +244,12 @@ if load_btn:
                 st.session_state["year1"] = year
             except Exception as e:
                 clear_session_cache(year, gp)
+                st.session_state["session"] = None
+                st.session_state["sess_key"] = None
+                err_msg = str(e).rstrip(".") + "."
                 st.error(
                     f"**Session Loading Error**\n\n"
-                    f"FastF1 could not load the lap data: {e}.\n\n"
+                    f"FastF1 could not load the lap data: {err_msg}\n\n"
                     "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
                 )
                 _render_footer()
@@ -263,9 +266,12 @@ if load_btn:
                 st.session_state["year2"] = year2
             except Exception as e:
                 clear_session_cache(year2, gp2)
+                st.session_state["session2"] = None
+                st.session_state["sess_key2"] = None
+                err_msg2 = str(e).rstrip(".") + "."
                 st.error(
                     f"**Session Loading Error (Session 2)**\n\n"
-                    f"FastF1 could not load the lap data: {e}.\n\n"
+                    f"FastF1 could not load the lap data: {err_msg2}\n\n"
                     "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
                 )
                 _render_footer()
