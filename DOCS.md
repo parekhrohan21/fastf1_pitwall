@@ -837,6 +837,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #110** / **Issue #109** (`fix: double period & session state reset on Session Loading Error`): Cleans up session state variables and formats exception error messages without trailing double periods (`servers..`) when session loading fails.
+- **PR #108** / **Issue #107** (`docs: update issue list chronology in developer manual`): Updated Section 18 of `DOCS.md` to prepend PR #106 / Issue #105 and PR #104.
 - **PR #106** / **Issue #105** (`docs: update README documentation for Live Timing Mode and troubleshooting fixes`): Updated `README.md` Troubleshooting section to document Real-Time Live Timing Mode and enforced British English spellings.
 - **PR #104** (`docs: clarify GitHub ID sequence & list PRs/Issues chronologically`): Added explanatory note on GitHub's unified ID sequence and formatted Section 18 of `DOCS.md` in strict reverse-chronological order.
 - **PR #103** / **Issue #102** (`docs: Add Solved Issues Changelog & Summary List to Documentation`): Added Section 18 to `DOCS.md` and anchor link in `README.md` logging all historical closed issues with 1-line explanations.
