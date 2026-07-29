@@ -837,6 +837,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #113** / **Issue #112** (`fix: Dark mode functionality & theme injection in app.py`): Invoked `inject_styles()` early in `app.py` on every render cycle to ensure dark/light mode state and constructor team themes are applied immediately.
+- **PR #111** (`docs: update Section 18 changelog for Issue #109`): Updated Section 18 of `DOCS.md` with PR #110 / Issue #109 entry.
 - **PR #110** / **Issue #109** (`fix: double period & session state reset on Session Loading Error`): Cleans up session state variables and formats exception error messages without trailing double periods (`servers..`) when session loading fails.
 - **PR #108** / **Issue #107** (`docs: update issue list chronology in developer manual`): Updated Section 18 of `DOCS.md` to prepend PR #106 / Issue #105 and PR #104.
 - **PR #106** / **Issue #105** (`docs: update README documentation for Live Timing Mode and troubleshooting fixes`): Updated `README.md` Troubleshooting section to document Real-Time Live Timing Mode and enforced British English spellings.
