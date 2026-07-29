@@ -41,6 +41,9 @@ from src.charts.plotly import (
 from src.charts.matplotlib import style_ax, build_chart, build_delta_chart
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+# Inject design system & dark/light theme CSS early on every render
+inject_styles("#FF8700")
+
 with st.sidebar:
     st.markdown(
         "<a href='http://rohanparekh.uk' target='_top' class='back-home-link'>"
@@ -457,7 +460,7 @@ tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
 
 colour1 = driver_colour(sess, driver1)
-st.markdown(f"<style>:root {{ --primary-color: {colour1}; --primary-rgb: {hex_to_rgb(colour1)}; }}</style>", unsafe_allow_html=True)
+inject_styles(colour1)
 colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver2 else "#27F4D2"
 
 matplotlib.rcParams.update(MATPLOTLIB_THEME)
