@@ -9,11 +9,12 @@ from src.data.loader import (
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
-    _fmt_driver1, _fmt_driver2
+    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
-    _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig
+    _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
+    build_grid_heatmap_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1107,3 +1108,72 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
             st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
         else:
             st.info("Load a session to view corner analysis.")
+
+
+def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[str], sess_key: str):
+    """Render the Multi-Driver Grid Analysis & Heatmaps section in app.py."""
+    if sess is None or laps_df is None or laps_df.empty or not all_drivers:
+        st.info("ℹ️ Multi-driver grid analysis is unavailable for this session.")
+        return
+
+    col_ctrl1, col_ctrl2 = st.columns([2, 1])
+
+    with col_ctrl1:
+        default_drvs = all_drivers[:10] if len(all_drivers) >= 10 else all_drivers
+        selected_drvs = st.multiselect(
+            "Select Grid Drivers (3 to 20 drivers)",
+            options=all_drivers,
+            default=default_drvs,
+            key="grid_heatmap_drivers_select",
+            format_func=_fmt_driver1,
+            help="Select drivers across the grid to compare split times, pace deltas, and top speeds.",
+        )
+
+    with col_ctrl2:
+        mode_label = st.radio(
+            "Analysis View",
+            options=["Sector Split Deltas", "Lap-by-Lap Pace Heatmap", "Top Speed Matrix"],
+            horizontal=False,
+            key="grid_heatmap_mode_radio",
+        )
+
+    if not selected_drvs or len(selected_drvs) < 2:
+        st.warning("⚠️ Please select at least 2 drivers to generate the grid analysis heatmap.")
+        return
+
+    mode_map = {
+        "Sector Split Deltas": "Sectors",
+        "Lap-by-Lap Pace Heatmap": "Laps",
+        "Top Speed Matrix": "Speed",
+    }
+
+    mode = mode_map.get(mode_label, "Sectors")
+    heatmap_data = _build_grid_heatmap_data(sess_key, laps_df, selected_drvs, mode=mode)
+
+    if not heatmap_data:
+        st.warning("⚠️ Unable to calculate grid heatmap data for the selected drivers and mode.")
+        return
+
+    fig = build_grid_heatmap_fig(heatmap_data, mode=mode)
+
+    # Metric Cards Summary
+    best_vals = heatmap_data.get("best_values", [])
+    cols_list = heatmap_data.get("columns", [])
+
+    if mode == "Sectors" and len(best_vals) >= 5:
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Grid Best S1", f"{best_vals[0]:.3f}s")
+        m2.metric("Grid Best S2", f"{best_vals[1]:.3f}s")
+        m3.metric("Grid Best S3", f"{best_vals[2]:.3f}s")
+        m4.metric("Grid Best Theoretical", f"{best_vals[3]:.3f}s")
+    elif mode == "Speed" and len(best_vals) >= 1:
+        m_cols = st.columns(min(len(best_vals), 4))
+        for idx, (mc_obj, val) in enumerate(zip(m_cols, best_vals)):
+            lbl = cols_list[idx] if idx < len(cols_list) else f"Speed {idx+1}"
+            mc_obj.metric(f"Top {lbl}", f"{val:.0f} km/h" if pd.notna(val) else "—")
+
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": True})
+    else:
+        st.info("No heatmap figure generated.")
+

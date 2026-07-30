@@ -32,7 +32,7 @@ from src.ui.components import (
     render_summary, render_session_stats, _render_fuel_sim_leaderboard,
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
-    render_live_status_banner
+    render_live_status_banner, _render_grid_heatmap_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -2038,6 +2038,12 @@ else:
     _ideal_df = _build_ideal_lap(sess_key, _all_laps1)
     _render_ideal_lap_section(_ideal_df, [driver1] + ([driver2] if compare and driver2 else []),
                               [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
+
+
+
+# ── Multi-Driver Grid Analysis & Heatmaps ───────────────────────────────────────
+st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
+_render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key)
 
 
 

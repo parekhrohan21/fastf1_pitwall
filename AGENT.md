@@ -182,6 +182,7 @@ To resolve technical debt and maintainability issues:
 - `src/charts/matplotlib.py` hosts static Matplotlib telemetry and speed delta charts.
 - **Decision #18**: *Real-Time Live Timing Stream Integration (`fastf1.livetiming`)* — Added support for recording and parsing live SignalR WebSocket streams via background threads (`start_live_recorder`, `stop_live_recorder`, `get_live_recorder_status`) and `load_live_session`. Included broadcast-grade live banner indicators and auto-refresh controls while adhering strictly to British English spellings across all comments, documentation, and user interfaces.
 - **Decision #19**: *Dark Mode & Theme Injection Fix (`inject_styles`)* — Ensure `inject_styles()` is called early in `app.py` on every render cycle so theme state (`dark_mode`) and CSS variables take effect immediately across all landing, sidebar, and telemetry states.
+- **Decision #20**: *Multi-Driver Grid Analysis & Heatmaps (`_build_grid_heatmap_data`)* — Added multi-driver grid analytics matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using interactive Plotly heatmaps with dynamic height calculation and broadcast color scales.
 
 ---
 

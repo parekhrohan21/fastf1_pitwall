@@ -938,3 +938,76 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
         )
     )
     return fig_deg, table_rows
+
+
+def build_grid_heatmap_fig(heatmap_data: dict, mode: str = "Sectors") -> go.Figure | None:
+    """Build an interactive Plotly Heatmap for multi-driver grid analysis."""
+    if not heatmap_data or "deltas" not in heatmap_data or "drivers" not in heatmap_data:
+        return None
+
+    drivers = heatmap_data["drivers"]
+    columns = heatmap_data["columns"]
+    deltas = heatmap_data["deltas"]
+    values = heatmap_data.get("values", [])
+
+    if mode == "Speed":
+        # Deficit in km/h: 0 (top speed) -> Emerald Green, larger deficit -> Dark Red
+        colorscale = [
+            [0.0, "#00E676"],   # Top speed (0 km/h deficit)
+            [0.2, "#66BB6A"],
+            [0.5, "#FFD54F"],   # Moderate deficit
+            [0.8, "#FF7043"],
+            [1.0, "#FF5252"],   # Highest speed deficit
+        ]
+        unit_label = "km/h deficit"
+        hover_fmt = "<b>%{y} · %{x}</b><br>Value: %{customdata}<br>Deficit: -%{z:.1f} km/h<extra></extra>"
+    else:
+        # Time delta in seconds: 0s (P1) -> Emerald Green, larger delta -> Coral Red
+        colorscale = [
+            [0.0, "#00E676"],   # 0.000s delta (P1 / Best)
+            [0.15, "#81C784"],  # +0.1s - +0.3s
+            [0.4, "#FFD54F"],   # +0.5s
+            [0.7, "#FF7043"],   # +1.0s
+            [1.0, "#FF5252"],   # +2.0s+ deficit
+        ]
+        unit_label = "seconds delta"
+        hover_fmt = "<b>%{y} · %{x}</b><br>Lap/Split: %{customdata}<br>Delta: +%{z:.3f}s<extra></extra>"
+
+    fig = go.Figure(data=go.Heatmap(
+        z=deltas,
+        x=columns,
+        y=drivers,
+        customdata=values,
+        colorscale=colorscale,
+        colorbar=dict(
+            title=dict(text=unit_label, font=dict(size=12)),
+            thickness=14,
+            len=0.85,
+        ),
+        hovertemplate=hover_fmt,
+        showscale=True,
+    ))
+
+    calc_height = max(420, len(drivers) * 32 + 100)
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Sector / Lap / Speed Metric",
+            gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False,
+            side="top" if len(columns) > 15 else "bottom",
+        ),
+        yaxis=dict(
+            title="Driver",
+            autorange="reversed",  # P1 at top
+            gridcolor="rgba(128,128,128,0.15)",
+            zeroline=False,
+        ),
+        height=calc_height,
+        margin=dict(l=60, r=40, t=40, b=40),
+    )
+
+    return fig
+

@@ -1161,3 +1161,200 @@ def _get_round(session):
     return None
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_grid_heatmap_data(sess_k: str, laps_df: pd.DataFrame, selected_drivers: list[str] | None = None, mode: str = "Sectors") -> dict | None:
+    """
+    Build multi-driver grid heatmap matrix data.
+    Modes:
+      - 'Sectors': Matrix of S1, S2, S3, Theoretical Best, Actual Best deltas (+seconds) vs grid best.
+      - 'Laps': Matrix of Drivers x Laps deltas (+seconds) vs fastest lap time per lap.
+      - 'Speed': Matrix of ST, I1, I2, FL speed deficits (km/h) vs top speed.
+    """
+    try:
+        if laps_df is None or laps_df.empty:
+            return None
+
+        laps = laps_df.copy()
+        laps = laps.dropna(subset=["Driver"])
+
+        all_drivers = sorted(laps["Driver"].unique().tolist())
+        if selected_drivers:
+            drivers = [d for d in selected_drivers if d in all_drivers]
+        else:
+            drivers = all_drivers
+
+        if not drivers:
+            return None
+
+        if mode == "Sectors":
+            sector_cols = ["Sector1Time", "Sector2Time", "Sector3Time", "LapTime"]
+            for col in ["Sector1Time", "Sector2Time", "Sector3Time"]:
+                if col not in laps.columns or laps[col].dropna().empty:
+                    return None
+
+            records = []
+            for drv in drivers:
+                grp = laps[laps["Driver"] == drv]
+                s1 = grp["Sector1Time"].dropna()
+                s2 = grp["Sector2Time"].dropna()
+                s3 = grp["Sector3Time"].dropna()
+                lt = grp["LapTime"].dropna()
+
+                if s1.empty or s2.empty or s3.empty or lt.empty:
+                    continue
+
+                b1 = s1.min().total_seconds()
+                b2 = s2.min().total_seconds()
+                b3 = s3.min().total_seconds()
+                theo = b1 + b2 + b3
+                act = lt.min().total_seconds()
+
+                records.append({
+                    "Driver": drv,
+                    "S1": b1,
+                    "S2": b2,
+                    "S3": b3,
+                    "Theoretical": theo,
+                    "Actual": act,
+                })
+
+            if not records:
+                return None
+
+            df = pd.DataFrame(records)
+            drv_order = df["Driver"].tolist()
+
+            min_s1 = df["S1"].min()
+            min_s2 = df["S2"].min()
+            min_s3 = df["S3"].min()
+            min_theo = df["Theoretical"].min()
+            min_act = df["Actual"].min()
+
+            delta_mat = np.zeros((len(df), 5))
+            value_mat = []
+
+            for i, row in df.iterrows():
+                d_s1 = row["S1"] - min_s1
+                d_s2 = row["S2"] - min_s2
+                d_s3 = row["S3"] - min_s3
+                d_theo = row["Theoretical"] - min_theo
+                d_act = row["Actual"] - min_act
+
+                delta_mat[i] = [d_s1, d_s2, d_s3, d_theo, d_act]
+                value_mat.append([
+                    f"{row['S1']:.3f}s",
+                    f"{row['S2']:.3f}s",
+                    f"{row['S3']:.3f}s",
+                    f"{row['Theoretical']:.3f}s",
+                    f"{row['Actual']:.3f}s",
+                ])
+
+            return {
+                "drivers": drv_order,
+                "columns": ["Sector 1", "Sector 2", "Sector 3", "Theoretical Best", "Actual Best"],
+                "deltas": delta_mat,
+                "values": value_mat,
+                "best_values": [min_s1, min_s2, min_s3, min_theo, min_act],
+            }
+
+        elif mode == "Laps":
+            laps = laps.dropna(subset=["LapNumber", "LapTime"])
+            if laps.empty:
+                return None
+
+            laps["LapNumber"] = laps["LapNumber"].astype(int)
+            laps["LapTime_s"] = laps["LapTime"].apply(lambda t: t.total_seconds() if pd.notna(t) else np.nan)
+            laps = laps.dropna(subset=["LapTime_s"])
+
+            max_lap = min(int(laps["LapNumber"].max()), 75)
+            lap_range = list(range(1, max_lap + 1))
+
+            pvt = laps.pivot_table(index="Driver", columns="LapNumber", values="LapTime_s", aggfunc="min")
+            pvt = pvt.reindex(index=drivers, columns=lap_range)
+
+            # Drop laps with no data across all selected drivers
+            pvt = pvt.dropna(how="all", axis=1)
+            if pvt.empty:
+                return None
+
+            valid_laps = pvt.columns.tolist()
+            lap_bests = pvt.min(axis=0)
+
+            delta_df = pvt.sub(lap_bests, axis=1)
+            delta_mat = delta_df.fillna(np.nan).to_numpy()
+
+            value_mat = []
+            for drv in drivers:
+                row_vals = []
+                for lap_num in valid_laps:
+                    val = pvt.loc[drv, lap_num] if drv in pvt.index else np.nan
+                    if pd.notna(val):
+                        m = int(val // 60)
+                        s = val % 60
+                        row_vals.append(f"{m}:{s:06.3f}" if m > 0 else f"{s:.3f}s")
+                    else:
+                        row_vals.append("—")
+                value_mat.append(row_vals)
+
+            return {
+                "drivers": drivers,
+                "columns": [f"Lap {l}" for l in valid_laps],
+                "deltas": delta_mat,
+                "values": value_mat,
+                "best_values": lap_bests.tolist(),
+            }
+
+        elif mode == "Speed":
+            speed_cols = ["SpeedST", "SpeedI1", "SpeedI2", "SpeedFL"]
+            available = [c for c in speed_cols if c in laps.columns and not laps[c].dropna().empty]
+            if not available:
+                return None
+
+            records = []
+            for drv in drivers:
+                grp = laps[laps["Driver"] == drv]
+                row = {"Driver": drv}
+                for col in available:
+                    sp = grp[col].dropna()
+                    row[col] = sp.max() if not sp.empty else np.nan
+                records.append(row)
+
+            df = pd.DataFrame(records)
+            drv_order = df["Driver"].tolist()
+
+            col_labels = [c.replace("Speed", "") + " Speed" for c in available]
+            max_speeds = [df[c].max() for c in available]
+
+            delta_mat = np.zeros((len(df), len(available)))
+            value_mat = []
+
+            for i, row in df.iterrows():
+                row_deltas = []
+                row_vals = []
+                for j, col in enumerate(available):
+                    val = row[col]
+                    max_val = max_speeds[j]
+                    if pd.notna(val) and pd.notna(max_val):
+                        defic = max_val - val  # Speed deficit in km/h (positive value means slower than top speed)
+                        row_deltas.append(defic)
+                        row_vals.append(f"{val:.0f} km/h")
+                    else:
+                        row_deltas.append(np.nan)
+                        row_vals.append("—")
+                delta_mat[i] = row_deltas
+                value_mat.append(row_vals)
+
+            return {
+                "drivers": drv_order,
+                "columns": col_labels,
+                "deltas": delta_mat,
+                "values": value_mat,
+                "best_values": max_speeds,
+            }
+
+        return None
+    except Exception:
+        return None
+
+
+
