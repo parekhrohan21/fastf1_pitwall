@@ -837,6 +837,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #114** / **Issue #85** (`feat: Multi-Driver Grid Analysis & Heatmaps`): Introduced multi-driver grid analysis matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using custom interactive Plotly heatmaps.
 - **PR #113** / **Issue #112** (`fix: Dark mode functionality & theme injection in app.py`): Invoked `inject_styles()` early in `app.py` on every render cycle to ensure dark/light mode state and constructor team themes are applied immediately.
 - **PR #111** (`docs: update Section 18 changelog for Issue #109`): Updated Section 18 of `DOCS.md` with PR #110 / Issue #109 entry.
 - **PR #110** / **Issue #109** (`fix: double period & session state reset on Session Loading Error`): Cleans up session state variables and formats exception error messages without trailing double periods (`servers..`) when session loading fails.
@@ -894,6 +895,24 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 - **Issue #4** (`Sector Mini-map Colouring`): Added track map speed heatmap rendering.
 - **Issue #1** (`Adding historical team colours`): Configured historical constructor team colours from 2018 to present.
 
+
+---
+
+## 19. Multi-Driver Grid Analysis & Heatmaps Architecture
+
+The **Multi-Driver Grid Analysis & Heatmaps** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`) expands driver comparison from 1v1 to full grid-wide matrix analysis.
+
+### Data Layer (`_build_grid_heatmap_data`)
+- **Cached Builder**: Annotated with `@st.cache_data(show_spinner=False, ttl=3600)` to ensure fast rerenders.
+- **Data Structuring**:
+  - `Sector Split Deltas`: Calculates `Sector 1`, `Sector 2`, `Sector 3`, `Theoretical Best`, and `Actual Best` for selected drivers, returning delta matrices (+seconds) relative to the overall grid-best split times.
+  - `Lap-by-Lap Pace Heatmap`: Computes a `Drivers × Laps` matrix calculating pace deltas relative to the fastest lap time of each lap.
+  - `Top Speed Matrix`: Extracts maximum speeds for `SpeedST`, `SpeedI1`, `SpeedI2`, and `SpeedFL` across drivers, returning speed deficits (km/h) relative to the top speed.
+
+### Visualisation Layer (`build_grid_heatmap_fig`)
+- **Plotly Heatmap**: Renders `go.Heatmap` with high-contrast broadcast color scales (`#00E676` green for 0.0s / top speed, scaling to `#FF5252` red for deficits).
+- **Interactive Tooltips**: Formats `customdata` values to show absolute times alongside relative deltas.
+- **Responsive Layout**: Dynamically computes figure height based on driver selection count (`max(420, len(drivers) * 32 + 100)`).
 
 ---
 
