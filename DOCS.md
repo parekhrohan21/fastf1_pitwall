@@ -24,6 +24,8 @@
 15. [Performance Notes](#15-performance-notes)
 16. [Testing](#16-testing)
 17. [Future Roadmap](#17-future-roadmap)
+18. [Solved Issues & Changelog](#18-solved-issues--changelog)
+19. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
 
 ---
 

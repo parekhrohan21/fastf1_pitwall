@@ -171,6 +171,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 14. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map, driver input pedal traces, or build the full multi-car Race Replay animation!
 15. **Championship Standings & Classification** — Scroll to the very bottom to view the Constructors' Championship standings (dynamically matched to constructor colours) and the official final standings table (with points, retirements/laps, stops, and Q1/Q2/Q3 split times where applicable).
 16. **Real-Time Live Timing Mode** — Enable **🔴 Real-Time Live Timing Mode** in the sidebar during a live race weekend. Start the SignalR stream recorder to save WebSocket stream packets to disk, select an auto-refresh rate (5s, 10s, 15s, 30s), and click **⬇️ Load Session(s)** to view live streaming telemetry and lap times!
+17. **Multi-Driver Grid Analysis & Heatmaps** — Scroll to the Multi-Driver Grid Analysis section to select 3 to 20 drivers across the grid. Toggle between **Sector Split Deltas**, **Lap-by-Lap Pace Heatmap**, and **Top Speed Matrix** to view color-coded performance heatmaps.
 
 ---
 
