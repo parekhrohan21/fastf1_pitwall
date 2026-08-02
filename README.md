@@ -10,7 +10,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 
 - **Any Session**: Supports data from 2018 → present (Race, Qualifying, Sprint, Practice 1/2/3).
 - **6-Channel Telemetry**: View combined or separate traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS.
-- **Head-to-Head Comparison**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart showing where time is gained/lost.
+- **Head-to-Head Comparison**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart and a **Continuous Time Delta (Δ)** chart showing exactly where time is gained/lost per meter along the track.
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays. Gracefully falls back to a clean gray track outline with warning banners if telemetry data (like speed or driver pedal inputs) is incomplete or partially unavailable, ensuring the dashboard never crashes.
 - **AWS-Style Mini-Sector Speed Map**: In Compare Mode, the track map is dynamically divided into dozens of 200m mini-sectors based on distance telemetry. Each track segment is smoothly interpolated and coloured according to the driver who carried the highest average speed through that exact section, mimicking premium broadcast graphics.
 - **Driver Input Track Map**: A dedicated map mode visualising driver foot pedal telemetry (Green for 100% Throttle, Red for Braking, Yellow for Coasting). Supports side-by-side comparison in Compare Mode.

@@ -100,3 +100,45 @@ def build_delta_chart(tel1, tel2, colour1, colour2, label1, label2):
     ax_d.legend(fontsize=10, framealpha=0.9)
     fig_d.tight_layout()
     return fig_d
+
+import fastf1.utils
+
+def build_time_delta_chart(lap_comp, lap_ref, colour_comp, colour_ref, label_comp, label_ref):
+    """
+    Plots the continuous time delta between two laps over distance.
+    delta_time returns a pd.Series representing the time delta.
+    A positive delta means lap_comp is slower than lap_ref.
+    A negative delta means lap_comp is faster than lap_ref.
+    """
+    try:
+        delta_time, ref_tel, comp_tel = fastf1.utils.delta_time(lap_ref, lap_comp)
+        
+        fig_td, ax_td = plt.subplots(figsize=(14, 2.8), facecolor="none")
+        ax_td.set_facecolor("none")
+        ax_td.axhline(0, color="gray", alpha=0.5, linewidth=0.8)
+        
+        # Fill where comp is slower than ref (positive delta)
+        ax_td.fill_between(ref_tel["Distance"], delta_time,
+                           where=(delta_time >= 0), color=colour_comp, alpha=0.6,
+                           label=f"{label_ref} faster", interpolate=True)
+        # Fill where comp is faster than ref (negative delta)
+        ax_td.fill_between(ref_tel["Distance"], delta_time,
+                           where=(delta_time < 0),  color=colour_ref, alpha=0.6,
+                           label=f"{label_comp} faster", interpolate=True)
+                           
+        ax_td.set_ylabel("Δ Time (s)", fontsize=11)
+        ax_td.set_xlabel("Distance (m)", fontsize=11)
+        ax_td.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.2f"))
+        
+        for spine in ax_td.spines.values():
+            spine.set_edgecolor("gray")
+            spine.set_alpha(0.3)
+        ax_td.grid(True, linestyle=":", linewidth=0.3, alpha=0.8)
+        ax_td.tick_params(labelsize=10)
+        ax_td.legend(fontsize=10, framealpha=0.9)
+        fig_td.tight_layout()
+        return fig_td
+    except Exception as e:
+        import logging
+        logging.error(f"Error building time delta chart: {e}")
+        return None

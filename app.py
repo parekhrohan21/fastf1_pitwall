@@ -38,7 +38,7 @@ from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     build_tyre_deg_fig
 )
-from src.charts.matplotlib import style_ax, build_chart, build_delta_chart
+from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 # Inject design system & dark/light theme CSS early on every render
@@ -1720,6 +1720,13 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
         fig_d = build_delta_chart(tel1, tel2, colour1, colour2, label1, label2)
         st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
+
+if compare and chart_mode == "Overlapping" and lap1 is not None and lap2 is not None:
+    st.markdown("<div class='section-title'>Time Delta (Continuous)</div>", unsafe_allow_html=True)
+    fig_td = build_time_delta_chart(lap2, lap1, colour2, colour1, label2, label1)
+    if fig_td:
+        st.pyplot(fig_td, width='stretch')
+        plt.close(fig_td)
 
 # ── Fastest Laps Leaderboard ──────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_allow_html=True)

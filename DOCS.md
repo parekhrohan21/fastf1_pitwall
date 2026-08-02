@@ -447,6 +447,7 @@ build_chart()           ← 6-channel Telemetry (Matplotlib)
 _build_export_csv()     ← Export panel — Distance, Speed, Throttle, Brake, RPM, Gear, DRS, Sector1/2/3 times, lap metadata
         │
 Speed Delta             ← Matplotlib fill-between (compare mode only)
+Time Delta (Cont.)      ← Matplotlib fill-between (compare mode only)
         │
 _render_leaderboard()   ← Fastest Laps Leaderboard (HTML table)
         │
@@ -486,6 +487,7 @@ Each chart section follows the same pattern:
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
+| Time Delta | Matplotlib | `build_time_delta_chart` | `src/charts/matplotlib.py` | `lap1`, `lap2` Laps |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `laps_df` grouped by driver |
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
