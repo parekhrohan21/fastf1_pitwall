@@ -1,5 +1,5 @@
 import streamlit as st
-
+import streamlit.components.v1 as components
 # ── Constants ─────────────────────────────────────────────────────────────────
 TEAM_COLOURS = {
     # ── 2024–2025 active grid ─────────────────────────────────────────────────

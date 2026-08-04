@@ -36,7 +36,7 @@ from src.ui.components import (
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
-    build_tyre_deg_fig
+    build_tyre_deg_fig, build_undercut_chart
 )
 from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart
 
@@ -1458,6 +1458,55 @@ else:
         )
     else:
         st.info("No pit stops recorded for the selected driver(s).")
+
+# ── Pit Strategy & Undercut / Overcut Simulator ───────────────────────────────
+if compare and driver2 and _pit_d1 and _pit_d2:
+    st.markdown("<div class='section-title'>Pit Strategy & Undercut Analysis</div>", unsafe_allow_html=True)
+    
+    battles = []
+    for p1 in _pit_d1:
+        lap1 = p1['lap']
+        for p2 in _pit_d2:
+            lap2 = p2['lap']
+            if abs(lap1 - lap2) <= 3:
+                battles.append((p1, p2))
+                break
+                
+    if not battles:
+        st.info("The selected drivers were on divergent strategies and did not engage in a direct pit stop battle.")
+    else:
+        battle = battles[0]
+        lap1 = battle[0]['lap']
+        lap2 = battle[1]['lap']
+        
+        w_start = min(lap1, lap2) - 1
+        w_end = max(lap1, lap2) + 2
+        
+        try:
+            t1_start = _all_laps1[_all_laps1['LapNumber'] == w_start]['Time'].iloc[0]
+            t2_start = _all_laps2[_all_laps2['LapNumber'] == w_start]['Time'].iloc[0]
+            gap_start = (t1_start - t2_start).total_seconds()
+            
+            t1_end = _all_laps1[_all_laps1['LapNumber'] == w_end]['Time'].iloc[0]
+            t2_end = _all_laps2[_all_laps2['LapNumber'] == w_end]['Time'].iloc[0]
+            gap_end = (t1_end - t2_end).total_seconds()
+            
+            first_pitter = label1 if lap1 < lap2 else (label2 if lap2 < lap1 else "Simultaneous")
+            
+            net_change = gap_start - gap_end
+            success = "Successful" if (lap1 < lap2 and net_change > 0) or (lap2 < lap1 and net_change < 0) else "Failed"
+            success_color = "#52E252" if success == "Successful" else "#E8002D"
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Aggressor (Pitted First)", first_pitter)
+            col2.metric(f"Gap at Lap {w_start}", f"{abs(gap_start):.2f}s", f"{'Behind' if gap_start > 0 else 'Ahead'}")
+            col3.metric(f"Gap at Lap {w_end}", f"{abs(gap_end):.2f}s", f"{'Behind' if gap_end > 0 else 'Ahead'}")
+            col4.markdown(f"<div style='text-align:center;'><div>Status</div><h3 style='color:{success_color}; margin-top:0;'>{success}</h3></div>", unsafe_allow_html=True)
+            
+            st.plotly_chart(build_undercut_chart(_all_laps1, _all_laps2, label1, label2, colour1, colour2, w_start, w_end, lap1, lap2), width="stretch", config={"displayModeBar": False})
+            
+        except Exception as e:
+            st.warning("Could not calculate undercut gap due to missing telemetry on the battle laps.")
 
 
 # ── Tyre Degradation Analysis ──────────────────────────────────────────────────
