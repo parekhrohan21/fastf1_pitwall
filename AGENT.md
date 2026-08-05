@@ -184,6 +184,7 @@ To resolve technical debt and maintainability issues:
 - **Decision #19**: *Dark Mode & Theme Injection Fix (`inject_styles`)* — Ensure `inject_styles()` is called early in `app.py` on every render cycle so theme state (`dark_mode`) and CSS variables take effect immediately across all landing, sidebar, and telemetry states.
 - **Decision #20**: *Multi-Driver Grid Analysis & Heatmaps (`_build_grid_heatmap_data`)* — Added multi-driver grid analytics matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using interactive Plotly heatmaps with dynamic height calculation and broadcast color scales.
 - **Decision #21**: *Continuous Time Delta per Meter Chart (`build_time_delta_chart`)* — Added a continuous time delta chart using `fastf1.utils.delta_time` below the speed delta chart in compare mode to visualise exact time gained/lost (in seconds) vs distance (meters).
+- **Decision #22**: *Pit Strategy & Undercut / Overcut Simulator (`build_undercut_chart`)* — Added automated strategic battle analysis pairing adjacent pit stops (±3 laps) between two drivers in compare mode, calculating pre/post pit gaps, and rendering a Plotly pit window gap chart with outcome metrics cards.
 
 ---
 

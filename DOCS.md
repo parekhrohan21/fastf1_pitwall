@@ -442,6 +442,8 @@ _stint_fig()            ← Tyre Stint Timeline (Plotly Gantt bars)
         │
 _render_pit_stops()     ← Pit Stop Summary (HTML table)
         │
+build_undercut_chart()  ← Pit Strategy & Undercut Analysis (Plotly gap line chart + metrics)
+        │
 build_chart()           ← 6-channel Telemetry (Matplotlib)
         │
 _build_export_csv()     ← Export panel — Distance, Speed, Throttle, Brake, RPM, Gear, DRS, Sector1/2/3 times, lap metadata
@@ -483,6 +485,7 @@ Each chart section follows the same pattern:
 | Fuel-Corrected Qualifying Sim | HTML | `_build_fuel_sim_leaderboard` | `_render_fuel_sim_leaderboard` | `laps_df` |
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
+| Pit Strategy & Undercut | Plotly | — (inline logic) | `build_undercut_chart` | `_all_laps1`, `_all_laps2` |
 | Tyre Degradation | Plotly | `_build_tyre_deg_data` | inline | `laps_df` filtered by driver; OLS regression of LapTime vs TyreLife per stint. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
