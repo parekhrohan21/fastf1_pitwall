@@ -6,7 +6,47 @@ from plotly.subplots import make_subplots
 from src.ui.styles import COMPOUND_COLOURS
 from src.data.loader import _get_telemetry_for_map, _team_colour
 
-def _lap_history_fig(drivers_data: list, highlight_laps: list) -> go.Figure:
+# ── Flag zone colour map ──────────────────────────────────────────────────────
+_FLAG_COLOURS = {
+    "SAFETY CAR":         "rgba(255,140,0,0.15)",
+    "VIRTUAL SAFETY CAR": "rgba(255,223,0,0.12)",
+    "RED FLAG":           "rgba(220,0,0,0.15)",
+    "YELLOW FLAG":        "rgba(255,200,0,0.10)",
+}
+
+
+def _add_flag_zones(fig: go.Figure, rc_messages, max_lap: int = 70) -> None:
+    """Add semi-transparent flag zone rectangles to a Plotly figure that uses LapNumber on x-axis."""
+    if rc_messages is None or rc_messages.empty:
+        return
+    if "LapNumber" not in rc_messages.columns or "FlagType" not in rc_messages.columns:
+        return
+
+    df = rc_messages.dropna(subset=["LapNumber"]).copy()
+    df["LapNumber"] = df["LapNumber"].astype(int)
+
+    flag_types = ["SAFETY CAR", "VIRTUAL SAFETY CAR", "RED FLAG", "YELLOW FLAG"]
+    for _, row in df.iterrows():
+        ftype = row["FlagType"]
+        if ftype not in flag_types:
+            continue
+        start_lap = int(row["LapNumber"])
+        # Find next CLEAR after this flag
+        clears = df[(df["FlagType"] == "CLEAR") & (df["LapNumber"] > start_lap)]
+        end_lap = int(clears["LapNumber"].iloc[0]) if not clears.empty else start_lap + 4
+        end_lap = min(end_lap, max_lap)
+        fig.add_vrect(
+            x0=start_lap - 0.5, x1=end_lap + 0.5,
+            fillcolor=_FLAG_COLOURS[ftype],
+            layer="below", line_width=0,
+            annotation_text=ftype.replace(" FLAG", ""),
+            annotation_position="top left",
+            annotation_font_size=9,
+            annotation_font_color="rgba(255,255,255,0.6)",
+        )
+
+
+def _lap_history_fig(drivers_data: list, highlight_laps: list, rc_messages=None) -> go.Figure:
     """
     drivers_data : list of (driver, colour, laps_df)
     highlight_laps: list of selected LapNumber per driver (same order)
@@ -104,6 +144,17 @@ def _lap_history_fig(drivers_data: list, highlight_laps: list) -> go.Figure:
         hovermode="x unified",
         height=280,
     )
+    # Overlay flag zones
+    if rc_messages is not None:
+        try:
+            all_laps = []
+            for _, _, laps in drivers_data:
+                if laps is not None and not laps.empty and "LapNumber" in laps.columns:
+                    all_laps.extend(laps["LapNumber"].tolist())
+            max_lap = int(max(all_laps)) if all_laps else 70
+        except Exception:
+            max_lap = 70
+        _add_flag_zones(fig, rc_messages, max_lap)
     return fig
 
 
