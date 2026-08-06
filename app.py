@@ -24,7 +24,8 @@ from src.data.loader import (
     _build_fuel_sim_leaderboard, _build_stints, _build_pit_stops, _build_tyre_deg_data,
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
-    get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request
+    get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request,
+    _build_race_control_messages
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
@@ -36,7 +37,7 @@ from src.ui.components import (
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
-    build_tyre_deg_fig, build_undercut_chart
+    build_tyre_deg_fig, build_undercut_chart, _add_flag_zones
 )
 from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart
 
@@ -368,6 +369,9 @@ except Exception as e:
 # ── Laps snapshot ─────────────────────────────────────────────────────────────
 _all_laps1: pd.DataFrame = pd.DataFrame(sess.laps.copy())
 _all_laps2: pd.DataFrame = pd.DataFrame(sess2.laps.copy()) if sess2 is not None else None
+
+# ── Race Control Messages ──────────────────────────────────────────────────────
+_rc_messages = _build_race_control_messages(sess_key, sess)
 
 # ── Driver name labels (built once per session) ───────────────────────────────
 _drv_labels1: dict = _build_driver_labels(sess)
@@ -881,7 +885,7 @@ else:
     else:
         _hist_pairs_filtered = _hist_pairs
 
-    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps), width="stretch", config={"displayModeBar": False})
+    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps, rc_messages=_rc_messages), width="stretch", config={"displayModeBar": False})
 
 # ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
 st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
@@ -2147,8 +2151,8 @@ def _build_gap_data(sess_k: str, laps_df: pd.DataFrame, _session_obj=None):
     except Exception:
         return None, None
 
-def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_laps):
-    """Build and return a Plotly figure of gap to leader."""
+def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_laps, rc_messages=None):
+    """Build and return a Plotly figure of gap to leader with optional flag zone overlays."""
     fig = go.Figure()
 
     # Grey background traces for all other drivers
@@ -2214,9 +2218,17 @@ def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_
         hovermode="x unified",
         height=420,
     )
+    # Overlay flag zones if available
+    if rc_messages is not None:
+        try:
+            all_laps = [ln for gap in gap_to_leader.values() for ln in gap.index]
+            max_lap = int(max(all_laps)) if all_laps else 70
+        except Exception:
+            max_lap = 70
+        _add_flag_zones(fig, rc_messages, max_lap)
     return fig
 
-def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_drivers, highlight_colours, fmt_func=None):
+def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_drivers, highlight_colours, fmt_func=None, rc_messages=None):
     gtl_data, ts_data = _build_gap_data(sess_k, laps_df, session_obj)
     if gtl_data is None:
         st.info("Gap to Leader data is not available for this session.")
@@ -2226,7 +2238,7 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
     highlight = [d for d in highlight_drivers if d in gtl_data]
     colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
-    gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps)
+    gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps, rc_messages=rc_messages)
     st.plotly_chart(gtl_fig, width="stretch", config={"displayModeBar": False})
 
     # Show quick stats below the chart
@@ -2248,13 +2260,50 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
 if sess2 is not None:
     tab_g1, tab_g2 = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
     with tab_g1:
-        _render_gap_to_leader_section(sess_key, _all_laps1, sess, [driver1], [colour1], _fmt_driver1)
+        _render_gap_to_leader_section(sess_key, _all_laps1, sess, [driver1], [colour1], _fmt_driver1, rc_messages=_rc_messages)
     with tab_g2:
         _render_gap_to_leader_section(sess_key2, _all_laps2, sess2, [driver2], [colour2], _fmt_driver2)
 else:
     _render_gap_to_leader_section(sess_key, _all_laps1, sess,
                                   [driver1] + ([driver2] if compare and driver2 else []),
-                                  [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
+                                  [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1,
+                                  rc_messages=_rc_messages)
+
+# ── Race Control Feed ─────────────────────────────────────────────────────────────
+st.markdown("<div class='section-title'>Race Control Feed</div>", unsafe_allow_html=True)
+
+if _rc_messages is None or _rc_messages.empty:
+    st.info("Race control messages are not available for this session.")
+else:
+    # Flag type colour badge map
+    _FLAG_BADGE = {
+        "SAFETY CAR":         ("🟠", "#FF8C00"),
+        "VIRTUAL SAFETY CAR": ("🟡", "#FFD700"),
+        "RED FLAG":           ("🔴", "#DC0000"),
+        "YELLOW FLAG":        ("🟡", "#FFC800"),
+        "CLEAR":              ("🟢", "#39B54A"),
+        "INVESTIGATION":      ("🔵", "#5B8DEF"),
+        "INFO":               ("⚪", "#888888"),
+    }
+    # Searchable filter
+    _rc_filter_options = ["All"] + sorted(_rc_messages["FlagType"].unique().tolist())
+    _rc_filter = st.selectbox("Filter by event type", _rc_filter_options, key="rc_filter")
+    _rc_display = _rc_messages if _rc_filter == "All" else _rc_messages[_rc_messages["FlagType"] == _rc_filter]
+
+    # Build display columns
+    _rc_cols = [c for c in ["LapNumber", "FlagType", "Message", "Category", "Scope", "Sector"] if c in _rc_display.columns]
+    _rc_df = _rc_display[_rc_cols].copy()
+    if "LapNumber" in _rc_df.columns:
+        _rc_df["LapNumber"] = _rc_df["LapNumber"].apply(lambda x: f"Lap {int(x)}" if pd.notna(x) else "—")
+    if "FlagType" in _rc_df.columns:
+        _rc_df["FlagType"] = _rc_df["FlagType"].apply(
+            lambda ft: f"{_FLAG_BADGE.get(ft, ('⚪', '#888888'))[0]} {ft}"
+        )
+    st.dataframe(
+        _rc_df,
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 # ── Race Position Chart ───────────────────────────────────────────────────────

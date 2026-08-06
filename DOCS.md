@@ -457,6 +457,8 @@ _build_ideal_lap()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver
         │
 Gap to Leader           ← Plotly line chart (all drivers)
         │
+Race Control Feed       ← Filterable st.dataframe of flag events + flag zones overlaid on Lap History & Gap charts
+        │
 Race Position           ← Plotly line chart — all drivers faded, selected highlighted (_build_position_data)
         │
 Track Map               ← Plotly scatter (speed-coloured path)
@@ -494,6 +496,7 @@ Each chart section follows the same pattern:
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `laps_df` grouped by driver |
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
 | Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
+| Race Control Feed | st.dataframe + vrect | `_build_race_control_messages` | inline | `sess.race_control_messages` |
 | Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colours mini-sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |

@@ -1357,4 +1357,50 @@ def _build_grid_heatmap_data(sess_k: str, laps_df: pd.DataFrame, selected_driver
         return None
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_race_control_messages(sess_k: str, _sess_obj) -> pd.DataFrame | None:
+    """Parse race_control_messages from the session into a clean DataFrame of flag events."""
+    try:
+        rc = getattr(_sess_obj, "race_control_messages", None)
+        if rc is None or (hasattr(rc, "empty") and rc.empty):
+            return None
 
+        df = pd.DataFrame(rc).copy()
+        if df.empty:
+            return None
+
+        # Normalise column names
+        df.columns = [c.strip() for c in df.columns]
+
+        # Keep relevant columns that are commonly present
+        keep_cols = [c for c in ["Time", "LapNumber", "Category", "Message", "Flag", "Scope", "Sector", "RacingNumber", "Status"]
+                     if c in df.columns]
+        df = df[keep_cols].copy()
+
+        # Compute LapNumber as int where available
+        if "LapNumber" in df.columns:
+            df["LapNumber"] = pd.to_numeric(df["LapNumber"], errors="coerce")
+
+        # Classify flag type for colouring/filtering
+        def _classify(row) -> str:
+            msg = str(row.get("Message", "")).upper()
+            flag = str(row.get("Flag", "")).upper()
+            if "SAFETY CAR DEPLOYED" in msg or flag == "SC":
+                return "SAFETY CAR"
+            if "VIRTUAL SAFETY CAR" in msg or flag == "VSC":
+                return "VIRTUAL SAFETY CAR"
+            if "RED FLAG" in msg or flag == "RED":
+                return "RED FLAG"
+            if "YELLOW" in msg or flag == "YELLOW":
+                return "YELLOW FLAG"
+            if "CLEAR" in msg or flag == "CLEAR" or "RESUME" in msg:
+                return "CLEAR"
+            if "INVESTIGATION" in msg or "NOTED" in msg or "PENALTY" in msg:
+                return "INVESTIGATION"
+            return "INFO"
+
+        df["FlagType"] = df.apply(_classify, axis=1)
+
+        return df.reset_index(drop=True)
+    except Exception:
+        return None
