@@ -847,6 +847,10 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #125** / **Issue #118** (`feat: Race Control Incident Timeline & Flag Overlays`): Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
+- **Issue #117** (`feat: Pit Strategy Simulator`): Added automated strategic battle analysis pairing adjacent pit stops (±3 laps) between two drivers in compare mode, calculating pre/post pit gaps, and rendering a Plotly pit window gap chart with outcome metrics cards.
+- **Issue #116** (`feat: Continuous Time Delta per Meter Chart`): Added a continuous time delta chart using `fastf1.utils.delta_time` below the speed delta chart in compare mode to visualise exact time gained/lost (in seconds) vs distance (meters).
+- **PR #115** (`docs: update README user guide & DOCS manual for grid heatmaps feature`): Updated README.md and DOCS.md to reflect the grid heatmaps feature.
 - **PR #114** / **Issue #85** (`feat: Multi-Driver Grid Analysis & Heatmaps`): Introduced multi-driver grid analysis matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using custom interactive Plotly heatmaps.
 - **PR #113** / **Issue #112** (`fix: Dark mode functionality & theme injection in app.py`): Invoked `inject_styles()` early in `app.py` on every render cycle to ensure dark/light mode state and constructor team themes are applied immediately.
 - **PR #111** (`docs: update Section 18 changelog for Issue #109`): Updated Section 18 of `DOCS.md` with PR #110 / Issue #109 entry.
