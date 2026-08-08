@@ -515,7 +515,7 @@ Closes #[issue number]
 
 ### Code Review
 
-Run this checklist before merging any PR or pushing a significant change directly to `main`:
+Before merging any PR or pushing a significant change directly to `main`, you **MUST** perform a formal code review and generate a markdown artifact named `code_review_issue_<number>.md` summarising the verification of the following checklist:
 
 **Correctness**
 - [ ] No `st.session_state["session"].laps` accessed inside a `@st.cache_data` function
