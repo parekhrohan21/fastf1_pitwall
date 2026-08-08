@@ -239,7 +239,10 @@ Then run a python syntax compilation check across all source modules:
 python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py
 ```
 
-### Step 5 — Commit, Push and Open a PR
+### Step 5 — Perform Code Review
+Before committing, document a formal code review evaluating the changes against the `AGENT.md` Code Review Checklist. Create a markdown artifact named `code_review_issue_<number>.md` summarising the verification of correctness, code quality, documentation updates, and testing results.
+
+### Step 6 — Commit, Push and Open a PR
 1. Stage and commit your changes referencing the issue number:
    ```bash
    git add .
@@ -256,7 +259,7 @@ python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/componen
    gh pr create --title "<type>: <short summary>" --body "Closes #<issue_number>"
    ```
 
-### Step 6 — Merge the PR & Clean Up
+### Step 7 — Merge the PR & Clean Up
 Once the PR is verified, merge it and delete the remote branch using:
 ```bash
 gh pr merge --merge --delete-branch
