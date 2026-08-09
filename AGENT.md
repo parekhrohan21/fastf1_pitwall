@@ -186,6 +186,7 @@ To resolve technical debt and maintainability issues:
 - **Decision #21**: *Continuous Time Delta per Meter Chart (`build_time_delta_chart`)* — Added a continuous time delta chart using `fastf1.utils.delta_time` below the speed delta chart in compare mode to visualise exact time gained/lost (in seconds) vs distance (meters).
 - **Decision #22**: *Pit Strategy & Undercut / Overcut Simulator (`build_undercut_chart`)* — Added automated strategic battle analysis pairing adjacent pit stops (±3 laps) between two drivers in compare mode, calculating pre/post pit gaps, and rendering a Plotly pit window gap chart with outcome metrics cards.
 - **Decision #23**: *Race Control Incident Timeline & Flag Overlays (`_build_race_control_messages`, `_add_flag_zones`)* — Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts via `add_vrect`. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
+- **Decision #24**: *Code Review Artifacts* — Enforced the creation of a formal `code_review_issue_<number>.md` artifact during the PR workflow (Step 5) to document verification against the Code Review Checklist.
 
 ---
 
