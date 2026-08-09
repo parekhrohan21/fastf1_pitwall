@@ -847,6 +847,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #127** / **Issue #123** (`docs: document code review artifact process in README and AGENT.md`): Updated `README.md` and `AGENT.md` to formalize the code review process by mandating the creation of a `code_review_issue_<number>.md` artifact.
+- **PR #126** (`docs: update changelog for issues 116, 117, and 118`): Updated Section 18 of `DOCS.md` to properly document recent completed features in reverse chronological order.
 - **PR #125** / **Issue #118** (`feat: Race Control Incident Timeline & Flag Overlays`): Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
 - **Issue #117** (`feat: Pit Strategy Simulator`): Added automated strategic battle analysis pairing adjacent pit stops (±3 laps) between two drivers in compare mode, calculating pre/post pit gaps, and rendering a Plotly pit window gap chart with outcome metrics cards.
 - **Issue #116** (`feat: Continuous Time Delta per Meter Chart`): Added a continuous time delta chart using `fastf1.utils.delta_time` below the speed delta chart in compare mode to visualise exact time gained/lost (in seconds) vs distance (meters).
