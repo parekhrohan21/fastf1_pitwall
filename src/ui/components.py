@@ -1177,3 +1177,66 @@ def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[
     else:
         st.info("No heatmap figure generated.")
 
+
+# ── Debrief Report Export ─────────────────────────────────────────────────────
+def _build_pdf_report(session_name: str, driver1: str, driver2: str, figs: dict) -> bytearray:
+    from fpdf import FPDF
+    import tempfile
+    
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    # Title
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.cell(w=0, h=15, text=f"Post-Race Debrief: {session_name}", new_x="LMARGIN", new_y="NEXT", align="C")
+    
+    pdf.set_font("Helvetica", "", 12)
+    driver_str = f"Drivers: {driver1}"
+    if driver2:
+        driver_str += f" vs {driver2}"
+    pdf.cell(w=0, h=10, text=driver_str, new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(5)
+    
+    # Render each figure
+    for title, fig in figs.items():
+        if fig is None: continue
+        
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(w=0, h=10, text=title, new_x="LMARGIN", new_y="NEXT")
+        
+        try:
+            img_bytes = fig.to_image(format="png", width=1200, height=600, scale=2)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+                tmpfile.write(img_bytes)
+                tmpfile_path = tmpfile.name
+                
+            pdf.image(tmpfile_path, w=190)
+            pdf.ln(10)
+        except Exception as e:
+            pdf.set_font("Helvetica", "I", 10)
+            pdf.cell(w=0, h=10, text=f"[Error rendering chart: {e}]", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(10)
+            
+    return pdf.output()
+
+def render_export_section(session_name: str, driver1: str, driver2: str, figs: dict):
+    import streamlit as st
+    st.markdown("---")
+    st.subheader("📥 Export Post-Race Debrief")
+    st.write("Generate a printable PDF report containing all the charts above.")
+    
+    if st.button("Generate PDF Report", use_container_width=True):
+        with st.spinner("Generating PDF... This may take a minute."):
+            try:
+                pdf_bytes = _build_pdf_report(session_name, driver1, driver2, figs)
+                st.download_button(
+                    label="📄 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"Debrief_{session_name.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                st.success("PDF generated! Click above to download.")
+            except Exception as e:
+                st.error(f"Error generating PDF: {e}")

@@ -3,6 +3,8 @@
 > **Audience:** Software engineers contributing to, extending, or debugging this project.
 > **Companion files:** `README.md` (user-facing), `AGENT.md` (AI maintenance agent spec).
 
+
+
 ---
 
 ## Table of Contents
@@ -27,6 +29,8 @@
 18. [Solved Issues & Changelog](#18-solved-issues--changelog)
 19. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
 
+
+
 ---
 
 ## 1. Project Philosophy
@@ -38,6 +42,8 @@ The Pit Wall dashboard is built around three principles:
 | **Modular Architecture** | Monolithic `app.py` has been refactored into a modular layout under `src/` to separate data loading, UI widgets, and plotting logic. |
 | **Data first** | All UI derives from FastF1 data — no hardcoded lap times, driver stats, or team info. |
 | **Zero backend** | Streamlit *is* the server. No Flask, no REST API, no database. FastF1 caching replaces a database. |
+
+
 
 ---
 
@@ -52,6 +58,8 @@ The Pit Wall dashboard is built around three principles:
 | Data wrangling | Pandas | ≥ 2.2 | All lap/telemetry DataFrames |
 | Numerics | NumPy | ≥ 1.26 | Interpolation for speed delta, position replay |
 | HTTP request engine | curl-cffi | ≥ 0.5.10 | TLS fingerprint impersonation to bypass anti-bot / CloudFront filters |
+
+
 
 ---
 
@@ -81,6 +89,8 @@ Browser interaction
 ```
 
 > **Key implication:** Every variable is re-evaluated every rerun. Only `st.session_state` and `@st.cache_data` persist across reruns.
+
+
 
 ---
 
@@ -114,6 +124,8 @@ sess.load(telemetry=True, laps=True, weather=True, messages=True)
 ### Driver Numbers vs Names
 
 FastF1 identifies drivers by **number strings** (`"4"`, `"81"`), not names. Always use numbers as the internal key. Convert to display names only at render time via `_fmt_driver()`.
+
+
 
 ---
 
@@ -217,6 +229,8 @@ def get_telemetry_cached(driver, lap, sess_key):
 ```
 Telemetry DataFrames are large (~3000 rows) and can't be efficiently cached with `@st.cache_data` (unhashable types). They are stored directly in `session_state` under a compound key.
 
+
+
 ---
 
 ## 6. State Management
@@ -247,6 +261,8 @@ st.button("Toggle Theme", on_click=_toggle_theme)
 
 This ensures the CSS injection block reads the updated value on the same rerun rather than one rerun behind.
 
+
+
 ---
 
 ## 6b. Compound Colour System
@@ -271,6 +287,8 @@ COMPOUND_COLOURS = {
 | `letter` | Tyre badge abbreviation (`S`, `M`, `H`, `I`, `W`) |
 
 **Rule:** Always look up with `.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])`. Never define a new inline compound colour dict — extend `COMPOUND_COLOURS` instead.
+
+
 
 ---
 
@@ -354,6 +372,8 @@ Renders the full driver banner section:
 - Tyre badge (compound, age, fresh flag)
 - Weather strip
 
+
+
 ---
 
 ## 8. CSS Architecture
@@ -421,6 +441,8 @@ To prevent this layout break:
 
 A `MutationObserver` (injected via `components.html`) watches for Streamlit's `data-stale="false"` flip (which signals a rerender completed) and resets the `animation` property on `.block-container` to replay `pageEnter` every time. This makes every button click feel like a smooth page transition.
 
+
+
 ---
 
 ## 9. Rendering Pipeline
@@ -475,6 +497,8 @@ Each chart section follows the same pattern:
 2. A figure-builder function creates the Plotly/Matplotlib figure
 3. `st.plotly_chart(fig, width="stretch")` or `st.pyplot(fig, width="stretch")` renders it
 
+
+
 ---
 
 ## 10. Chart Inventory
@@ -504,6 +528,8 @@ Each chart section follows the same pattern:
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
 | Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `laps_df` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
+
+
 
 ---
 
@@ -541,6 +567,8 @@ f"""
 """
 ```
 
+
+
 ---
 
 ## 12. Driver Name Mapping
@@ -576,6 +604,8 @@ To extend this to any new component, call `_fmt_driver(driver_num)` on the displ
 # Example: rendering a driver label in any HTML context
 f"<td>{_fmt_driver(drv)}</td>"
 ```
+
+
 
 ---
 
@@ -662,6 +692,8 @@ if compare and driver2:
 
 Add a bullet to **Key Features** and a numbered step to **How to Use**.
 
+
+
 ---
 
 ## 14. Common Pitfalls & Gotchas
@@ -739,6 +771,8 @@ When resolving the default Grand Prix index dynamically by comparing event dates
 When counting a driver's pit stops in F1 sessions, rely on identifying laps containing both non-null `PitInTime` and `PitOutTime` columns. Do not count `PitInTime` alone, as this will also count retirements that occurred in the pit lane (which are not completed pit stops).
 
 
+
+
 ---
 
 ## 15. Performance Notes
@@ -754,6 +788,8 @@ When counting a driver's pit stops in F1 sessions, rely on identifying laps cont
 | Standings data fetch (Ergast) | `@st.cache_data(show_spinner=False, ttl=3600)` with exception safety filters |
 
 The heaviest single operation is `sess.load()` on first call. Everything else is sub-second once the session is cached.
+
+
 
 ---
 
@@ -806,6 +842,8 @@ Run this after any significant change:
 - [ ] Dark mode toggle switches all backgrounds including top bar
 - [ ] Light mode toggle reverses all backgrounds
 
+
+
 ---
 
 ## 17. Future Roadmap
@@ -837,6 +875,8 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Responsive mobile telemetry**~~ | ✅ **Done** — Matplotlib telemetry charts scale dynamically to fit mobile viewports without horizontal scrolling or clipping. |
 | ~~High~~ | ~~**Mini-Sector Dominance Map**~~ | ✅ **Done** — AWS-style micro-sector track map colouring based on interpolated telemetry distance/speed arrays. |
 | ~~Medium~~ | ~~**Corner-by-Corner Analysis**~~ | ✅ **Done** — Extracts corner coordinates via `get_circuit_info()`, detects braking point and apex speed, and renders racing line and speed profile comparisons. |
+
+
 
 ---
 
@@ -912,6 +952,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 - **Issue #1** (`Adding historical team colours`): Configured historical constructor team colours from 2018 to present.
 
 
+
+
 ---
 
 ## 19. Multi-Driver Grid Analysis & Heatmaps Architecture
@@ -930,6 +972,18 @@ The **Multi-Driver Grid Analysis & Heatmaps** module (`src/data/loader.py`, `src
 - **Interactive Tooltips**: Formats `customdata` values to show absolute times alongside relative deltas.
 - **Responsive Layout**: Dynamically computes figure height based on driver selection count (`max(420, len(drivers) * 32 + 100)`).
 
+
+
+## 20. Post-Race Debrief Exporter (PDF)
+
+The **Post-Race Debrief Exporter** (`src/ui/components.py`, `app.py`) enables the automated generation of printable broadcast-style reports.
+
+### Architecture Overview
+- **Chart Collection (`_export_figs`)**: Key Plotly figures (Lap Time History, Tyre Stints, Gap to Leader, Position History) are saved to an `_export_figs` dictionary within `app.py` after being rendered.
+- **Image Conversion (`kaleido`)**: In the `_build_pdf_report` function, each captured Plotly figure is rasterized into a high-resolution PNG using the `fig.to_image()` method powered by the `kaleido` engine.
+- **PDF Generation (`fpdf2`)**: The `FPDF` class is used to compile these static PNGs into a paginated document layout, featuring custom title headers and automatic page breaking.
+- **User Interface**: `render_export_section` surfaces a Streamlit `st.download_button` in the sidebar allowing the user to seamlessly generate and download the report client-side.
+
 ---
 
-*Last updated: July 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+*Last updated: August 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*

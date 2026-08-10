@@ -33,7 +33,7 @@ from src.ui.components import (
     render_summary, render_session_stats, _render_fuel_sim_leaderboard,
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
-    render_live_status_banner, _render_grid_heatmap_section
+    render_live_status_banner, _render_grid_heatmap_section, render_export_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -376,6 +376,9 @@ _rc_messages = _build_race_control_messages(sess_key, sess)
 # ── Driver name labels (built once per session) ───────────────────────────────
 _drv_labels1: dict = _build_driver_labels(sess)
 _drv_labels2: dict = _build_driver_labels(sess2) if sess2 is not None else None
+
+# ── Export Figures Collection ──────────────────────────────────────────────────
+_export_figs = {}
 
 
 
@@ -885,7 +888,9 @@ else:
     else:
         _hist_pairs_filtered = _hist_pairs
 
-    st.plotly_chart(_lap_history_fig(_hist_pairs_filtered, _hist_laps, rc_messages=_rc_messages), width="stretch", config={"displayModeBar": False})
+    _lap_hist_fig_obj = _lap_history_fig(_hist_pairs_filtered, _hist_laps, rc_messages=_rc_messages)
+    _export_figs["Lap Time History"] = _lap_hist_fig_obj
+    st.plotly_chart(_lap_hist_fig_obj, width="stretch", config={"displayModeBar": False})
 
 # ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
 st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
@@ -1354,7 +1359,9 @@ if compare and driver2:
 if all(not s for _, s in _stint_data):
     st.info("Stint data not available for this session.")
 else:
-    st.plotly_chart(_stint_fig(_stint_data), width="stretch", config={"displayModeBar": False})
+    _stint_fig_obj = _stint_fig(_stint_data)
+    _export_figs["Tyre Stints"] = _stint_fig_obj
+    st.plotly_chart(_stint_fig_obj, width="stretch", config={"displayModeBar": False})
 
 
 
@@ -2239,6 +2246,7 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
     colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
     gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps, rc_messages=rc_messages)
+    _export_figs["Gap to Leader"] = gtl_fig
     st.plotly_chart(gtl_fig, width="stretch", config={"displayModeBar": False})
 
     # Show quick stats below the chart
@@ -2414,6 +2422,7 @@ def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colou
         hoverlabel=dict(bgcolor="rgba(20,20,20,0.85)", font_size=12),
     )
 
+    _export_figs["Position History"] = pos_fig
     st.plotly_chart(pos_fig, width="stretch", config={"displayModeBar": False})
 
 
@@ -3296,6 +3305,9 @@ else:
     standings_d = _build_driver_standings(year, r)
     _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d, laps_df=_all_laps1)
 
+with st.sidebar:
+    if not live_mode and "driver1" in locals() and "driver2" in locals():
+        render_export_section(f"{year} {gp} {session_label}", driver1, driver2 if compare else None, _export_figs)
 
 _render_footer()
 
