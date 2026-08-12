@@ -979,6 +979,149 @@ def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | Non
         return None
 
 
+def _build_consistency_analysis(sess_k: str, laps_df: pd.DataFrame, drivers: list[str] = None) -> dict | None:
+    """
+    Calculate driver lap time variance per stint, overall consistency index,
+    and clean air vs traffic deficit.
+    """
+    try:
+        if laps_df is None or laps_df.empty:
+            return None
+
+        df = laps_df.copy()
+        if "LapTime" not in df.columns or "Driver" not in df.columns:
+            return None
+
+        df = df.dropna(subset=["LapTime", "Driver"]).copy()
+        if df.empty:
+            return None
+
+        df["LapTime_s"] = df["LapTime"].dt.total_seconds()
+
+        # Clean laps mask: filter out in-laps, out-laps, and safety car / red flag periods
+        clean_mask = (df["LapTime_s"] > 0)
+        if "IsAccurate" in df.columns:
+            clean_mask = clean_mask & (df["IsAccurate"] == True)
+        if "PitInTime" in df.columns:
+            clean_mask = clean_mask & (df["PitInTime"].isna())
+        if "PitOutTime" in df.columns:
+            clean_mask = clean_mask & (df["PitOutTime"].isna())
+        if "TrackStatus" in df.columns:
+            clean_mask = clean_mask & (~df["TrackStatus"].astype(str).str.contains("4|5|6|7"))
+
+        clean_df_all = df[clean_mask].copy()
+        if clean_df_all.empty:
+            return None
+
+        if drivers:
+            clean_df_all = clean_df_all[clean_df_all["Driver"].isin(drivers)].copy()
+            if clean_df_all.empty:
+                return None
+
+        clean_df_all["IsTraffic"] = False
+
+        # Categorize Clean Air vs Traffic via position gap if available
+        try:
+            if "Position" in clean_df_all.columns and "LapNumber" in clean_df_all.columns:
+                pos_per_lap = clean_df_all.groupby(["LapNumber", "Driver"])["Position"].first().unstack(level=1)
+                traffic_flags = {}
+                for lap, lap_positions in pos_per_lap.iterrows():
+                    sorted_pos = lap_positions.dropna().sort_values()
+                    prev_drv = None
+                    for drv, pos in sorted_pos.items():
+                        if pos == 1 or prev_drv is None:
+                            traffic_flags[(drv, lap)] = False
+                        else:
+                            drv_laps = clean_df_all[(clean_df_all["Driver"] == drv) & (clean_df_all["LapNumber"] <= lap)]["LapTime_s"].sum()
+                            prev_laps = clean_df_all[(clean_df_all["Driver"] == prev_drv) & (clean_df_all["LapNumber"] <= lap)]["LapTime_s"].sum()
+                            gap = drv_laps - prev_laps
+                            traffic_flags[(drv, lap)] = (0.0 <= gap <= 1.5)
+                        prev_drv = drv
+                clean_df_all["IsTraffic"] = clean_df_all.apply(
+                    lambda r: traffic_flags.get((r["Driver"], r["LapNumber"]), False), axis=1
+                )
+        except Exception:
+            pass
+
+        result_drivers = {}
+        processed_clean_laps = []
+
+        for drv, drv_df in clean_df_all.groupby("Driver"):
+            drv_laps = drv_df.sort_values("LapNumber").copy()
+            if drv_laps.empty:
+                continue
+
+            median_t = drv_laps["LapTime_s"].median()
+            valid_laps = drv_laps[drv_laps["LapTime_s"] <= median_t * 1.20].copy()
+            if valid_laps.empty:
+                valid_laps = drv_laps.copy()
+
+            processed_clean_laps.append(valid_laps)
+
+            overall_std = float(valid_laps["LapTime_s"].std()) if len(valid_laps) > 1 else 0.0
+            overall_score = round(max(0.0, min(100.0, 100.0 - overall_std * 30.0)), 1)
+
+            clean_air_laps = valid_laps[~valid_laps["IsTraffic"]]
+            traffic_laps = valid_laps[valid_laps["IsTraffic"]]
+
+            if clean_air_laps.empty and traffic_laps.empty:
+                clean_air_laps = valid_laps[valid_laps["LapTime_s"] <= median_t * 1.02]
+                traffic_laps = valid_laps[valid_laps["LapTime_s"] > median_t * 1.02]
+
+            clean_air_pace = float(clean_air_laps["LapTime_s"].median()) if not clean_air_laps.empty else median_t
+            traffic_pace = float(traffic_laps["LapTime_s"].median()) if not traffic_laps.empty else clean_air_pace
+            traffic_deficit = round(max(0.0, traffic_pace - clean_air_pace), 3)
+
+            stints_list = []
+            stint_col = "Stint" if "Stint" in valid_laps.columns else None
+
+            if stint_col:
+                for stint_num, s_group in valid_laps.groupby(stint_col):
+                    cmp = str(s_group["Compound"].iloc[0]).upper() if "Compound" in s_group.columns else "UNKNOWN"
+                    s_std = float(s_group["LapTime_s"].std()) if len(s_group) > 1 else 0.0
+                    s_score = round(max(0.0, min(100.0, 100.0 - s_std * 30.0)), 1)
+                    s_median = float(s_group["LapTime_s"].median())
+                    stints_list.append({
+                        "stint": int(stint_num),
+                        "compound": cmp,
+                        "std": round(s_std, 3),
+                        "score": s_score,
+                        "median": s_median,
+                        "count": len(s_group),
+                        "laps_df": s_group
+                    })
+            else:
+                stints_list.append({
+                    "stint": 1,
+                    "compound": "UNKNOWN",
+                    "std": round(overall_std, 3),
+                    "score": overall_score,
+                    "median": median_t,
+                    "count": len(valid_laps),
+                    "laps_df": valid_laps
+                })
+
+            result_drivers[drv] = {
+                "overall_std": round(overall_std, 3),
+                "overall_score": overall_score,
+                "clean_air_pace": clean_air_pace,
+                "traffic_pace": traffic_pace,
+                "traffic_deficit": traffic_deficit,
+                "clean_laps_count": len(valid_laps),
+                "stints": stints_list,
+                "clean_df": valid_laps
+            }
+
+        combined_clean_df = pd.concat(processed_clean_laps, ignore_index=True) if processed_clean_laps else None
+
+        return {
+            "drivers": result_drivers,
+            "all_clean_laps": combined_clean_df
+        }
+    except Exception:
+        return None
+
+
 def _build_leaderboard(sess_k: str, laps_df: pd.DataFrame):
     """Return a ranked DataFrame of all drivers' fastest laps."""
     try:

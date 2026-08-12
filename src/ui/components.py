@@ -9,12 +9,12 @@ from src.data.loader import (
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
-    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data
+    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data, _build_consistency_analysis
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
-    build_grid_heatmap_fig
+    build_grid_heatmap_fig, build_stint_consistency_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1240,3 +1240,80 @@ def render_export_section(session_name: str, driver1: str, driver2: str, figs: d
                 st.success("PDF generated! Click above to download.")
             except Exception as e:
                 st.error(f"Error generating PDF: {e}")
+
+
+def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, highlight_colours: list, fmt_func=None):
+    """Render Consistency Score, Clean Air vs Traffic Deficit metric cards, and Violin plot."""
+    if laps_df is None or laps_df.empty:
+        st.info("ℹ️ Lap time data unavailable for consistency analysis.")
+        return
+
+    analysis_data = _build_consistency_analysis("", laps_df, highlight_drivers)
+    if not analysis_data or "drivers" not in analysis_data or not analysis_data["drivers"]:
+        st.info("ℹ️ Insufficient clean laps available to compute consistency metrics.")
+        return
+
+    drivers_data = analysis_data["drivers"]
+
+    for drv, col in zip(highlight_drivers, highlight_colours):
+        if drv not in drivers_data:
+            continue
+        d_info = drivers_data[drv]
+        drv_label = fmt_func(drv) if fmt_func else drv
+
+        st.markdown(
+            f"<div style='border-left: 4px solid {col}; padding-left: 12px; margin-bottom: 12px; font-weight: bold; font-size: 16px; color: {col};'>"
+            f"{drv_label} — Pace Consistency Summary"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        c1, c2, c3, c4 = st.columns(4)
+
+        score_str = f"{d_info['overall_score']:.1f}%"
+        std_str = f"±{d_info['overall_std']:.3f} s"
+        clean_air_str = format_laptime(pd.to_timedelta(d_info["clean_air_pace"], unit="s"))
+        deficit_val = d_info["traffic_deficit"]
+        deficit_str = f"+{deficit_val:.3f} s / lap" if deficit_val > 0 else "0.000 s (Clean Air)"
+
+        def _card(column, label, main_val, sub_val=""):
+            column.markdown(
+                f"<div class='metric-card' style='--accent:{col}; margin-bottom: 14px;'>"
+                f"<div class='metric-label'>{label}</div>"
+                f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{main_val}</div>"
+                f"{f'<div style=\"font-size:11px; opacity:0.7; margin-top:2px;\">{sub_val}</div>' if sub_val else ''}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        _card(c1, "Consistency Index", score_str, f"Std Dev: {std_str}")
+        _card(c2, "Lap Time Std Dev", std_str, f"Over {d_info['clean_laps_count']} clean laps")
+        _card(c3, "Clean Air Pace (Median)", clean_air_str, "Optimal clear track pace")
+        _card(c4, "Traffic Deficit", deficit_str, "Pace lost following car ahead")
+
+    fig = build_stint_consistency_fig(analysis_data, highlight_drivers, highlight_colours)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
+
+    table_rows = []
+    for drv, col in zip(highlight_drivers, highlight_colours):
+        if drv not in drivers_data:
+            continue
+        d_info = drivers_data[drv]
+        for s in d_info["stints"]:
+            med_str = format_laptime(pd.to_timedelta(s["median"], unit="s"))
+            table_rows.append({
+                "Driver": fmt_func(drv) if fmt_func else drv,
+                "Stint": s["stint"],
+                "Compound": s["compound"],
+                "Valid Laps": s["count"],
+                "Median Pace": med_str,
+                "Std Dev (s)": f"±{s['std']:.3f} s",
+                "Consistency Score": f"{s['score']:.1f}%"
+            })
+
+    if table_rows:
+        df_table = pd.DataFrame(table_rows)
+        st.markdown("<div style='font-size:13px; font-weight:700; margin-top:8px; margin-bottom:6px; opacity:0.85;'>📊 Stint-by-Stint Consistency Breakdown</div>", unsafe_allow_html=True)
+        st.dataframe(df_table, use_container_width=True, hide_index=True)
+
