@@ -1112,3 +1112,94 @@ def build_undercut_chart(l1_df, l2_df, d1_label, d2_label, color1, color2, start
     )
     return fig
 
+
+def build_stint_consistency_fig(consistency_data: dict, highlight_drivers: list, highlight_colours: list) -> go.Figure | None:
+    """
+    Build Plotly Violin/Boxplot chart comparing driver pace distributions per stint.
+    """
+    if not consistency_data or "drivers" not in consistency_data:
+        return None
+
+    drivers_dict = consistency_data["drivers"]
+    fig = go.Figure()
+
+    driver_color_map = {}
+    for drv, col in zip(highlight_drivers, highlight_colours):
+        if drv:
+            driver_color_map[drv] = col
+
+    has_traces = False
+    for drv in highlight_drivers:
+        if drv not in drivers_dict:
+            continue
+        drv_info = drivers_dict[drv]
+        colour = driver_color_map.get(drv, "#FF8700")
+
+        for s_info in drv_info["stints"]:
+            stint_num = s_info["stint"]
+            compound = s_info["compound"]
+            laps_df = s_info["laps_df"]
+            if laps_df.empty:
+                continue
+
+            trace_name = f"{drv} - Stint {stint_num} ({compound})"
+
+            hover_text = [
+                f"<b>{drv}</b> (Stint {stint_num} - {compound})<br>"
+                f"Lap {row['LapNumber']}<br>"
+                f"Lap Time: {int(row['LapTime_s']//60)}:{row['LapTime_s']%60:06.3f}<br>"
+                f"Tyre Age: {row.get('TyreLife', 'N/A')}"
+                for _, row in laps_df.iterrows()
+            ]
+
+            fig.add_trace(go.Violin(
+                y=laps_df["LapTime_s"],
+                x=[trace_name] * len(laps_df),
+                name=trace_name,
+                box_visible=True,
+                meanline_visible=True,
+                points="all",
+                jitter=0.25,
+                marker=dict(size=5, color=colour),
+                line=dict(color=colour, width=1.5),
+                text=hover_text,
+                hoverinfo="text",
+            ))
+            has_traces = True
+
+    if not has_traces:
+        return None
+
+    fig.update_layout(
+        title=dict(
+            text="Stint Pace Distribution & Driver Consistency (Violin / Boxplot)",
+            font=dict(size=15, color="#e8e8e8")
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e8e8e8", family="Inter, sans-serif"),
+        yaxis=dict(
+            title="Lap Time (seconds)",
+            gridcolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.2)",
+            autorange="reversed",
+        ),
+        xaxis=dict(
+            title="Driver & Stint",
+            gridcolor="rgba(128,128,128,0.2)",
+            tickangle=-15,
+        ),
+        margin=dict(l=50, r=40, t=60, b=60),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    return fig
+
+

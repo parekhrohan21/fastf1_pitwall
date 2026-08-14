@@ -33,7 +33,8 @@ from src.ui.components import (
     render_summary, render_session_stats, _render_fuel_sim_leaderboard,
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
-    render_live_status_banner, _render_grid_heatmap_section, render_export_section
+    render_live_status_banner, _render_grid_heatmap_section, render_export_section,
+    _render_consistency_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1585,6 +1586,13 @@ else:
         f"</table></div>",
         unsafe_allow_html=True
     )
+
+# ── Driver Consistency & Stint Pace Distribution ───────────────────────────
+st.markdown("<div class='section-title'>Driver Consistency & Stint Pace Distribution</div>", unsafe_allow_html=True)
+_hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
+_hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
+_render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
+
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
 if tel1 is None:
