@@ -64,10 +64,10 @@ The application logic is modularised into individual packages under `src/` to se
 | Module | Purpose |
 |---|---|
 | `app.py` | Streamlit entry point. Initialises page configurations, loads UI sidebars, invokes data builders, and renders layout blocks. |
-| `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, and hosts all `@st.cache_data` session fetching and statistical data-builders. |
+| `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, and hosts all `@st.cache_data` session fetching and statistical data-builders (`_build_consistency_analysis`, `_build_tyre_deg_data`, `_build_grid_heatmap_data`, etc.). |
 | `src/ui/styles.py` | Housed with team/compound color constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
-| `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, layout maps block tabs, and footer. |
-| `src/charts/plotly.py` | Construct and return interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, animated replays, and corner analysis subplots. |
+| `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, consistency section (`_render_consistency_section`), layout maps block tabs, export PDF section, and footer. |
+| `src/charts/plotly.py` | Construct and return interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, stint consistency violin/boxplots (`build_stint_consistency_fig`), animated replays, and corner analysis subplots. |
 | `src/charts/matplotlib.py` | Creates static Matplotlib figures for 6-channel telemetry profiles and speed delta overlays. |
 
 ---

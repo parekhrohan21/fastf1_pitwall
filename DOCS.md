@@ -28,6 +28,8 @@
 17. [Future Roadmap](#17-future-roadmap)
 18. [Solved Issues & Changelog](#18-solved-issues--changelog)
 19. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
+20. [Post-Race Debrief Exporter (PDF)](#20-post-race-debrief-exporter-pdf)
+21. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
 
 
 
@@ -513,6 +515,7 @@ Each chart section follows the same pattern:
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
 | Pit Strategy & Undercut | Plotly | — (inline logic) | `build_undercut_chart` | `_all_laps1`, `_all_laps2` |
 | Tyre Degradation | Plotly | `_build_tyre_deg_data` | inline | `laps_df` filtered by driver; OLS regression of LapTime vs TyreLife per stint. |
+| Driver Consistency | Plotly | `_build_consistency_analysis` | `build_stint_consistency_fig` | `laps_df` filtered by driver; std dev, clean air vs traffic, violin/boxplot stint distribution. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
@@ -983,6 +986,26 @@ The **Post-Race Debrief Exporter** (`src/ui/components.py`, `app.py`) enables th
 - **Image Conversion (`kaleido`)**: In the `_build_pdf_report` function, each captured Plotly figure is rasterized into a high-resolution PNG using the `fig.to_image()` method powered by the `kaleido` engine.
 - **PDF Generation (`fpdf2`)**: The `FPDF` class is used to compile these static PNGs into a paginated document layout, featuring custom title headers and automatic page breaking.
 - **User Interface**: `render_export_section` surfaces a Streamlit `st.download_button` in the sidebar allowing the user to seamlessly generate and download the report client-side.
+
+
+## 21. Driver Consistency Index & Stint Pace Distribution Architecture
+
+The **Driver Consistency Index & Stint Pace Distribution** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `app.py`) evaluates lap time variance per stint to measure race pace consistency and visualises pace distributions.
+
+### Data Layer (`_build_consistency_analysis`)
+- **Filtering**: Excludes in-laps (`PitInTime`), out-laps (`PitOutTime`), inaccurate laps (`IsAccurate == False`), safety car / red flag periods (`TrackStatus` containing `"4|5|6|7"`), and extreme pace outliers (> 1.20x median).
+- **Metric Computation**:
+  - `Overall Std Dev`: Standard deviation of lap times across clean flyer laps in seconds.
+  - `Consistency Index`: 0–100% normalized score calculated as `max(0, min(100, 100 - std * 30))`.
+  - `Clean Air vs. Traffic Deficit`: Categorizes laps based on track position and time gap (gap <= 1.5s = traffic). Calculates median clean air pace vs traffic pace to evaluate seconds lost per lap in traffic.
+
+### Visualisation Layer (`build_stint_consistency_fig`)
+- **Plotly Violin & Boxplot**: Renders `go.Violin` per stint with `box_visible=True`, `meanline_visible=True`, and `points="all"` jittered lap data points.
+- **Custom Color Coding**: Matched to constructor team colors (`driver_color_map`).
+
+### UI Layer (`_render_consistency_section`)
+- **Metric Cards**: Renders 4 high-level stat cards per selected driver (*Consistency Index*, *Lap Time Std Dev*, *Clean Air Pace*, *Traffic Deficit*).
+- **Stint Breakdown Table**: Displays structured table summarizing Stint #, Compound, Valid Laps count, Median Pace, Std Dev (±s), and Stint Consistency Score.
 
 ---
 
