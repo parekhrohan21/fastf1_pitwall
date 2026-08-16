@@ -9,12 +9,13 @@ from src.data.loader import (
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
-    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data, _build_consistency_analysis
+    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data, _build_consistency_analysis,
+    _build_weather_correlation_data
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
-    build_grid_heatmap_fig, build_stint_consistency_fig
+    build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1277,11 +1278,12 @@ def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, 
         deficit_str = f"+{deficit_val:.3f} s / lap" if deficit_val > 0 else "0.000 s (Clean Air)"
 
         def _card(column, label, main_val, sub_val=""):
+            sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub_val}</div>" if sub_val else ""
             column.markdown(
                 f"<div class='metric-card' style='--accent:{col}; margin-bottom: 14px;'>"
                 f"<div class='metric-label'>{label}</div>"
                 f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{main_val}</div>"
-                f"{f'<div style=\"font-size:11px; opacity:0.7; margin-top:2px;\">{sub_val}</div>' if sub_val else ''}"
+                f"{sub_html}"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -1316,4 +1318,90 @@ def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, 
         df_table = pd.DataFrame(table_rows)
         st.markdown("<div style='font-size:13px; font-weight:700; margin-top:8px; margin-bottom:6px; opacity:0.85;'>📊 Stint-by-Stint Consistency Breakdown</div>", unsafe_allow_html=True)
         st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+
+def _render_weather_correlation_section(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    session_obj=None,
+    highlight_drivers: list[str] = None,
+    highlight_colours: list[str] = None,
+    fmt_func=None
+):
+    """Render track temperature and weather correlation metrics and dual-axis chart."""
+    if laps_df is None or laps_df.empty or not highlight_drivers:
+        return
+
+    weather_data = _build_weather_correlation_data(sess_k, laps_df, session_obj, highlight_drivers)
+    if not weather_data or "stats" not in weather_data:
+        return
+
+    stats = weather_data["stats"]
+
+    st.markdown("<div class='section-title'>🌡 Track Temperature & Weather Impact Correlation</div>", unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    def _wcard(column, label, main_val, sub_val=""):
+        sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub_val}</div>" if sub_val else ""
+        column.markdown(
+            f"<div class='metric-card' style='--accent:#FF5722; margin-bottom: 14px;'>"
+            f"<div class='metric-label'>{label}</div>"
+            f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{main_val}</div>"
+            f"{sub_html}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    t_min = stats.get("track_temp_min")
+    t_max = stats.get("track_temp_max")
+    t_avg = stats.get("track_temp_avg")
+    if t_min is not None and t_max is not None:
+        range_str = f"{t_min:.1f}°C – {t_max:.1f}°C"
+        sub_t = f"Avg {t_avg:.1f}°C track"
+    else:
+        range_str = "—"
+        sub_t = "Track temp unavailable"
+    _wcard(c1, "Track Temp Range", range_str, sub_t)
+
+    corr = stats.get("temp_correlation")
+    if corr is not None:
+        corr_str = f"{corr:+.3f}"
+        if corr > 0.3:
+            sens_str = "High Heat Sensitivity"
+        elif corr < -0.3:
+            sens_str = "Pace Improves with Heat"
+        else:
+            sens_str = "Neutral Heat Impact"
+    else:
+        corr_str = "—"
+        sens_str = "Insufficient clean laps"
+    _wcard(c2, "Pace-Temp Correlation", corr_str, sens_str)
+
+    rain_det = stats.get("rainfall_detected", False)
+    wet_laps = stats.get("wet_laps_count", 0)
+    if rain_det or wet_laps > 0:
+        rain_str = f"☔ Wet ({wet_laps} Laps)"
+        rain_sub = "Rainfall recorded during session"
+    else:
+        rain_str = "☀️ Dry Session"
+        rain_sub = "Zero rainfall recorded"
+    _wcard(c3, "Weather Condition", rain_str, rain_sub)
+
+    crossover = stats.get("crossover_laps", [])
+    if crossover:
+        cross_str = f"Lap {crossover[0]}"
+        cross_sub = f"{len(crossover)} crossover transitions"
+    else:
+        cross_str = "None"
+        cross_sub = "No Slick/Wet crossover"
+    _wcard(c4, "Rain Crossover", cross_str, cross_sub)
+
+    colors_map = dict(zip(highlight_drivers, highlight_colours)) if highlight_colours else {}
+    labels_map = {d: (fmt_func(d) if fmt_func else d) for d in highlight_drivers}
+
+    fig = build_weather_correlation_fig(weather_data, colors_map, labels_map)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
+
 

@@ -189,6 +189,7 @@ To resolve technical debt and maintainability issues:
 - **Decision #24**: *Code Review Artifacts* — Enforced the creation of a formal `code_review_issue_<number>.md` artifact during the PR workflow (Step 5) to document verification against the Code Review Checklist.
 - **Decision #25**: *Post-Race Debrief PDF Exporter (`_build_pdf_report`)* — Automated printable broadcast-style report compilation using `kaleido`, `fpdf2`, and `Pillow` to capture and compile telemetry & strategy charts into downloadable PDFs.
 - **Decision #26**: *Driver Consistency Index & Stint Pace Distribution (`_build_consistency_analysis`)* — Evaluates lap time standard deviation per stint after filtering in-laps, out-laps, and Safety Car / Red Flag periods. Calculates 0–100% Consistency Score index, Clean Air Pace, Traffic Deficit (+s/lap), and renders Plotly Violin/Boxplot distribution charts (`build_stint_consistency_fig`).
+- **Decision #27**: *Track Temperature & Weather Impact Correlation (`_build_weather_correlation_data`)* — Extracts timeseries weather data merged via `pd.merge_asof` on lap completion timestamps (`Time`). Renders a dual-axis Plotly chart (`build_weather_correlation_fig`) overlaying track temperature (°C) on driver pace, calculating Pearson correlation scores and detecting Rain Crossover windows (`_render_weather_correlation_section`).
 
 ---
 

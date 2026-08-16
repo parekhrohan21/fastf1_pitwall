@@ -30,6 +30,7 @@
 19. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
 20. [Post-Race Debrief Exporter (PDF)](#20-post-race-debrief-exporter-pdf)
 21. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
+22. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
 
 
 
@@ -1006,6 +1007,30 @@ The **Driver Consistency Index & Stint Pace Distribution** module (`src/data/loa
 ### UI Layer (`_render_consistency_section`)
 - **Metric Cards**: Renders 4 high-level stat cards per selected driver (*Consistency Index*, *Lap Time Std Dev*, *Clean Air Pace*, *Traffic Deficit*).
 - **Stint Breakdown Table**: Displays structured table summarizing Stint #, Compound, Valid Laps count, Median Pace, Std Dev (±s), and Stint Consistency Score.
+
+
+## 22. Track Temperature & Weather Impact Correlation Architecture
+
+The **Track Temperature & Weather Impact Correlation** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `app.py`) evaluates track and air temperature shifts, rainfall intensity, and weather transitions against driver lap times.
+
+### Data Layer (`_build_weather_correlation_data`)
+- **Timeseries Weather Merging**: Uses `pd.merge_asof` on lap completion timestamps (`Time`) to align `_session_obj.weather_data` (`TrackTemp`, `AirTemp`, `Rainfall`, `Humidity`, `WindSpeed`) with each driver's lap record.
+- **Statistical Analytics**:
+  - `Track Temp Range`: Minimum, maximum, and average track temperature (°C) across the session.
+  - `Rain Crossover Laps`: Detects exact lap numbers where compound usage transitions between Slicks (Soft, Medium, Hard) and Wet Tyres (Intermediate, Wet).
+  - `Pace-Temp Correlation`: Pearson correlation coefficient ($r$) between `TrackTemp` (°C) and lap time (s) across clean flyer laps.
+
+### Visualisation Layer (`build_weather_correlation_fig`)
+- **Plotly Dual-Axis Layout**:
+  - Primary Y-axis (left): Driver lap time traces (colored by constructor team color).
+  - Secondary Y-axis (right): Track temperature curve (°C) rendered with a filled area gradient.
+- **Annotations & Shading**:
+  - Shaded vertical bands (`rgba(0,191,255,0.12)`) highlighting rainfall laps.
+  - Dashed vertical lines with annotations indicating Slick ↔ Wet crossover lap numbers.
+
+### UI Layer (`_render_weather_correlation_section`)
+- **Top Metric Cards**: Renders 4 high-level cards (*Track Temp Range*, *Pace-Temp Correlation*, *Weather Condition*, *Rain Crossover*).
+- **Interactive Chart**: Displays the dual-axis Plotly figure.
 
 ---
 

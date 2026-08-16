@@ -1203,3 +1203,132 @@ def build_stint_consistency_fig(consistency_data: dict, highlight_drivers: list,
     return fig
 
 
+def build_weather_correlation_fig(
+    weather_data: dict,
+    driver_colors: dict[str, str] = None,
+    driver_labels: dict[str, str] = None
+) -> go.Figure | None:
+    """
+    Build dual-axis Plotly chart overlaying Track Temperature (°C) and Driver Lap Times.
+    Highlights rain crossover windows and rain intensity.
+    """
+    if not weather_data or "laps_weather_df" not in weather_data:
+        return None
+
+    laps_w_df = weather_data["laps_weather_df"]
+    driver_laps = weather_data.get("driver_laps", {})
+    stats = weather_data.get("stats", {})
+
+    if laps_w_df is None or laps_w_df.empty:
+        return None
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # 1. Plot Track Temperature on Secondary Y-axis
+    if "TrackTemp" in laps_w_df.columns and not laps_w_df["TrackTemp"].isna().all():
+        fig.add_trace(
+            go.Scatter(
+                x=laps_w_df["LapNumber"],
+                y=laps_w_df["TrackTemp"],
+                mode="lines",
+                name="Track Temp (°C)",
+                line=dict(color="#FF5722", width=3),
+                fill="tozeroy",
+                fillcolor="rgba(255, 87, 34, 0.08)",
+                hovertemplate="<b>Lap %{x}</b><br>Track Temp: %{y:.1f}°C<extra></extra>",
+            ),
+            secondary_y=True,
+        )
+
+    # 2. Plot Driver Lap Times on Primary Y-axis
+    colors = driver_colors or {}
+    labels = driver_labels or {}
+
+    for drv, df_drv in driver_laps.items():
+        if df_drv.empty:
+            continue
+
+        clr = colors.get(drv, "#00E5FF")
+        lbl = labels.get(drv, drv)
+
+        fig.add_trace(
+            go.Scatter(
+                x=df_drv["LapNumber"],
+                y=df_drv["LapTime_s"],
+                mode="lines+markers",
+                name=f"{lbl} Pace",
+                line=dict(color=clr, width=2),
+                marker=dict(size=6, color=clr),
+                hovertemplate=f"<b>{lbl}</b><br>Lap %{{x}}<br>Lap Time: %{{y:.3f}}s<extra></extra>",
+            ),
+            secondary_y=False,
+        )
+
+    # 3. Add Rain Crossover Vlines
+    crossover_laps = stats.get("crossover_laps", [])
+    for lap_crossover in crossover_laps:
+        fig.add_vline(
+            x=lap_crossover,
+            line=dict(color="#00E5FF", width=2, dash="dash"),
+            annotation_text=f"☔ Rain Crossover L{lap_crossover}",
+            annotation_position="top left",
+            annotation_font=dict(color="#00E5FF", size=11),
+        )
+
+    # 4. Highlight wet laps shading if rainfall was detected
+    if "Rainfall" in laps_w_df.columns:
+        wet_df = laps_w_df[laps_w_df["Rainfall"] == True]
+        if not wet_df.empty:
+            for _, r_row in wet_df.iterrows():
+                l_num = r_row["LapNumber"]
+                fig.add_vrect(
+                    x0=l_num - 0.5,
+                    x1=l_num + 0.5,
+                    fillcolor="rgba(0, 191, 255, 0.12)",
+                    layer="below",
+                    line_width=0,
+                )
+
+    fig.update_layout(
+        title=dict(
+            text="<b>Track Temperature & Weather Impact Correlation</b>",
+            font=dict(size=16, color="#ffffff", family="Inter, sans-serif"),
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,15,20,0.6)",
+        font=dict(color="#e8e8e8", family="Inter, sans-serif"),
+        margin=dict(l=60, r=60, t=60, b=50),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0.5)",
+        ),
+        hovermode="x unified",
+    )
+
+    fig.update_xaxes(
+        title_text="Lap Number",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+    )
+
+    fig.update_yaxes(
+        title_text="Lap Time (seconds)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        secondary_y=False,
+    )
+
+    fig.update_yaxes(
+        title_text="Track Temperature (°C)",
+        gridcolor="rgba(255, 87, 34, 0.15)",
+        secondary_y=True,
+    )
+
+    return fig
+
+
+
