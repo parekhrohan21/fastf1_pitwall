@@ -47,6 +47,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Design Origin Footer**: A subtle, beautifully styled bottom footer displaying `Made proudly in Great Britain 🇬🇧` at the bottom of all pages and states.
 - **Multi-Driver Grid Analysis & Heatmaps**: Grid-wide analytical matrix allowing users to select 3 to 20 drivers across the field. Renders interactive Plotly heatmaps color-coded by time deltas or speed deficits for **Sector Split Deltas** (S1, S2, S3, Theoretical Best), **Lap-by-Lap Pace Heatmap** (Drivers × Laps), and **Top Speed Matrix** (ST, I1, I2, FL).
 - **Driver Consistency Index & Stint Pace Distribution**: Calculates driver lap time variance per stint after filtering out in-laps, out-laps, and Safety Car / Red Flag periods. Evaluates a **Consistency Score** (0–100%), Lap Time Std Dev (±s), Clean Air Pace vs. **Traffic Deficit** (+s/lap), and renders interactive Plotly Violin and Boxplot distributions with raw lap points alongside a stint breakdown table.
+- **Track Temperature & Weather Impact Correlation**: Correlates track and air temperature shifts, rainfall intensity, and humidity with lap time drop-offs and tyre compound performance. Renders a dual-axis Plotly chart overlaying Track Temperature (°C) on driver pace, featuring automatic detection of **Rain Crossover Windows** (Slicks ↔ Intermediates/Wets) and Pearson pace-heat sensitivity scores.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---

@@ -1122,6 +1122,130 @@ def _build_consistency_analysis(sess_k: str, laps_df: pd.DataFrame, drivers: lis
         return None
 
 
+def _build_weather_correlation_data(sess_k: str, laps_df: pd.DataFrame, _session_obj=None, drivers: list[str] = None) -> dict | None:
+    """
+    Correlate track/air temperature changes and rainfall intensity with lap time
+    drop-offs and tyre compound performance.
+    """
+    try:
+        if laps_df is None or laps_df.empty:
+            return None
+
+        laps = laps_df.copy()
+        if "LapTime" not in laps.columns or "Driver" not in laps.columns or "LapNumber" not in laps.columns:
+            return None
+
+        laps = laps.dropna(subset=["LapTime", "Driver", "LapNumber"]).copy()
+        if laps.empty:
+            return None
+
+        laps["LapTime_s"] = laps["LapTime"].dt.total_seconds()
+        laps["LapNumber"] = laps["LapNumber"].astype(int)
+
+        clean_mask = (laps["LapTime_s"] > 0)
+        if "IsAccurate" in laps.columns:
+            clean_mask = clean_mask & (laps["IsAccurate"] == True)
+        if "PitInTime" in laps.columns:
+            clean_mask = clean_mask & (laps["PitInTime"].isna())
+        if "PitOutTime" in laps.columns:
+            clean_mask = clean_mask & (laps["PitOutTime"].isna())
+        if "TrackStatus" in laps.columns:
+            clean_mask = clean_mask & (~laps["TrackStatus"].astype(str).str.contains("4|5|6|7"))
+
+        clean_laps = laps[clean_mask].copy()
+
+        # Extract weather data from _session_obj if available
+        weather_df = None
+        if _session_obj is not None and hasattr(_session_obj, "weather_data"):
+            try:
+                w_raw = _session_obj.weather_data
+                if w_raw is not None and not w_raw.empty and "Time" in w_raw.columns:
+                    weather_df = w_raw.copy()
+            except Exception:
+                weather_df = None
+
+        # Merge weather onto laps_df by Time using merge_asof if weather_df exists
+        if weather_df is not None and "Time" in laps.columns:
+            try:
+                laps_sorted = laps.sort_values("Time").copy()
+                w_sorted = weather_df.sort_values("Time").copy()
+                laps = pd.merge_asof(laps_sorted, w_sorted, on="Time", direction="nearest", suffixes=("", "_w")).sort_values(["Driver", "LapNumber"]).copy()
+                if not clean_laps.empty and "Time" in clean_laps.columns:
+                    clean_laps = pd.merge_asof(clean_laps.sort_values("Time"), w_sorted, on="Time", direction="nearest", suffixes=("", "_w"))
+            except Exception:
+                pass
+
+        # Build lap-level weather summary
+        lap_weather = {}
+        if "TrackTemp" in laps.columns:
+            for lap_num, grp in laps.groupby("LapNumber"):
+                t_trk = float(grp["TrackTemp"].dropna().median()) if not grp["TrackTemp"].dropna().empty else None
+                t_air = float(grp["AirTemp"].dropna().median()) if "AirTemp" in grp.columns and not grp["AirTemp"].dropna().empty else None
+                rain = bool(grp["Rainfall"].dropna().any()) if "Rainfall" in grp.columns and not grp["Rainfall"].dropna().empty else False
+                hum = float(grp["Humidity"].dropna().median()) if "Humidity" in grp.columns and not grp["Humidity"].dropna().empty else None
+                med_pace = float(clean_laps[clean_laps["LapNumber"] == lap_num]["LapTime_s"].median()) if not clean_laps[clean_laps["LapNumber"] == lap_num].empty else None
+                lap_weather[int(lap_num)] = {
+                    "TrackTemp": t_trk,
+                    "AirTemp": t_air,
+                    "Rainfall": rain,
+                    "Humidity": hum,
+                    "MedianPace": med_pace
+                }
+
+        lap_weather_df = pd.DataFrame.from_dict(lap_weather, orient="index")
+        if not lap_weather_df.empty:
+            lap_weather_df.index.name = "LapNumber"
+            lap_weather_df = lap_weather_df.reset_index().sort_values("LapNumber")
+
+        # Detect Slick vs Wet Rain Crossover Laps
+        crossover_laps = []
+        wet_compounds = {"INTERMEDIATE", "WET"}
+        if "Compound" in laps.columns:
+            prev_has_wet = None
+            for lap_num, grp in laps.sort_values("LapNumber").groupby("LapNumber"):
+                cmps = {str(c).upper() for c in grp["Compound"].dropna()}
+                has_wet = bool(cmps.intersection(wet_compounds))
+                if prev_has_wet is not None and has_wet != prev_has_wet:
+                    crossover_laps.append(int(lap_num))
+                prev_has_wet = has_wet
+
+        driver_laps_dict = {}
+        target_drivers = drivers if drivers else laps["Driver"].unique().tolist()
+        for drv in target_drivers:
+            drv_clean = clean_laps[clean_laps["Driver"] == drv].sort_values("LapNumber").copy()
+            if not drv_clean.empty:
+                driver_laps_dict[drv] = drv_clean
+
+        trk_temps = laps["TrackTemp"].dropna() if "TrackTemp" in laps.columns else pd.Series(dtype=float)
+        air_temps = laps["AirTemp"].dropna() if "AirTemp" in laps.columns else pd.Series(dtype=float)
+        rain_laps = laps[laps["Rainfall"] == True]["LapNumber"].nunique() if "Rainfall" in laps.columns else 0
+
+        corr_val = None
+        if not clean_laps.empty and "TrackTemp" in clean_laps.columns:
+            valid_corr_data = clean_laps.dropna(subset=["TrackTemp", "LapTime_s"])
+            if len(valid_corr_data) >= 5:
+                corr_val = float(valid_corr_data["TrackTemp"].corr(valid_corr_data["LapTime_s"]))
+
+        stats = {
+            "track_temp_min": round(float(trk_temps.min()), 1) if not trk_temps.empty else None,
+            "track_temp_max": round(float(trk_temps.max()), 1) if not trk_temps.empty else None,
+            "track_temp_avg": round(float(trk_temps.mean()), 1) if not trk_temps.empty else None,
+            "air_temp_avg": round(float(air_temps.mean()), 1) if not air_temps.empty else None,
+            "rainfall_detected": bool(rain_laps > 0),
+            "wet_laps_count": int(rain_laps),
+            "crossover_laps": crossover_laps,
+            "temp_correlation": round(corr_val, 3) if corr_val is not None and not np.isnan(corr_val) else None,
+        }
+
+        return {
+            "laps_weather_df": lap_weather_df,
+            "driver_laps": driver_laps_dict,
+            "stats": stats
+        }
+    except Exception:
+        return None
+
+
 def _build_leaderboard(sess_k: str, laps_df: pd.DataFrame):
     """Return a ranked DataFrame of all drivers' fastest laps."""
     try:
