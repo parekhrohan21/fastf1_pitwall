@@ -31,6 +31,7 @@
 20. [Post-Race Debrief Exporter (PDF)](#20-post-race-debrief-exporter-pdf)
 21. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
 22. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
+23. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
 
 
 
@@ -1031,6 +1032,28 @@ The **Track Temperature & Weather Impact Correlation** module (`src/data/loader.
 ### UI Layer (`_render_weather_correlation_section`)
 - **Top Metric Cards**: Renders 4 high-level cards (*Track Temp Range*, *Pace-Temp Correlation*, *Weather Condition*, *Rain Crossover*).
 - **Interactive Chart**: Displays the dual-axis Plotly figure.
+
+
+## 23. Multi-Year Historical Lap Comparison Architecture
+
+The **Multi-Year Historical Lap Comparison** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `app.py`) enables multi-season telemetry comparisons across different technical regulation eras.
+
+### Data Layer (`_build_multi_year_comparison`)
+- **Distance-Grid Alignment**: Interpolates speed, time, throttle, and distance arrays onto a unified distance grid (`np.linspace(0, max_dist, 500)`).
+- **Metric Computation**:
+  - `Era Lap Time Delta`: Computes exact lap time difference (s) between eras.
+  - `Top Speed & Apex Speed`: Extracts maximum straight-line speed and minimum cornering speed per era.
+  - `Full Throttle Ratio`: Calculates percentage of track distance driven at 100% throttle.
+  - `Continuous Time Delta`: Integrates speed delta array over distance to compute time gained or lost per meter.
+
+### Visualisation Layer (`build_multi_year_comparison_fig`)
+- **Dual-Subplot Layout**:
+  - Subplot 1 (top): Speed telemetry profile overlays (km/h) for Era 1 (solid line) vs Era 2 (dashed line).
+  - Subplot 2 (bottom): Continuous time delta trace (Δ seconds) with filled area styling.
+
+### UI Layer (`_render_multi_year_comparison_section`)
+- **Metric Cards**: Displays 4 stat cards (*Era Lap Time Delta*, *Top Speed*, *Min Apex Speed*, *Full Throttle %*).
+- **Chart Render**: Renders the Plotly dual-subplot figure.
 
 ---
 

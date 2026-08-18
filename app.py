@@ -34,7 +34,8 @@ from src.ui.components import (
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
-    _render_consistency_section, _render_weather_correlation_section
+    _render_consistency_section, _render_weather_correlation_section,
+    _render_multi_year_comparison_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1595,6 +1596,19 @@ _render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Temperature & Weather Impact Correlation ─────────────────────────
 _render_weather_correlation_section(sess_key, _all_laps1, sess1, _hl_drivers, _hl_colours, _fmt_driver1)
+
+# ── Multi-Year Historical Lap Comparison ─────────────────────────────────
+if compare and tel1 is not None and tel2 is not None:
+    _era_label1 = f"{year1} {_fmt_driver1(driver1)}"
+    _era_label2 = f"{year2} {_fmt_driver2(driver2)}"
+    _lap1_sec = lap1["LapTime"].total_seconds() if lap1 is not None and hasattr(lap1, "LapTime") and pd.notna(lap1["LapTime"]) else None
+    _lap2_sec = lap2["LapTime"].total_seconds() if lap2 is not None and hasattr(lap2, "LapTime") and pd.notna(lap2["LapTime"]) else None
+    _render_multi_year_comparison_section(
+        tel1, tel2,
+        label1=_era_label1, label2=_era_label2,
+        lap1_sec=_lap1_sec, lap2_sec=_lap2_sec,
+        color1=colour1, color2=colour2
+    )
 
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 

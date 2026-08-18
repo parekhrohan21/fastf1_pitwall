@@ -1331,4 +1331,123 @@ def build_weather_correlation_fig(
     return fig
 
 
+def build_multi_year_comparison_fig(
+    multi_year_data: dict,
+    color1: str = "#FF8700",
+    color2: str = "#00E5FF"
+) -> go.Figure | None:
+    """
+    Build dual-subplot Plotly figure comparing speed profiles (km/h) and continuous time delta (s)
+    across two different seasons / technical regulation eras.
+    """
+    if not multi_year_data or "grid" not in multi_year_data:
+        return None
+
+    grid = multi_year_data["grid"]
+    speed1 = multi_year_data["speed1"]
+    speed2 = multi_year_data["speed2"]
+    time_delta = multi_year_data.get("time_delta")
+    stats = multi_year_data.get("stats", {})
+
+    lbl1 = stats.get("label1", "Era 1")
+    lbl2 = stats.get("label2", "Era 2")
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.1,
+        subplot_titles=(
+            f"<b>Speed Telemetry Profile ({lbl1} vs {lbl2})</b>",
+            f"<b>Continuous Time Delta (Δ s per meter)</b>"
+        )
+    )
+
+    # 1. Speed Traces (Subplot 1)
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=speed1,
+            mode="lines",
+            name=lbl1,
+            line=dict(color=color1, width=2.5),
+            hovertemplate=f"<b>{lbl1}</b><br>Dist: %{{x:.0f}}m<br>Speed: %{{y:.1f}} km/h<extra></extra>",
+        ),
+        row=1, col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=speed2,
+            mode="lines",
+            name=lbl2,
+            line=dict(color=color2, width=2.5, dash="dash"),
+            hovertemplate=f"<b>{lbl2}</b><br>Dist: %{{x:.0f}}m<br>Speed: %{{y:.1f}} km/h<extra></extra>",
+        ),
+        row=1, col=1
+    )
+
+    # 2. Time Delta Trace (Subplot 2)
+    if time_delta is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=grid,
+                y=time_delta,
+                mode="lines",
+                name=f"Δ Time ({lbl1} - {lbl2})",
+                line=dict(color="#00E676", width=2),
+                fill="tozeroy",
+                fillcolor="rgba(0, 230, 118, 0.12)",
+                hovertemplate=f"<b>Δ Time</b><br>Dist: %{{x:.0f}}m<br>Delta: %{{y:+.3f}}s<extra></extra>",
+            ),
+            row=2, col=1
+        )
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,15,20,0.6)",
+        font=dict(color="#e8e8e8", family="Inter, sans-serif"),
+        margin=dict(l=60, r=40, t=50, b=50),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0.5)",
+        ),
+        hovermode="x unified",
+        height=520,
+    )
+
+    fig.update_xaxes(
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        row=1, col=1
+    )
+    fig.update_xaxes(
+        title_text="Track Distance (meters)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        row=2, col=1
+    )
+
+    fig.update_yaxes(
+        title_text="Speed (km/h)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        row=1, col=1
+    )
+    fig.update_yaxes(
+        title_text="Delta (seconds)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        row=2, col=1
+    )
+
+    return fig
+
+
+
 
