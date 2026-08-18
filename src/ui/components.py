@@ -10,12 +10,13 @@ from src.data.loader import (
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
     _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data, _build_consistency_analysis,
-    _build_weather_correlation_data
+    _build_weather_correlation_data, _build_multi_year_comparison
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
-    build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig
+    build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
+    build_multi_year_comparison_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1403,5 +1404,74 @@ def _render_weather_correlation_section(
     fig = build_weather_correlation_fig(weather_data, colors_map, labels_map)
     if fig is not None:
         st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_multi_year_comparison_section(
+    tel1: pd.DataFrame,
+    tel2: pd.DataFrame,
+    label1: str = "Era 1",
+    label2: str = "Era 2",
+    lap1_sec: float = None,
+    lap2_sec: float = None,
+    color1: str = "#FF8700",
+    color2: str = "#00E5FF"
+):
+    """Render multi-year historical lap telemetry comparison and metric cards."""
+    if tel1 is None or tel2 is None or tel1.empty or tel2.empty:
+        return
+
+    data = _build_multi_year_comparison(tel1, tel2, label1, label2, lap1_sec, lap2_sec)
+    if not data or "stats" not in data:
+        return
+
+    stats = data["stats"]
+
+    st.markdown("<div class='section-title'>🏛 Multi-Year Historical Lap Comparison</div>", unsafe_allow_html=True)
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    def _mcard(column, label, main_val, sub_val="", accent_col="#FF8700"):
+        sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub_val}</div>" if sub_val else ""
+        column.markdown(
+            f"<div class='metric-card' style='--accent:{accent_col}; margin-bottom: 14px;'>"
+            f"<div class='metric-label'>{label}</div>"
+            f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{main_val}</div>"
+            f"{sub_html}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    delta_s = stats.get("lap_delta_s")
+    if delta_s is not None:
+        delta_str = f"{delta_s:+.3f} s"
+        faster_era = label1 if delta_s < 0 else label2
+        delta_sub = f"{faster_era} faster"
+    else:
+        delta_str = "—"
+        delta_sub = "Lap time delta unavailable"
+    _mcard(c1, "Era Lap Time Delta", delta_str, delta_sub, color1)
+
+    ts1 = stats.get("top_speed1", 0)
+    ts2 = stats.get("top_speed2", 0)
+    _mcard(c2, "Top Speed (ST)", f"{ts1} / {ts2} km/h", f"{label1} vs {label2}", color2)
+
+    ap1 = stats.get("apex_speed1", 0)
+    ap2 = stats.get("apex_speed2", 0)
+    _mcard(c3, "Min Apex Speed", f"{ap1} / {ap2} km/h", f"{label1} vs {label2}", color1)
+
+    th1 = stats.get("throttle_pct1")
+    th2 = stats.get("throttle_pct2")
+    if th1 is not None and th2 is not None:
+        th_str = f"{th1:.1f}% / {th2:.1f}%"
+        th_sub = "Full throttle lap ratio"
+    else:
+        th_str = "—"
+        th_sub = "Throttle telemetry unavailable"
+    _mcard(c4, "Full Throttle %", th_str, th_sub, color2)
+
+    fig = build_multi_year_comparison_fig(data, color1, color2)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
+
 
 

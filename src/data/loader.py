@@ -1246,6 +1246,96 @@ def _build_weather_correlation_data(sess_k: str, laps_df: pd.DataFrame, _session
         return None
 
 
+def _build_multi_year_comparison(
+    tel1: pd.DataFrame,
+    tel2: pd.DataFrame,
+    label1: str = "Era 1",
+    label2: str = "Era 2",
+    lap1_time_s: float = None,
+    lap2_time_s: float = None
+) -> dict | None:
+    """
+    Build multi-year historical lap comparison dataset aligning distance-based telemetry traces
+    and computing era performance metrics (speed deltas, apex speeds, throttle ratios, delta time).
+    """
+    try:
+        if tel1 is None or tel2 is None or tel1.empty or tel2.empty:
+            return None
+
+        if "Distance" not in tel1.columns or "Speed" not in tel1.columns:
+            return None
+        if "Distance" not in tel2.columns or "Speed" not in tel2.columns:
+            return None
+
+        t1 = tel1.sort_values("Distance").dropna(subset=["Distance", "Speed"]).copy()
+        t2 = tel2.sort_values("Distance").dropna(subset=["Distance", "Speed"]).copy()
+
+        if t1.empty or t2.empty:
+            return None
+
+        max_dist = min(t1["Distance"].max(), t2["Distance"].max())
+        if max_dist <= 0:
+            return None
+
+        grid = np.linspace(0, max_dist, 500)
+        speed1_interp = np.interp(grid, t1["Distance"], t1["Speed"])
+        speed2_interp = np.interp(grid, t2["Distance"], t2["Speed"])
+
+        speed_delta = speed1_interp - speed2_interp
+
+        time_delta = None
+        if "Time" in t1.columns and "Time" in t2.columns:
+            try:
+                t1_sec = t1["Time"].dt.total_seconds().values
+                t2_sec = t2["Time"].dt.total_seconds().values
+                time1_interp = np.interp(grid, t1["Distance"], t1_sec - t1_sec[0])
+                time2_interp = np.interp(grid, t2["Distance"], t2_sec - t2_sec[0])
+                time_delta = time1_interp - time2_interp
+            except Exception:
+                time_delta = None
+
+        if time_delta is None:
+            dx = grid[1] - grid[0]
+            v1_ms = np.maximum(speed1_interp / 3.6, 1.0)
+            v2_ms = np.maximum(speed2_interp / 3.6, 1.0)
+            dt = (1.0 / v1_ms) - (1.0 / v2_ms)
+            time_delta = np.cumsum(dt) * dx
+
+        top_speed1 = float(t1["Speed"].max())
+        top_speed2 = float(t2["Speed"].max())
+
+        apex_speed1 = float(t1["Speed"].min())
+        apex_speed2 = float(t2["Speed"].min())
+
+        throttle_pct1 = float((t1["Throttle"] == 100).mean() * 100) if "Throttle" in t1.columns else None
+        throttle_pct2 = float((t2["Throttle"] == 100).mean() * 100) if "Throttle" in t2.columns else None
+
+        lap_delta_s = None
+        if lap1_time_s is not None and lap2_time_s is not None:
+            lap_delta_s = round(lap1_time_s - lap2_time_s, 3)
+
+        return {
+            "grid": grid,
+            "speed1": speed1_interp,
+            "speed2": speed2_interp,
+            "speed_delta": speed_delta,
+            "time_delta": time_delta,
+            "stats": {
+                "top_speed1": round(top_speed1, 1),
+                "top_speed2": round(top_speed2, 1),
+                "apex_speed1": round(apex_speed1, 1),
+                "apex_speed2": round(apex_speed2, 1),
+                "throttle_pct1": round(throttle_pct1, 1) if throttle_pct1 is not None else None,
+                "throttle_pct2": round(throttle_pct2, 1) if throttle_pct2 is not None else None,
+                "lap_delta_s": lap_delta_s,
+                "label1": label1,
+                "label2": label2,
+            }
+        }
+    except Exception:
+        return None
+
+
 def _build_leaderboard(sess_k: str, laps_df: pd.DataFrame):
     """Return a ranked DataFrame of all drivers' fastest laps."""
     try:
