@@ -772,7 +772,18 @@ def build_corner_fig(win1, win2, driver, other_driver, colour, other_colour, ape
         dist_to_apex = None
         if braking_d is not None:
             dist_to_apex = apex_d - braking_d
-            
+
+        max_steering = None
+        if "Steering" in df.columns and pd.notna(df["Steering"]).any():
+            steering_num = pd.to_numeric(df["Steering"], errors="coerce")
+            if not steering_num.isna().all():
+                max_steering = float(steering_num.abs().max())
+
+        drs_active = False
+        if "DRS" in df.columns and pd.notna(df["DRS"]).any():
+            drs_num = pd.to_numeric(df["DRS"], errors="coerce")
+            drs_active = bool((drs_num > 0).any())
+
         return {
             "apex_speed": apex_speed,
             "apex_dist": apex_d,
@@ -781,17 +792,24 @@ def build_corner_fig(win1, win2, driver, other_driver, colour, other_colour, ape
             "braking_dist": braking_d,
             "braking_x": braking_x,
             "braking_y": braking_y,
-            "dist_to_apex": dist_to_apex
+            "dist_to_apex": dist_to_apex,
+            "max_steering": max_steering,
+            "drs_active": drs_active
         }
 
     stats1 = compute_stats(win1)
     stats2 = compute_stats(win2) if win2 is not None else None
 
-    # Built figure layout
     fig = make_subplots(
-        rows=2, cols=1,
-        subplot_titles=("Racing Line Overlay", "Speed Profile"),
-        vertical_spacing=0.08
+        rows=4, cols=1,
+        subplot_titles=(
+            "<b>Racing Line Overlay</b>",
+            "<b>Speed Profile</b>",
+            "<b>Steering Angle (° degrees)</b>",
+            "<b>DRS Activation Status</b>"
+        ),
+        vertical_spacing=0.06,
+        row_heights=[0.34, 0.24, 0.22, 0.20]
     )
 
     fig.add_trace(go.Scatter(
@@ -876,16 +894,70 @@ def build_corner_fig(win1, win2, driver, other_driver, colour, other_colour, ape
             hovertemplate=f"<b>{other_driver}</b><br>Dist: %{{x:.1f}} m from apex<br>Speed: %{{y:.0f}} km/h<extra></extra>"
         ), row=2, col=1)
 
-    fig.update_xaxes(title_text="Distance relative to apex (m)", row=2, col=1)
-    fig.update_yaxes(title_text="Speed (km/h)", row=2, col=1)
+    if "Steering" in win1.columns:
+        fig.add_trace(go.Scatter(
+            x=win1["Distance"] - apex_dist, y=pd.to_numeric(win1["Steering"], errors="coerce"),
+            mode="lines",
+            line=dict(color=colour, width=2.5),
+            name=driver,
+            legendgroup=driver,
+            showlegend=False,
+            hovertemplate=f"<b>{driver}</b><br>Dist: %{{x:.1f}} m from apex<br>Steering: %{{y:.1f}}°<extra></extra>"
+        ), row=3, col=1)
+
+    if win2 is not None and "Steering" in win2.columns:
+        fig.add_trace(go.Scatter(
+            x=win2["Distance"] - apex_dist, y=pd.to_numeric(win2["Steering"], errors="coerce"),
+            mode="lines",
+            line=dict(color=other_colour, width=2.5, dash="dash"),
+            name=other_driver,
+            legendgroup=other_driver,
+            showlegend=False,
+            hovertemplate=f"<b>{other_driver}</b><br>Dist: %{{x:.1f}} m from apex<br>Steering: %{{y:.1f}}°<extra></extra>"
+        ), row=3, col=1)
+
+    if "DRS" in win1.columns:
+        drs1_val = (pd.to_numeric(win1["DRS"], errors="coerce") > 0).astype(int)
+        fig.add_trace(go.Scatter(
+            x=win1["Distance"] - apex_dist, y=drs1_val,
+            mode="lines",
+            line=dict(color=colour, width=2.5),
+            name=driver,
+            legendgroup=driver,
+            showlegend=False,
+            hovertemplate=f"<b>{driver}</b><br>Dist: %{{x:.1f}} m from apex<br>DRS: %{{y}}<extra></extra>"
+        ), row=4, col=1)
+
+    if win2 is not None and "DRS" in win2.columns:
+        drs2_val = (pd.to_numeric(win2["DRS"], errors="coerce") > 0).astype(int)
+        fig.add_trace(go.Scatter(
+            x=win2["Distance"] - apex_dist, y=drs2_val,
+            mode="lines",
+            line=dict(color=other_colour, width=2.5, dash="dash"),
+            name=other_driver,
+            legendgroup=other_driver,
+            showlegend=False,
+            hovertemplate=f"<b>{other_driver}</b><br>Dist: %{{x:.1f}} m from apex<br>DRS: %{{y}}<extra></extra>"
+        ), row=4, col=1)
+
     fig.update_xaxes(visible=False, scaleanchor="y", scaleratio=1, row=1, col=1)
     fig.update_yaxes(visible=False, row=1, col=1)
 
+    fig.update_xaxes(gridcolor="rgba(128,128,128,0.2)", row=2, col=1)
+    fig.update_yaxes(title_text="Speed (km/h)", gridcolor="rgba(128,128,128,0.2)", row=2, col=1)
+
+    fig.update_xaxes(gridcolor="rgba(128,128,128,0.2)", row=3, col=1)
+    fig.update_yaxes(title_text="Steering (°)", gridcolor="rgba(128,128,128,0.2)", row=3, col=1)
+
+    fig.update_xaxes(title_text="Distance relative to apex (m)", gridcolor="rgba(128,128,128,0.2)", row=4, col=1)
+    fig.update_yaxes(title_text="DRS Active", tickvals=[0, 1], ticktext=["OFF", "ON"], gridcolor="rgba(128,128,128,0.2)", row=4, col=1)
+
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        height=640,
-        margin=dict(l=0, r=40, t=40, b=10),
+        plot_bgcolor="rgba(15,15,20,0.6)",
+        font=dict(color="#e8e8e8", family="Inter, sans-serif"),
+        height=820,
+        margin=dict(l=60, r=40, t=40, b=40),
         showlegend=True,
     )
     return fig, stats1, stats2

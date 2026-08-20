@@ -1101,11 +1101,17 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
                 if stats1:
                     st.write(f"Apex Speed: **{stats1['apex_speed']:.1f} km/h**")
                     st.write(f"Braking Distance to Apex: **{stats1['dist_to_apex']:.1f} m**" if stats1["braking_dist"] is not None else "Braking Distance to Apex: **—**")
+                    if stats1.get("max_steering") is not None:
+                        st.write(f"Max Steering Angle: **{stats1['max_steering']:.1f}°**")
+                    st.write(f"DRS Activated: **{'Yes' if stats1.get('drs_active') else 'No'}**")
             with col_st2:
                 if compare and stats2:
                     st.markdown(f"<div style='border-left: 4px solid {other_colour}; padding-left: 12px; margin-bottom: 16px;'><div style='font-size: 13px; opacity: 0.7;'>Driver 2</div><div style='font-size: 18px; font-weight: bold; color: {other_colour};'>{fmt_func(other_driver) if fmt_func else other_driver}</div></div>", unsafe_allow_html=True)
                     st.write(f"Apex Speed: **{stats2['apex_speed']:.1f} km/h**")
                     st.write(f"Braking Distance to Apex: **{stats2['dist_to_apex']:.1f} m**" if stats2["braking_dist"] is not None else "Braking Distance to Apex: **—**")
+                    if stats2.get("max_steering") is not None:
+                        st.write(f"Max Steering Angle: **{stats2['max_steering']:.1f}°**")
+                    st.write(f"DRS Activated: **{'Yes' if stats2.get('drs_active') else 'No'}**")
 
             st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
         else:

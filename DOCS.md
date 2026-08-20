@@ -892,6 +892,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #136** (`feat: Driver Steering & DRS Telemetry Subplots in Corner Analysis`): Expanded corner-by-corner telemetry analysis (`build_corner_fig` in `src/charts/plotly.py`) into a 4-subplot layout adding Steering Angle (`Steering` in ° degrees) and DRS activation (`DRS` status) profiles alongside Racing Line and Speed plots, with metrics cards displaying Max Steering Angle and DRS status.
 - **PR #127** / **Issue #123** (`docs: document code review artifact process in README and AGENT.md`): Updated `README.md` and `AGENT.md` to formalize the code review process by mandating the creation of a `code_review_issue_<number>.md` artifact.
 - **PR #126** (`docs: update changelog for issues 116, 117, and 118`): Updated Section 18 of `DOCS.md` to properly document recent completed features in reverse chronological order.
 - **PR #125** / **Issue #118** (`feat: Race Control Incident Timeline & Flag Overlays`): Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
