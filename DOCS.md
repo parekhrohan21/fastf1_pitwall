@@ -32,6 +32,7 @@
 21. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
 22. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
 23. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
+24. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
 
 
 
@@ -200,6 +201,9 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
+| `_build_consistency_analysis(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
+| `_build_weather_correlation_data(sess_k, laps_df, sess_obj)` | `sess_key, laps_df, sess_obj` |
+| `_build_multi_year_comparison(tel1, tel2, label1, label2, ...)` | `tel1, tel2, label1, label2, lap1_time_s, lap2_time_s` |
 
 `sess_key` is a string formatted as `"{year}_{gp}_{session_type}"` (e.g. `"2025_British Grand Prix_R"`).
 
@@ -529,8 +533,10 @@ Each chart section follows the same pattern:
 | Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
 | Track Speed Map | Plotly | `_get_telemetry_for_map` | `_speed_map_fig` | `lap.get_car_data()`. In compare mode, colours mini-sectors by dominance. |
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |
-| Corner Analysis | Plotly subplots | `_get_telemetry_for_map` | inline (`with map_tab4`) | `lap.get_car_data()`. Displays racing line overlay with apex/braking markers + Speed profile. |
+| Corner Analysis (4-subplot) | Plotly subplots | `_get_telemetry_for_map` | `build_corner_fig` (`with map_tab4`) | `lap.get_car_data()`. 4 subplots: Racing Line, Speed Profile, Steering Angle (°), DRS Activation Status. |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
+| Weather Correlation | Plotly dual-axis | `_build_weather_correlation_data` | `build_weather_correlation_fig` | `sess.weather_data` merged on `Time` via `pd.merge_asof`. Pearson pace-temp correlation, rain crossover detection. |
+| Multi-Year Comparison | Plotly dual-subplot | `_build_multi_year_comparison` | `build_multi_year_comparison_fig` | Interpolated telemetry on 500-pt distance grid. Speed overlay + continuous time delta. |
 | Constructors' Championship Standings | HTML | `_build_constructor_standings` | `_render_constructor_standings` | Jolpi (Ergast) API constructor standings |
 | Official Session Classification | HTML | `_build_final_classification` | `_render_final_classification` | `sess.results` (Q1/Q2/Q3 or Time/Status/Grid/Points), `laps_df` (for pit stop counts), and Jolpi (Ergast) API driver standings (for championship points) |
 
@@ -880,6 +886,10 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Responsive mobile telemetry**~~ | ✅ **Done** — Matplotlib telemetry charts scale dynamically to fit mobile viewports without horizontal scrolling or clipping. |
 | ~~High~~ | ~~**Mini-Sector Dominance Map**~~ | ✅ **Done** — AWS-style micro-sector track map colouring based on interpolated telemetry distance/speed arrays. |
 | ~~Medium~~ | ~~**Corner-by-Corner Analysis**~~ | ✅ **Done** — Extracts corner coordinates via `get_circuit_info()`, detects braking point and apex speed, and renders racing line and speed profile comparisons. |
+| ~~High~~ | ~~**Driver Consistency Index & Stint Pace Distribution**~~ | ✅ **Done** — `_build_consistency_analysis` evaluates std dev, Consistency Score, Clean Air Pace, and Traffic Deficit. Renders Violin/Boxplot distributions (`build_stint_consistency_fig`). |
+| ~~High~~ | ~~**Track Temperature & Weather Impact Correlation**~~ | ✅ **Done** — `_build_weather_correlation_data` merges weather timeseries via `pd.merge_asof`. Dual-axis chart overlaying Track Temp (°C) on driver pace (`build_weather_correlation_fig`). |
+| ~~Medium~~ | ~~**Multi-Year Historical Lap Comparison**~~ | ✅ **Done** — `_build_multi_year_comparison` aligns two telemetry traces to a 500-pt distance grid. Plots speed profile overlays and continuous time delta curves (`build_multi_year_comparison_fig`). |
+| ~~Medium~~ | ~~**Driver Steering & DRS Subplots in Corner Analysis**~~ | ✅ **Done** — `build_corner_fig` expanded to 4 subplots: Racing Line, Speed, Steering Angle (°), DRS Activation. Metrics include Max Steering Angle and DRS Activated status. |
 
 
 
@@ -892,7 +902,10 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
-- **Issue #136** (`feat: Driver Steering & DRS Telemetry Subplots in Corner Analysis`): Expanded corner-by-corner telemetry analysis (`build_corner_fig` in `src/charts/plotly.py`) into a 4-subplot layout adding Steering Angle (`Steering` in ° degrees) and DRS activation (`DRS` status) profiles alongside Racing Line and Speed plots, with metrics cards displaying Max Steering Angle and DRS status.
+- **PR #141** / **Issue #136** (`feat: Driver Steering & DRS Telemetry Subplots in Corner Analysis`): Expanded `build_corner_fig` in `src/charts/plotly.py` into a 4-subplot layout adding Steering Angle (`Steering` in ° degrees) and DRS activation (`DRS` status) profiles alongside Racing Line and Speed. Updated `compute_stats` to extract `max_steering` and `drs_active`. Metric cards display Max Steering Angle and DRS Activated status.
+- **PR #140** / **Issue #121** (`feat: Multi-Year Historical Lap Comparison`): Implemented `_build_multi_year_comparison` (500-pt distance grid interpolation, speed delta, continuous time delta), `build_multi_year_comparison_fig` (dual-subplot Plotly), and `_render_multi_year_comparison_section` (metric cards: Era Lap Time Delta, Top Speed ST, Min Apex Speed, Full Throttle %).
+- **PR #135** / **Issue #120** (`feat: Track Temperature & Weather Impact Correlation`): Implemented `_build_weather_correlation_data` (timeseries weather merge via `pd.merge_asof`), `build_weather_correlation_fig` (dual-axis Plotly), and `_render_weather_correlation_section` (metric cards: Track Temp Range, Pace-Temp Correlation, Weather Condition, Rain Crossover).
+- **PR #132** / **Issue #119** (`feat: Driver Consistency Index & Stint Pace Distribution`): Implemented `_build_consistency_analysis` (std dev, Consistency Score, Clean Air Pace, Traffic Deficit per stint), `build_stint_consistency_fig` (Plotly Violin/Boxplot), and `_render_consistency_section` (metric cards and stint breakdown table).
 - **PR #127** / **Issue #123** (`docs: document code review artifact process in README and AGENT.md`): Updated `README.md` and `AGENT.md` to formalize the code review process by mandating the creation of a `code_review_issue_<number>.md` artifact.
 - **PR #126** (`docs: update changelog for issues 116, 117, and 118`): Updated Section 18 of `DOCS.md` to properly document recent completed features in reverse chronological order.
 - **PR #125** / **Issue #118** (`feat: Race Control Incident Timeline & Flag Overlays`): Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
@@ -1055,6 +1068,39 @@ The **Multi-Year Historical Lap Comparison** module (`src/data/loader.py`, `src/
 ### UI Layer (`_render_multi_year_comparison_section`)
 - **Metric Cards**: Displays 4 stat cards (*Era Lap Time Delta*, *Top Speed*, *Min Apex Speed*, *Full Throttle %*).
 - **Chart Render**: Renders the Plotly dual-subplot figure.
+
+---
+
+## 24. Corner Analysis — Steering & DRS Telemetry Subplots Architecture
+
+The **Corner-by-Corner Analysis** module (`src/charts/plotly.py` → `build_corner_fig`, `src/ui/components.py` → `render_maps_block`, `compute_stats`) was expanded from a 2-subplot layout (Racing Line, Speed) to a full **4-subplot telemetry layout** adding Steering Angle and DRS activation traces.
+
+### Data Layer (`compute_stats` + `get_telemetry_cached`)
+- **Telemetry Slice**: Telemetry is sliced to a distance window `[apex_distance − 200, apex_distance + 100]` around the detected corner apex.
+- **Steering Angle**: `tel["Steering"]` is coerced with `pd.to_numeric(..., errors="coerce")` and the absolute max is extracted as `max_steering` (°).
+- **DRS Status**: `tel["DRS"]` is coerced with `pd.to_numeric(..., errors="coerce")`; DRS is considered **active** if any sample in the corner window records a DRS value ≥ 10.
+- **Existing Metrics**: Apex Speed (min Speed in window), Braking Point (first frame with `Brake > 0`, falling back to max deceleration `ds < −1`).
+
+### Visualisation Layer (`build_corner_fig`)
+Utilises `plotly.subplots.make_subplots` with 4 rows and `row_heights=[0.35, 0.28, 0.22, 0.15]`:
+
+| Row | Subplot | Content |
+|---|---|---|
+| 1 | Racing Line | X/Y coordinate scatter with star marker for apex, cross marker for braking point |
+| 2 | Speed Profile | Speed (km/h) vs Distance relative to apex (m) |
+| 3 | Steering Angle | Steering (°) vs Distance relative to apex (m) — absolute value displayed for clarity |
+| 4 | DRS Status | DRS activation bar/line vs Distance — 0 = inactive, 1 = active |
+
+- All distance arrays are shifted so that `d = 0` aligns to the apex point.
+- Missing or all-NaN Steering/DRS columns are handled gracefully — subplots display "No data" annotations rather than crashing.
+
+### UI Layer (`render_maps_block`)
+- **Metrics Row**: Four metric cards displayed side-by-side: *Apex Speed*, *Braking Point*, *Max Steering (°)*, *DRS Activated*.
+- **DRS Card**: Rendered as `"✅ Yes"` or `"❌ No"` based on the boolean `drs_active` flag from `compute_stats`.
+
+### Robustness Notes
+- **Type Safety**: Both `Steering` and `DRS` FastF1 channels can be returned as strings or mixed types; `pd.to_numeric(..., errors="coerce")` is mandatory before any numeric operation.
+- **Graceful Fallback**: If `Steering` or `DRS` is unavailable (fully NaN), subplots render a centered annotation: `"No steering / DRS data available for this corner window."`.
 
 ---
 

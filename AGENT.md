@@ -159,11 +159,15 @@ To provide a complete overview of the race strategy alongside results, a `Stops`
 In compare mode, the track map is divided into `NUM_MINISECTORS = 25` micro-sectors based on distance telemetry (roughly 150-250m per segment). Average speeds of both drivers are calculated in each distance interval, and the segment line is drawn using the colour of the fastest driver. To prevent visual gaps, each segment includes the first coordinate of the subsequent segment.
 
 ### 15. Corner-by-Corner Performance Analysis
-An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block` to compare driver performance through specific turns:
-- Retrives corner coordinates and apex distances via `session_obj.get_circuit_info()`.
+An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block` to compare driver performance through specific turns. The analysis renders a **4-subplot Plotly layout** via `build_corner_fig`:
+- Retrieves corner coordinates and apex distances via `session_obj.get_circuit_info()`.
 - Slices telemetry to a distance window `[apex_distance - 200, apex_distance + 100]` around the apex.
-- Calculates apex speed (minimum speed) and braking point (first frame with `Brake > 0`, falling back to maximum deceleration `ds < -1` before the apex).
-- Displays metrics side-by-side and plots a Plotly figure with two subplots: Racing Line Overlay (X/Y coordinates with star/cross markers for apex/braking) and Speed Profile (Speed vs Distance relative to apex).
+- **Subplot 1 — Racing Line**: X/Y coordinate scatter with star marker (apex) and cross marker (braking point).
+- **Subplot 2 — Speed Profile**: Speed (km/h) vs Distance relative to apex (m). Calculates apex speed (minimum speed) and braking point (first frame with `Brake > 0`, falling back to maximum deceleration `ds < -1` before the apex).
+- **Subplot 3 — Steering Angle**: `Steering` channel coerced with `pd.to_numeric(..., errors="coerce")` to handle mixed string types; plotted in ° (degrees) vs distance relative to apex. Absolute max extracted as `max_steering`.
+- **Subplot 4 — DRS Status**: `DRS` channel coerced with `pd.to_numeric(..., errors="coerce")`; binary activation flag (active if DRS ≥ 10) plotted vs distance. Boolean `drs_active` passed to metrics card.
+- Displays four metrics side-by-side: *Apex Speed*, *Braking Point*, *Max Steering Angle (°)*, *DRS Activated (✅/❌)*.
+- Graceful fallback annotations rendered if Steering or DRS data is all-NaN for the corner window.
 
 ### 16. Tyre Degradation Modeling and Pace Drop-off
 To model pace drop-off and tyre wear characteristics:
