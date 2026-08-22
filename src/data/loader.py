@@ -947,6 +947,20 @@ def _build_pit_stops(driver: str, sess_k: str, laps_df: pd.DataFrame) -> list[di
 
 
 def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | None:
+    """Build per-stint tyre degradation data with predictive cliff lap estimation.
+
+    In addition to the existing linear OLS slope, this function computes:
+    - ``quad_coeffs``: (a, b, c) of the best-fit quadratic (degree-2) polynomial.
+    - ``cliff_lap``: estimated TyreLife lap at which lap time exceeds base pace by 1.5 s.
+      Calculated by solving the quadratic model for pace = base_pace + 1.5 s.
+      Falls back to the linear extrapolation when the quadratic is unavailable.
+    - ``remaining_laps``: cliff_lap minus the last observed TyreLife in the stint
+      (how many more laps the tyre is predicted to survive before degrading critically).
+    - ``pit_window_low``/``pit_window_high``: ±3 lap safety window around cliff_lap.
+    """
+    # Threshold for what constitutes a meaningful pace cliff (seconds)
+    CLIFF_THRESHOLD_S = 1.5
+
     try:
         laps = laps_df[laps_df["Driver"] == driver].copy()
         if laps.empty:
@@ -968,12 +982,73 @@ def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | Non
         for (stint, compound), group in clean_laps.groupby(["Stint", "Compound"]):
             group = group.sort_values("LapNumber")
             # Only consider stints with at least 4 valid laps
-            if len(group) >= 4:
-                stints_data.append({
-                    "stint": int(stint),
-                    "compound": str(compound),
-                    "laps": group[["TyreLife", "LapTime_s"]].to_dict(orient="records"),
-                })
+            if len(group) < 4:
+                continue
+
+            x_vals = np.array(group["TyreLife"].values, dtype=float)
+            y_vals = np.array(group["LapTime_s"].values, dtype=float)
+
+            # ── Linear regression (kept for chart and table compatibility) ───
+            slope, intercept = np.polyfit(x_vals, y_vals, 1)
+            base_pace = intercept  # pace at TyreLife = 0 (linear model)
+
+            # ── Quadratic regression (non-linear thermal degradation model) ──
+            quad_coeffs = None
+            cliff_lap: int | None = None
+            remaining_laps: int | None = None
+            pit_window_low: int | None = None
+            pit_window_high: int | None = None
+
+            try:
+                if len(x_vals) >= 5:
+                    a, b, c = np.polyfit(x_vals, y_vals, 2)
+                    quad_coeffs = (float(a), float(b), float(c))
+                    # Base pace from quadratic at TyreLife = x_vals.min()
+                    quad_base = np.polyval([a, b, c], x_vals.min())
+                    cliff_target = quad_base + CLIFF_THRESHOLD_S
+
+                    # Solve a*x^2 + b*x + (c - cliff_target) = 0
+                    discriminant = b**2 - 4 * a * (c - cliff_target)
+                    if a > 1e-9 and discriminant >= 0:
+                        # Take the larger root (the tyre degrades beyond baseline as age increases)
+                        x_cliff = (-b + np.sqrt(discriminant)) / (2 * a)
+                        if x_cliff > x_vals.min():
+                            cliff_lap = max(int(round(x_cliff)), int(x_vals.min()) + 1)
+                        else:
+                            cliff_lap = None
+            except Exception:
+                quad_coeffs = None
+                cliff_lap = None
+
+            # ── Fallback: linear cliff extrapolation ─────────────────────────
+            if cliff_lap is None and slope > 1e-6:
+                # Linear: pace = slope * x + intercept => cliff when pace = base + 1.5
+                x_cliff_linear = (base_pace + CLIFF_THRESHOLD_S - intercept) / slope
+                if x_cliff_linear > x_vals.min():
+                    cliff_lap = max(int(round(x_cliff_linear)), int(x_vals.min()) + 1)
+
+            # ── Remaining laps and pit window ────────────────────────────────
+            last_tyre_life = int(x_vals.max())
+            if cliff_lap is not None:
+                remaining_laps = max(cliff_lap - last_tyre_life, 0)
+                pit_window_low = max(cliff_lap - 3, 1)
+                pit_window_high = cliff_lap + 3
+
+            stints_data.append({
+                "stint": int(stint),
+                "compound": str(compound),
+                "laps": group[["TyreLife", "LapTime_s"]].to_dict(orient="records"),
+                # Predictive crossover fields
+                "slope": float(slope),
+                "base_pace": float(base_pace),
+                "quad_coeffs": quad_coeffs,
+                "last_tyre_life": last_tyre_life,
+                "cliff_lap": cliff_lap,
+                "remaining_laps": remaining_laps,
+                "pit_window_low": pit_window_low,
+                "pit_window_high": pit_window_high,
+                "cliff_threshold_s": CLIFF_THRESHOLD_S,
+            })
         return stints_data if stints_data else None
     except Exception:
         return None

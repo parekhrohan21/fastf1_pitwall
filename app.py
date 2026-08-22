@@ -35,7 +35,7 @@ from src.ui.components import (
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
     _render_consistency_section, _render_weather_correlation_section,
-    _render_multi_year_comparison_section
+    _render_multi_year_comparison_section, render_tyre_crossover_matrix
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1586,6 +1586,17 @@ else:
         f"<tbody>{table_html}</tbody>"
         f"</table></div>",
         unsafe_allow_html=True
+    )
+
+    # ── Tyre Life & Crossover Prediction Matrix ──────────────────────────────
+    render_tyre_crossover_matrix(
+        table_rows=table_rows,
+        fmt_driver1=_fmt_driver1,
+        fmt_driver2=_fmt_driver2,
+        driver1=driver1,
+        driver2=driver2 if compare else None,
+        colour1=colour1,
+        colour2=colour2,
     )
 
 # ── Driver Consistency & Stint Pace Distribution ───────────────────────────
