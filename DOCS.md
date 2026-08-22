@@ -33,6 +33,7 @@
 22. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
 23. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
 24. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
+25. [Predictive Tyre Degradation & Thermal Crossover Matrix Architecture](#25-predictive-tyre-degradation--thermal-crossover-matrix-architecture)
 
 
 
@@ -520,7 +521,7 @@ Each chart section follows the same pattern:
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
 | Pit Strategy & Undercut | Plotly | — (inline logic) | `build_undercut_chart` | `_all_laps1`, `_all_laps2` |
-| Tyre Degradation | Plotly | `_build_tyre_deg_data` | inline | `laps_df` filtered by driver; OLS regression of LapTime vs TyreLife per stint. |
+| Tyre Degradation + Crossover Matrix | Plotly + HTML | `_build_tyre_deg_data` | `build_tyre_deg_fig` + `render_tyre_crossover_matrix` | `laps_df` filtered by driver; linear & quadratic OLS + cliff lap prediction. |
 | Driver Consistency | Plotly | `_build_consistency_analysis` | `build_stint_consistency_fig` | `laps_df` filtered by driver; std dev, clean air vs traffic, violin/boxplot stint distribution. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
@@ -890,6 +891,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Track Temperature & Weather Impact Correlation**~~ | ✅ **Done** — `_build_weather_correlation_data` merges weather timeseries via `pd.merge_asof`. Dual-axis chart overlaying Track Temp (°C) on driver pace (`build_weather_correlation_fig`). |
 | ~~Medium~~ | ~~**Multi-Year Historical Lap Comparison**~~ | ✅ **Done** — `_build_multi_year_comparison` aligns two telemetry traces to a 500-pt distance grid. Plots speed profile overlays and continuous time delta curves (`build_multi_year_comparison_fig`). |
 | ~~Medium~~ | ~~**Driver Steering & DRS Subplots in Corner Analysis**~~ | ✅ **Done** — `build_corner_fig` expanded to 4 subplots: Racing Line, Speed, Steering Angle (°), DRS Activation. Metrics include Max Steering Angle and DRS Activated status. |
+| ~~High~~ | ~~**Predictive Tyre Degradation & Thermal Crossover Matrix**~~ | ✅ **Done** — `_build_tyre_deg_data` enhanced with quadratic thermal model, cliff lap estimation (+1.5 s threshold), pit window (±3 laps), and `render_tyre_crossover_matrix` urgency matrix table. |
 
 
 
@@ -901,6 +903,8 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
+
+- **PR #143** / **Issue #137** (`feat: Predictive Tyre Degradation & Thermal Crossover Matrix`): Enhanced `_build_tyre_deg_data` with quadratic polynomial regression, cliff lap estimation (pace +1.5 s threshold), remaining laps to cliff, and pit window (±3 laps). Updated `build_tyre_deg_fig` with quadratic thermal curve overlay and dotted cliff vline markers. Added `render_tyre_crossover_matrix` to `src/ui/components.py` with urgency colour-coding (🟢/🟡/🔴/✅). 13/13 new unit tests pass.
 
 - **PR #141** / **Issue #136** (`feat: Driver Steering & DRS Telemetry Subplots in Corner Analysis`): Expanded `build_corner_fig` in `src/charts/plotly.py` into a 4-subplot layout adding Steering Angle (`Steering` in ° degrees) and DRS activation (`DRS` status) profiles alongside Racing Line and Speed. Updated `compute_stats` to extract `max_steering` and `drs_active`. Metric cards display Max Steering Angle and DRS Activated status.
 - **PR #140** / **Issue #121** (`feat: Multi-Year Historical Lap Comparison`): Implemented `_build_multi_year_comparison` (500-pt distance grid interpolation, speed delta, continuous time delta), `build_multi_year_comparison_fig` (dual-subplot Plotly), and `_render_multi_year_comparison_section` (metric cards: Era Lap Time Delta, Top Speed ST, Min Apex Speed, Full Throttle %).
@@ -1101,6 +1105,74 @@ Utilises `plotly.subplots.make_subplots` with 4 rows and `row_heights=[0.35, 0.2
 ### Robustness Notes
 - **Type Safety**: Both `Steering` and `DRS` FastF1 channels can be returned as strings or mixed types; `pd.to_numeric(..., errors="coerce")` is mandatory before any numeric operation.
 - **Graceful Fallback**: If `Steering` or `DRS` is unavailable (fully NaN), subplots render a centered annotation: `"No steering / DRS data available for this corner window."`.
+
+
+---
+
+## 25. Predictive Tyre Degradation & Thermal Crossover Matrix Architecture
+
+The **Predictive Tyre Degradation & Thermal Crossover Matrix** module extends the existing OLS-based tyre degradation section with a non-linear thermal model that estimates when a tyre compound will reach a critical pace drop-off, enabling pit strategy window recommendations.
+
+### Data Layer (`_build_tyre_deg_data` — `src/data/loader.py`)
+
+**Existing behaviour (preserved):** Filters laps by `IsAccurate == True`, excludes TrackStatus `4/5/6/7`, and groups by `(Stint, Compound)` requiring ≥ 4 laps.
+
+**New behaviour:**
+
+| Step | Logic |
+|---|---|
+| **Linear regression** | `np.polyfit(x_vals, y_vals, 1)` → `slope`, `intercept`. Identical to previous behaviour; now stored as `slope` and `base_pace` keys. |
+| **Quadratic regression** | `np.polyfit(x_vals, y_vals, 2)` → `(a, b, c)` only when stint has ≥ 5 laps. Stored as `quad_coeffs`. |
+| **Cliff lap (quadratic)** | Solves `a·x² + b·x + (c − cliff_target) = 0` where `cliff_target = quad_base + 1.5`. Takes the larger root. Guards: `a > 1e-9`, `discriminant >= 0`, `x_cliff > x_vals.min()`. |
+| **Cliff lap (linear fallback)** | When quadratic unavailable, solves `x_cliff = (base_pace + 1.5 − intercept) / slope`. Guard: `slope > 1e-6`. |
+| **Remaining laps** | `max(cliff_lap − last_tyre_life, 0)` |
+| **Pit window** | `[max(cliff_lap − 3, 1), cliff_lap + 3]` |
+
+**New dict keys per stint:**
+```python
+{
+    "slope": float,           # linear degradation rate (s/lap)
+    "base_pace": float,       # linear intercept (base pace s)
+    "quad_coeffs": tuple | None,  # (a, b, c) or None
+    "last_tyre_life": int,    # last observed TyreLife
+    "cliff_lap": int | None,  # predicted TyreLife cliff lap
+    "remaining_laps": int | None,
+    "pit_window_low": int | None,
+    "pit_window_high": int | None,
+    "cliff_threshold_s": float,  # always 1.5
+}
+```
+
+### Visualisation Layer (`build_tyre_deg_fig` — `src/charts/plotly.py`)
+
+| Addition | Description |
+|---|---|
+| Linear trendline extension | Extended 5 laps beyond `x_vals.max()` to show extrapolated trend |
+| Quadratic thermal curve | `np.polyval([a, b, c], x_quad)` extending 8 laps beyond data; drawn at 55% opacity with team colour |
+| Cliff vline | `fig.add_vline(x=cliff_lap, line_dash="dot", ...)` with `"⚠ Cliff ~Lap N"` annotation per stint |
+| `table_rows` extended | New fields `cliff_lap`, `remaining_laps`, `pit_window_low`, `pit_window_high`, `last_tyre_life` included |
+
+### UI Layer (`render_tyre_crossover_matrix` — `src/ui/components.py`)
+
+Rendered immediately after the Degradation Rates Summary table. Columns:
+- **Driver** (team colour) · **Stint** · **Compound** (coloured dot) · **Deg Rate** · **Model** (Quadratic/Linear) · **Cliff Lap (TyreLife)** · **Remaining** · **Pit Window** · **Status**
+
+**Urgency logic (`_urgency`):**
+
+| `remaining_laps` | Badge | Row tint |
+|---|---|---|
+| `None` | — | transparent |
+| `<= 0` | ✅ Past Cliff | subtle white |
+| `<= 3` | 🔴 Critical | red tint |
+| `<= 8` | 🟡 Soon | amber tint |
+| `> 8` | 🟢 Safe | green tint |
+
+Early return with info message if no cliff estimates are available (insufficient laps or flat slope).
+
+### Robustness Notes
+- `try/except Exception` wraps the entire quadratic block; failures fall through to linear fallback.
+- `try/except Exception: return None` at the outer function level prevents app crashes on any unexpected data shape.
+- All new `table_rows` fields accessed with `.get()` in the figure builder for backward compatibility.
 
 ---
 

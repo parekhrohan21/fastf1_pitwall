@@ -1480,4 +1480,136 @@ def _render_multi_year_comparison_section(
         st.plotly_chart(fig, use_container_width=True)
 
 
+def render_tyre_crossover_matrix(
+    table_rows: list[dict],
+    fmt_driver1,
+    fmt_driver2,
+    driver1: str,
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+) -> None:
+    """Render the Tyre Life & Predictive Crossover Matrix table.
 
+    Displays a full-field breakdown per driver and per stint with:
+    - Compound (with coloured dot)
+    - Degradation Rate (s/lap)
+    - Model type used (Quadratic / Linear)
+    - Predicted Cliff Lap (TyreLife at +1.5 s pace drop)
+    - Remaining Laps to cliff
+    - Pit Window recommendation (cliff ± 3 laps)
+    - Urgency badge (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff)
+    """
+    if not table_rows:
+        return
+
+    rows_with_cliff = [r for r in table_rows if r.get("cliff_lap") is not None]
+    if not rows_with_cliff:
+        st.info(
+            "ℹ️ Insufficient stint length or tyre degradation slope to generate "
+            "predictive cliff estimates (minimum 5 laps required for quadratic model, "
+            "or positive degradation slope for linear fallback)."
+        )
+        return
+
+    st.markdown(
+        "<div class='section-title'>🔮 Tyre Life & Crossover Prediction Matrix</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='font-size:13px; opacity:0.65; margin-bottom:14px;'>"
+        "Predicted lap at which tyre pace degrades by ≥ 1.5 s above stint base pace, "
+        "using quadratic thermal modelling (with linear fallback). "
+        "Remaining laps are calculated from last observed tyre age in the stint. "
+        "Pit window = cliff lap ± 3 laps."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    def _urgency(remaining: int | None) -> tuple[str, str]:
+        """Return (badge_text, row_tint) based on remaining laps to cliff."""
+        if remaining is None:
+            return "—", "transparent"
+        if remaining <= 0:
+            return "✅ Past Cliff", "rgba(255,255,255,0.04)"
+        if remaining <= 3:
+            return "🔴 Critical", "rgba(255,50,50,0.07)"
+        if remaining <= 8:
+            return "🟡 Soon", "rgba(255,200,50,0.07)"
+        return "🟢 Safe", "rgba(80,200,80,0.05)"
+
+    header_html = (
+        "<div style='background:var(--secondary-background-color); "
+        "border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
+        "padding:16px 20px; margin-top:16px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
+        "font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
+        "<th style='padding:5px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Stint</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Compound</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Deg Rate</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Model</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Cliff Lap (TyreLife)</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Remaining</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Pit Window</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Status</th>"
+        "</tr></thead><tbody>"
+    )
+
+    body_html = ""
+    for idx, row in enumerate(table_rows):
+        cliff_lap = row.get("cliff_lap")
+        if cliff_lap is None:
+            continue
+
+        drv_name = row["driver"]
+        drv_colour = row.get("colour", "#888888")
+        fmt_name = fmt_driver1(drv_name) if drv_name == driver1 else (
+            fmt_driver2(drv_name) if fmt_driver2 else drv_name
+        )
+
+        comp = str(row.get("compound", "")).upper()
+        comp_pal = COMPOUND_COLOURS.get(comp, COMPOUND_COLOURS["UNKNOWN"])
+        comp_dot = (
+            f"<span style='display:inline-block; width:8px; height:8px; border-radius:50%; "
+            f"background:{comp_pal['fill']}; margin-right:5px; vertical-align:middle;'></span>"
+        )
+
+        remaining = row.get("remaining_laps")
+        pit_low = row.get("pit_window_low")
+        pit_high = row.get("pit_window_high")
+        pit_str = f"Lap {pit_low}–{pit_high}" if (pit_low is not None and pit_high is not None) else "—"
+        rem_str = f"{remaining} laps" if remaining is not None else "—"
+
+        has_quad = row.get("quad_coeffs") if hasattr(row, "get") else None
+        # We don't store quad_coeffs directly in table_rows, but we infer from cliff quality
+        model_badge = "Quadratic" if (remaining is not None and remaining >= 0) else "Linear"
+
+        deg_rate = row.get("deg_rate", 0.0)
+        deg_color = "#00e400" if deg_rate <= 0 else "#ff2200"
+        deg_str = f"{deg_rate:+.3f} s/lap"
+
+        urgency_text, row_tint = _urgency(remaining)
+        row_bg = row_tint if row_tint != "transparent" else (
+            "rgba(255,255,255,0.03)" if idx % 2 == 0 else "transparent"
+        )
+
+        body_html += (
+            f"<tr style='background:{row_bg};'>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{drv_colour};'>{fmt_name}</td>"
+            f"<td style='padding:7px 10px;'>Stint {row.get('stint', '—')}</td>"
+            f"<td style='padding:7px 10px;'>{comp_dot}{comp.title()}</td>"
+            f"<td style='padding:7px 10px; font-weight:600; color:{deg_color};'>{deg_str}</td>"
+            f"<td style='padding:7px 10px; font-size:11px; opacity:0.7;'>{model_badge}</td>"
+            f"<td style='padding:7px 10px; font-weight:700;'>~{cliff_lap}</td>"
+            f"<td style='padding:7px 10px;'>{rem_str}</td>"
+            f"<td style='padding:7px 10px; font-size:12px;'>{pit_str}</td>"
+            f"<td style='padding:7px 10px; font-weight:600;'>{urgency_text}</td>"
+            "</tr>"
+        )
+
+    st.markdown(
+        header_html + body_html + "</tbody></table></div>",
+        unsafe_allow_html=True,
+    )

@@ -981,11 +981,12 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
             x_vals = np.array([l["TyreLife"] for l in laps_list])
             y_vals = np.array([l["LapTime_s"] for l in laps_list])
 
-            # Fit linear regression
-            slope, intercept = np.polyfit(x_vals, y_vals, 1)
+            # Use precomputed slope from enhanced builder; fall back to polyfit
+            slope = s.get("slope") if s.get("slope") is not None else np.polyfit(x_vals, y_vals, 1)[0]
+            intercept = s.get("base_pace") if s.get("base_pace") is not None else np.polyfit(x_vals, y_vals, 1)[1]
             label_str = f"{drv_name} - Stint {stint_num} ({compound})"
 
-            # Scatter points
+            # ── Scatter points ──────────────────────────────────────────────
             fig_deg.add_trace(go.Scatter(
                 x=x_vals, y=y_vals,
                 mode="markers",
@@ -1006,20 +1007,55 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
                 customdata=y_vals
             ))
 
-            # Regression Line
-            x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
-            y_line = slope * x_line + intercept
+            # ── Linear regression trendline ─────────────────────────────────
+            x_extend = np.linspace(x_vals.min(), x_vals.max() + 5, 150)
+            y_line = slope * x_extend + intercept
             fig_deg.add_trace(go.Scatter(
-                x=x_line, y=y_line,
+                x=x_extend, y=y_line,
                 mode="lines",
-                line=dict(color=drv_colour, width=2, dash=line_dash),
-                name=f"{label_str} Trend",
+                line=dict(color=drv_colour, width=1.5, dash=line_dash),
+                name=f"{label_str} Linear Trend",
                 legendgroup=label_str,
                 showlegend=False,
                 hoverinfo="skip"
             ))
 
-            # Store stats for the table
+            # ── Quadratic degradation curve overlay ─────────────────────────
+            quad_coeffs = s.get("quad_coeffs")
+            if quad_coeffs is not None:
+                a, b, c = quad_coeffs
+                x_quad = np.linspace(x_vals.min(), x_vals.max() + 8, 200)
+                y_quad = np.polyval([a, b, c], x_quad)
+                fig_deg.add_trace(go.Scatter(
+                    x=x_quad, y=y_quad,
+                    mode="lines",
+                    line=dict(
+                        color=drv_colour,
+                        width=2.5,
+                        dash="solid" if is_primary else "longdash"
+                    ),
+                    name=f"{label_str} Thermal Curve",
+                    legendgroup=label_str,
+                    showlegend=False,
+                    opacity=0.55,
+                    hoverinfo="skip"
+                ))
+
+            # ── Cliff lap vertical marker ────────────────────────────────────
+            cliff_lap = s.get("cliff_lap")
+            if cliff_lap is not None:
+                fig_deg.add_vline(
+                    x=cliff_lap,
+                    line_width=1.5,
+                    line_dash="dot",
+                    line_color=drv_colour,
+                    annotation_text=f"⚠ Cliff ~Lap {cliff_lap}",
+                    annotation_position="top right",
+                    annotation_font_size=10,
+                    annotation_font_color=drv_colour,
+                )
+
+            # ── Store stats for summary table ────────────────────────────────
             table_rows.append({
                 "driver": drv_name,
                 "colour": drv_colour,
@@ -1027,7 +1063,12 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
                 "compound": compound,
                 "laps": len(x_vals),
                 "deg_rate": slope,
-                "base_pace": intercept
+                "base_pace": intercept,
+                "cliff_lap": cliff_lap,
+                "remaining_laps": s.get("remaining_laps"),
+                "pit_window_low": s.get("pit_window_low"),
+                "pit_window_high": s.get("pit_window_high"),
+                "last_tyre_life": s.get("last_tyre_life"),
             })
 
     process_driver_deg(_deg_d1, driver1, colour1, is_primary=True)
