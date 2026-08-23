@@ -347,9 +347,10 @@ Calls `sess.get_driver(driver)` → `TeamName` → `_team_colour()`.
 Builds `{"4": "NOR · Norris", "81": "PIA · Piastri", ...}` from live FastF1 driver info.
 Safe — individual driver failures don't break the whole dict.
 
-### `_fmt_driver(num: str) -> str`
-`format_func` for `st.selectbox`. Returns `_drv_labels.get(num, num)`.
-Use this everywhere a driver number is displayed to a user.
+### `_fmt_driver1(num: str) -> str` / `_fmt_driver2(num: str) -> str`
+Formatting closures built per-session by `_build_driver_labels()`. Each closure captures the `_drv_labels` dict for its respective session (Driver 1 vs. Driver 2 compare session).
+Returns `_drv_labels.get(num, num)` — formatted name like `"NOR · Norris"` or the raw driver number as fallback.
+Use these everywhere a driver number is displayed to a user. **Never use raw driver numbers directly in the UI.**
 
 ### `_build_constructor_standings(year: int, round_no: int = None) -> list`
 Fetches season Constructors' Championship standings from Jolpi (Ergast) API. Cached using `@st.cache_data(show_spinner=False, ttl=3600)` with failure fallback.
@@ -370,6 +371,15 @@ Applies consistent Matplotlib axis styling (grey grid, spine opacity, label size
 `special="brake"` → binary Y axis (Off/On).
 `special="drs"` → DRS states (0/8/12).
 `special="gear"` → integer Y ticks.
+
+### `_build_race_control_messages(sess_k: str, _sess_obj) -> pd.DataFrame | None`
+Parses `sess.race_control_messages` into a classified DataFrame with a `Category` column (SC, VSC, Red, Yellow, Clear, Investigation). Returns `None` if unavailable. Used to populate the Race Control Feed table and overlay flag zones on Lap History and Gap charts.
+
+### `_build_grid_heatmap_data(sess_k, laps_df, selected_drivers, mode) -> dict | None`
+Builds grid-wide analytical data matrices for multi-driver heatmap analysis. Supports three modes: `"Sectors"` (S1/S2/S3/Theoretical delta from P1), `"Laps"` (lap-by-lap pace heatmap), `"Speed"` (ST/I1/I2/FL top speed deficit matrix). Returns `None` if fewer than 3 drivers selected.
+
+### `render_tyre_crossover_matrix(table_rows, fmt_driver1, fmt_driver2, driver1, ...)`
+Renders the full-field **Tyre Life & Crossover Prediction Matrix** HTML table after the degradation summary. Reads `cliff_lap`, `remaining_laps`, `pit_window_low/high` from `table_rows` (produced by `build_tyre_deg_fig`). Applies urgency colour-coding per row (🟢/🟡/🔴/✅). Returns early silently if no cliff estimates are available.
 
 ### `render_summary(lap, driver, colour)`
 Renders the full driver banner section:
@@ -843,6 +853,8 @@ Run this after any significant change:
 - [ ] Compound multiselect filter shows/hides laps correctly
 - [ ] Fuel-Adjusted Pace slider updates the chart
 - [ ] Tyre Stint Timeline shows coloured bars
+- [ ] Tyre Degradation chart renders with regression trendlines and cliff vlines
+- [ ] Tyre Life & Crossover Prediction Matrix renders with urgency badges
 - [ ] Telemetry chart renders all 6 channels
 - [ ] Export CSV button downloads a valid file with Sector1/2/3 columns
 - [ ] Fastest Laps Leaderboard shows all drivers
@@ -851,6 +863,9 @@ Run this after any significant change:
 - [ ] Gap to Leader chart renders
 - [ ] Race Position chart renders (Race/Sprint sessions only)
 - [ ] Track Map renders with speed colours
+- [ ] Corner Analysis tab: 4-subplot layout (Racing Line, Speed, Steering, DRS) renders
+- [ ] Driver Consistency section renders violin/boxplot with stat cards
+- [ ] Weather Impact Correlation chart renders with dual axis
 - [ ] Dark mode toggle switches all backgrounds including top bar
 - [ ] Light mode toggle reverses all backgrounds
 
@@ -892,6 +907,8 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Multi-Year Historical Lap Comparison**~~ | ✅ **Done** — `_build_multi_year_comparison` aligns two telemetry traces to a 500-pt distance grid. Plots speed profile overlays and continuous time delta curves (`build_multi_year_comparison_fig`). |
 | ~~Medium~~ | ~~**Driver Steering & DRS Subplots in Corner Analysis**~~ | ✅ **Done** — `build_corner_fig` expanded to 4 subplots: Racing Line, Speed, Steering Angle (°), DRS Activation. Metrics include Max Steering Angle and DRS Activated status. |
 | ~~High~~ | ~~**Predictive Tyre Degradation & Thermal Crossover Matrix**~~ | ✅ **Done** — `_build_tyre_deg_data` enhanced with quadratic thermal model, cliff lap estimation (+1.5 s threshold), pit window (±3 laps), and `render_tyre_crossover_matrix` urgency matrix table. |
+| Medium | **Interactive Telemetry Channel Toggle & Custom Trace Filtering** | Allow users to toggle individual telemetry channels (Speed, Throttle, Brake, RPM, Gear, DRS) on/off and reorder traces in the 6-channel Matplotlib chart. |
+| Low | **High-Throughput Telemetry Data Exporter (Parquet & JSON)** | Add Parquet and JSON export options alongside the existing CSV exporter, with batch multi-lap export support. |
 
 
 
