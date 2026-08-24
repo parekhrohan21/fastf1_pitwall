@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import matplotlib
 import matplotlib.pyplot as plt
 
 # Streamlit Page Config MUST be run first before any other Streamlit widgets!
