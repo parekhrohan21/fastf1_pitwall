@@ -1510,7 +1510,7 @@ _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
 _render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Temperature & Weather Impact Correlation ─────────────────────────
-_render_weather_correlation_section(sess_key, _all_laps1, sess1, _hl_drivers, _hl_colours, _fmt_driver1)
+_render_weather_correlation_section(sess_key, _all_laps1, sess, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Multi-Year Historical Lap Comparison ─────────────────────────────────
 if compare and tel1 is not None and tel2 is not None:
