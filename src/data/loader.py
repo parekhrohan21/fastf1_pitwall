@@ -738,16 +738,28 @@ def _build_final_classification(sess_k: str, _results_df: pd.DataFrame):
         return None
 
 
-def _fmt_driver1(num: str) -> str:
-    """Format function for selectbox — shows 'ABR · Last Name' for Session 1."""
-    return _drv_labels1.get(str(num), str(num))
+def _make_fmt_driver(drv_labels: dict, fallback: dict | None = None):
+    """Return a format_func closure for st.selectbox that shows 'ABR · Last Name'.
 
+    Args:
+        drv_labels: Primary labels dict built by _build_driver_labels for the session.
+        fallback:   Optional fallback dict (e.g. Session 1 labels when Session 2 is
+                    missing a driver). Consulted only when drv_labels has no match.
 
-def _fmt_driver2(num: str) -> str:
-    """Format function for selectbox — shows 'ABR · Last Name' for Session 2."""
-    if _drv_labels2 is not None:
-        return _drv_labels2.get(str(num), str(num))
-    return _drv_labels1.get(str(num), str(num))
+    Usage in app.py::
+
+        _fmt_driver1 = _make_fmt_driver(_drv_labels1)
+        _fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labels1)
+    """
+    def _fmt(num: str) -> str:
+        key = str(num)
+        label = drv_labels.get(key)
+        if label is not None:
+            return label
+        if fallback is not None:
+            return fallback.get(key, key)
+        return key
+    return _fmt
 
 
 def _build_lap_history(driver: str, sess_k: str, laps_df: pd.DataFrame):

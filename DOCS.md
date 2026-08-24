@@ -129,7 +129,7 @@ sess.load(telemetry=True, laps=True, weather=True, messages=True)
 
 ### Driver Numbers vs Names
 
-FastF1 identifies drivers by **number strings** (`"4"`, `"81"`), not names. Always use numbers as the internal key. Convert to display names only at render time via `_fmt_driver()`.
+FastF1 identifies drivers by **number strings** (`"4"`, `"81"`), not names. Always use numbers as the internal key. Convert to display names only at render time via `_fmt_driver1()` / `_fmt_driver2()`.
 
 
 

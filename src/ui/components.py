@@ -9,7 +9,7 @@ from src.data.loader import (
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
-    _fmt_driver1, _fmt_driver2, _build_grid_heatmap_data, _build_consistency_analysis,
+    _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_multi_year_comparison
 )
 from src.charts.plotly import (
@@ -1118,7 +1118,7 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
             st.info("Load a session to view corner analysis.")
 
 
-def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[str], sess_key: str):
+def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[str], sess_key: str, fmt_func=None):
     """Render the Multi-Driver Grid Analysis & Heatmaps section in app.py."""
     if sess is None or laps_df is None or laps_df.empty or not all_drivers:
         st.info("ℹ️ Multi-driver grid analysis is unavailable for this session.")
@@ -1133,7 +1133,7 @@ def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[
             options=all_drivers,
             default=default_drvs,
             key="grid_heatmap_drivers_select",
-            format_func=_fmt_driver1,
+            format_func=fmt_func if fmt_func is not None else str,
             help="Select drivers across the grid to compare split times, pace deltas, and top speeds.",
         )
 
