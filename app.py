@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # Modular imports
-from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP
+from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
     load_schedule, load_session, clear_session_cache, format_laptime, driver_colour,
     _build_driver_labels, get_telemetry_cached, _format_classification_time,
