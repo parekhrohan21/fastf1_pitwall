@@ -20,7 +20,7 @@ from src.data.loader import (
     _map_driver_id_to_number, _get_session_winner, _get_default_gp_index,
     get_constructor_colour, is_same_team, _build_constructor_standings,
     get_driver_standings_points, _build_driver_standings, _build_final_classification,
-    _fmt_driver1, _fmt_driver2, _build_lap_history, _build_fuel_adjusted,
+    _make_fmt_driver, _build_lap_history, _build_fuel_adjusted,
     _build_fuel_sim_leaderboard, _build_stints, _build_pit_stops, _build_tyre_deg_data,
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
@@ -378,6 +378,10 @@ _rc_messages = _build_race_control_messages(sess_key, sess)
 # ── Driver name labels (built once per session) ───────────────────────────────
 _drv_labels1: dict = _build_driver_labels(sess)
 _drv_labels2: dict = _build_driver_labels(sess2) if sess2 is not None else None
+
+# Build closures that capture the labels dicts — avoids NameError from loader.py globals
+_fmt_driver1 = _make_fmt_driver(_drv_labels1)
+_fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labels1)
 
 # ── Export Figures Collection ──────────────────────────────────────────────────
 _export_figs = {}
@@ -2146,7 +2150,7 @@ else:
 
 # ── Multi-Driver Grid Analysis & Heatmaps ───────────────────────────────────────
 st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
-_render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key)
+_render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
 
 
 
