@@ -1302,7 +1302,7 @@ def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, 
 
     fig = build_stint_consistency_fig(analysis_data, highlight_drivers, highlight_colours)
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     table_rows = []
     for drv, col in zip(highlight_drivers, highlight_colours):
@@ -1324,7 +1324,7 @@ def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, 
     if table_rows:
         df_table = pd.DataFrame(table_rows)
         st.markdown("<div style='font-size:13px; font-weight:700; margin-top:8px; margin-bottom:6px; opacity:0.85;'>📊 Stint-by-Stint Consistency Breakdown</div>", unsafe_allow_html=True)
-        st.dataframe(df_table, use_container_width=True, hide_index=True)
+        st.dataframe(df_table, width="stretch", hide_index=True)
 
 
 def _render_weather_correlation_section(
@@ -1409,7 +1409,7 @@ def _render_weather_correlation_section(
 
     fig = build_weather_correlation_fig(weather_data, colors_map, labels_map)
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 def _render_multi_year_comparison_section(
@@ -1477,7 +1477,7 @@ def _render_multi_year_comparison_section(
 
     fig = build_multi_year_comparison_fig(data, color1, color2)
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 def render_tyre_crossover_matrix(

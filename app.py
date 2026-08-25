@@ -2184,7 +2184,7 @@ else:
         )
     st.dataframe(
         _rc_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
