@@ -906,8 +906,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Track Temperature & Weather Impact Correlation**~~ | ✅ **Done** — `_build_weather_correlation_data` merges weather timeseries via `pd.merge_asof`. Dual-axis chart overlaying Track Temp (°C) on driver pace (`build_weather_correlation_fig`). |
 | ~~Medium~~ | ~~**Multi-Year Historical Lap Comparison**~~ | ✅ **Done** — `_build_multi_year_comparison` aligns two telemetry traces to a 500-pt distance grid. Plots speed profile overlays and continuous time delta curves (`build_multi_year_comparison_fig`). |
 | ~~Medium~~ | ~~**Driver Steering & DRS Subplots in Corner Analysis**~~ | ✅ **Done** — `build_corner_fig` expanded to 4 subplots: Racing Line, Speed, Steering Angle (°), DRS Activation. Metrics include Max Steering Angle and DRS Activated status. |
-| ~~High~~ | ~~**Predictive Tyre Degradation & Thermal Crossover Matrix**~~ | ✅ **Done** — `_build_tyre_deg_data` enhanced with quadratic thermal model, cliff lap estimation (+1.5 s threshold), pit window (±3 laps), and `render_tyre_crossover_matrix` urgency matrix table. |
-| Medium | **Interactive Telemetry Channel Toggle & Custom Trace Filtering** | Allow users to toggle individual telemetry channels (Speed, Throttle, Brake, RPM, Gear, DRS) on/off and reorder traces in the 6-channel Matplotlib chart. |
+| ~~Medium~~ | ~~**Interactive Telemetry Channel Toggle & Custom Trace Filtering**~~ | ✅ **Done** — Added dynamic multiselect channel filter in `app.py` and updated `build_chart` in `src/charts/matplotlib.py` with custom channel filtering and proportional layout height scaling. |
 | Low | **High-Throughput Telemetry Data Exporter (Parquet & JSON)** | Add Parquet and JSON export options alongside the existing CSV exporter, with batch multi-lap export support. |
 
 
@@ -921,7 +920,10 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #144** / **Issue #138** (`feat: Interactive Telemetry Channel Toggle & Custom Trace Filtering`): Added dynamic channel selection multiselect in `app.py` under the Telemetry section, updated `build_chart` in `src/charts/matplotlib.py` to support dynamic channel subset filtering (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) with proportional figure height scaling (`max(2.8, sum(h_ratios) * 1.05 + 0.5)`), restored missing `CHANNEL_CONFIG` and `mpatches` definitions, and added comprehensive pytest suite (9 new unit tests).
+
 - **PR #143** / **Issue #137** (`feat: Predictive Tyre Degradation & Thermal Crossover Matrix`): Enhanced `_build_tyre_deg_data` with quadratic polynomial regression, cliff lap estimation (pace +1.5 s threshold), remaining laps to cliff, and pit window (±3 laps). Updated `build_tyre_deg_fig` with quadratic thermal curve overlay and dotted cliff vline markers. Added `render_tyre_crossover_matrix` to `src/ui/components.py` with urgency colour-coding (🟢/🟡/🔴/✅). 13/13 new unit tests pass.
+
 
 - **PR #141** / **Issue #136** (`feat: Driver Steering & DRS Telemetry Subplots in Corner Analysis`): Expanded `build_corner_fig` in `src/charts/plotly.py` into a 4-subplot layout adding Steering Angle (`Steering` in ° degrees) and DRS activation (`DRS` status) profiles alongside Racing Line and Speed. Updated `compute_stats` to extract `max_steering` and `drs_active`. Metric cards display Max Steering Angle and DRS Activated status.
 - **PR #140** / **Issue #121** (`feat: Multi-Year Historical Lap Comparison`): Implemented `_build_multi_year_comparison` (500-pt distance grid interpolation, speed delta, continuous time delta), `build_multi_year_comparison_fig` (dual-subplot Plotly), and `_render_multi_year_comparison_section` (metric cards: Era Lap Time Delta, Top Speed ST, Min Apex Speed, Full Throttle %).
