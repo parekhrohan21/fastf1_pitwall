@@ -42,7 +42,7 @@ from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     build_tyre_deg_fig, build_undercut_chart, _add_flag_zones
 )
-from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart
+from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart, AVAILABLE_CHANNELS
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 # Inject design system & dark/light theme CSS early on every render
@@ -1532,7 +1532,13 @@ if tel1 is None:
     _render_footer()
     st.stop()
 
-
+# ── Telemetry Channel Filter ──────────────────────────────────────────────────
+selected_channels = st.multiselect(
+    "Telemetry Channels",
+    options=AVAILABLE_CHANNELS,
+    default=AVAILABLE_CHANNELS,
+    help="Toggle and select which telemetry channels to display on the chart.",
+)
 
 # ── Overlapping ───────────────────────────────────────────────────────────────
 if chart_mode == "Overlapping" or not compare:
@@ -1549,9 +1555,12 @@ if chart_mode == "Overlapping" or not compare:
         else:
             title += f"  ·  {driver1}"
 
-    fig = build_chart(drv_list, title)
-    st.pyplot(fig, width="stretch")
-    plt.close(fig)
+    fig = build_chart(drv_list, title, selected_channels=selected_channels)
+    if fig is not None:
+        st.pyplot(fig, width="stretch")
+        plt.close(fig)
+    else:
+        st.info("Select at least one telemetry channel above to display the chart.")
 
 # ── Separate ──────────────────────────────────────────────────────────────────
 else:
@@ -1569,9 +1578,13 @@ else:
             except Exception:
                 lt = ""
             title = f"{drv_lbl}  ·  {lt}"
-            fig = build_chart([(drv_lbl, colour, tel)], title, fig_width=7)
-            st.pyplot(fig, width="stretch")
-            plt.close(fig)
+            fig = build_chart([(drv_lbl, colour, tel)], title, fig_width=7, selected_channels=selected_channels)
+            if fig is not None:
+                st.pyplot(fig, width="stretch")
+                plt.close(fig)
+            else:
+                st.info("Select at least one telemetry channel to display.")
+
 
 
 # ── Export Telemetry ──────────────────────────────────────────────────────────

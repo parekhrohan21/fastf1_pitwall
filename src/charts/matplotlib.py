@@ -1,9 +1,24 @@
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
+import matplotlib.patches as mpatches
 import numpy as np
 import pandas as pd
 import streamlit as st
+import fastf1.utils
+
+# ── Telemetry Channel Configurations ──────────────────────────────────────────
+# Mapping of channel name -> (subplot_title, df_column, y_label, special_flag, height_ratio)
+CHANNEL_CONFIG = {
+    "Speed":    ("Speed",    "Speed",    "km/h",  "",      3.0),
+    "Throttle": ("Throttle", "Throttle", "%",     "",      2.0),
+    "Brake":    ("Brake",    "Brake",    "",      "brake", 1.0),
+    "RPM":      ("RPM",      "RPM",      "RPM",   "",      2.0),
+    "Gear":     ("Gear",     "nGear",    "Gear",  "gear",  1.5),
+    "DRS":      ("DRS",      "DRS",      "DRS",   "drs",   1.0),
+}
+AVAILABLE_CHANNELS = list(CHANNEL_CONFIG.keys())
+
 
 def style_ax(ax, ylabel: str, special: str = ""):
     ax.set_ylabel(ylabel, fontsize=11, labelpad=8)
@@ -24,29 +39,69 @@ def style_ax(ax, ylabel: str, special: str = ""):
         ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
 
 
-def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
-    """drivers_telemetry: list of (driver_label, colour, tel_df)"""
-    fig = plt.figure(figsize=(fig_width, 11), facecolor="none")
-    gs = gridspec.GridSpec(N, 1, figure=fig, hspace=0.04,
-                           height_ratios=H_RATIOS, top=0.94, bottom=0.06,
-                           left=0.07, right=0.97)
-    axes = [fig.add_subplot(gs[i]) for i in range(N)]
+def build_chart(
+    drivers_telemetry: list,
+    title_str: str,
+    fig_width: float = 14,
+    selected_channels: list[str] | None = None,
+) -> plt.Figure | None:
+    """Build multi-channel telemetry comparison chart with dynamic channel filtering and height scaling."""
+    if selected_channels is None:
+        active_channel_keys = AVAILABLE_CHANNELS
+    else:
+        # Preserve user selection order while filtering only known valid channels
+        active_channel_keys = [ch for ch in selected_channels if ch in CHANNEL_CONFIG]
 
-    for ax_i, (_, col, ylabel, special) in enumerate(CHANNELS):
+    if not active_channel_keys:
+        return None
+
+    active_channels = [CHANNEL_CONFIG[k] for k in active_channel_keys]
+    num_channels = len(active_channels)
+    h_ratios = [cfg[4] for cfg in active_channels]
+
+    # Dynamically scale figure height based on selected channels and their height ratios
+    fig_height = max(2.8, sum(h_ratios) * 1.05 + 0.5)
+
+    fig = plt.figure(figsize=(fig_width, fig_height), facecolor="none")
+    gs = gridspec.GridSpec(
+        num_channels,
+        1,
+        figure=fig,
+        hspace=0.04,
+        height_ratios=h_ratios,
+        top=0.94 if num_channels > 1 else 0.90,
+        bottom=0.06 if num_channels > 1 else 0.15,
+        left=0.07,
+        right=0.97,
+    )
+    axes = [fig.add_subplot(gs[i]) for i in range(num_channels)]
+
+    for ax_i, (_, col, ylabel, special, _) in enumerate(active_channels):
         ax = axes[ax_i]
         for drv_label, colour, tel in drivers_telemetry:
             if tel is not None and col in tel.columns:
                 lw = 1.7 if drv_label == drivers_telemetry[0][0] else 1.5
                 ls = "-" if drv_label == drivers_telemetry[0][0] else "--"
                 al = 0.95 if drv_label == drivers_telemetry[0][0] else 0.80
-                ax.plot(tel["Distance"], tel[col],
-                        color=colour, linewidth=lw, linestyle=ls, alpha=al,
-                        label=drv_label, solid_capstyle="round")
+                ax.plot(
+                    tel["Distance"],
+                    tel[col],
+                    color=colour,
+                    linewidth=lw,
+                    linestyle=ls,
+                    alpha=al,
+                    label=drv_label,
+                    solid_capstyle="round",
+                )
                 if col == "Speed" and drv_label == drivers_telemetry[0][0]:
                     ax.fill_between(tel["Distance"], tel[col], alpha=0.05, color=colour)
 
         unit = f" ({ylabel})" if ylabel else ""
-        style_ax(ax, col if not ylabel else ylabel + unit if special not in ("brake","drs","gear") else col, special)
+        style_ax(
+            ax,
+            col if not ylabel else ylabel + unit if special not in ("brake", "drs", "gear") else col,
+            special,
+        )
 
         # gear: integer y ticks
         if special == "gear":
@@ -54,25 +109,40 @@ def build_chart(drivers_telemetry: list, title_str: str, fig_width: float = 14):
             ax.set_ylim(0.5, 8.5)
             ax.set_yticks(range(1, 9))
 
-        if ax_i < N - 1:
+        if ax_i < num_channels - 1:
             ax.set_xticklabels([])
         else:
             ax.set_xlabel("Distance (m)", fontsize=11, labelpad=8)
 
-    for ax_i, (label, _, _, _) in enumerate(CHANNELS):
+    for ax_i, (label, _, _, _, _) in enumerate(active_channels):
         axes[ax_i].yaxis.set_label_position("left")
-        axes[ax_i].text(1.002, 0.5, label, transform=axes[ax_i].transAxes,
-                        fontsize=10, va="center", ha="left",
-                        rotation=0, fontweight="600", alpha=0.6)
+        axes[ax_i].text(
+            1.002,
+            0.5,
+            label,
+            transform=axes[ax_i].transAxes,
+            fontsize=10,
+            va="center",
+            ha="left",
+            rotation=0,
+            fontweight="600",
+            alpha=0.6,
+        )
 
     fig.suptitle(title_str, fontsize=12, fontweight="bold", y=0.98)
 
     # Legend
     handles = [mpatches.Patch(color=c, label=d) for d, c, _ in drivers_telemetry]
     if len(handles) > 1:
-        fig.legend(handles=handles, loc="upper right",
-                   bbox_to_anchor=(0.97, 0.965), fontsize=9,
-                   framealpha=0.9, handlelength=1.2, handleheight=0.8)
+        fig.legend(
+            handles=handles,
+            loc="upper right",
+            bbox_to_anchor=(0.97, 0.965),
+            fontsize=9,
+            framealpha=0.9,
+            handlelength=1.2,
+            handleheight=0.8,
+        )
     return fig
 
 
@@ -101,7 +171,6 @@ def build_delta_chart(tel1, tel2, colour1, colour2, label1, label2):
     fig_d.tight_layout()
     return fig_d
 
-import fastf1.utils
 
 def build_time_delta_chart(lap_comp, lap_ref, colour_comp, colour_ref, label_comp, label_ref):
     """
@@ -142,3 +211,4 @@ def build_time_delta_chart(lap_comp, lap_ref, colour_comp, colour_ref, label_com
         import logging
         logging.error(f"Error building time delta chart: {e}")
         return None
+
