@@ -34,6 +34,7 @@
 23. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
 24. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
 25. [Predictive Tyre Degradation & Thermal Crossover Matrix Architecture](#25-predictive-tyre-degradation--thermal-crossover-matrix-architecture)
+26. [Interactive Telemetry Channel Toggle & Custom Trace Filtering Architecture](#26-interactive-telemetry-channel-toggle--custom-trace-filtering-architecture)
 
 
 
@@ -1192,6 +1193,34 @@ Early return with info message if no cliff estimates are available (insufficient
 - `try/except Exception` wraps the entire quadratic block; failures fall through to linear fallback.
 - `try/except Exception: return None` at the outer function level prevents app crashes on any unexpected data shape.
 - All new `table_rows` fields accessed with `.get()` in the figure builder for backward compatibility.
+
+
+---
+
+## 26. Interactive Telemetry Channel Toggle & Custom Trace Filtering Architecture
+
+The **Interactive Telemetry Channel Toggle & Custom Trace Filtering** module enhances the static 6-channel telemetry view by allowing users to dynamically select, filter, and reorder specific telemetry channels on the fly via a Streamlit multiselect widget.
+
+### Configuration Layer (`AVAILABLE_CHANNELS` & `CHANNEL_CONFIG` — `src/charts/matplotlib.py`)
+- Defines the canonical configuration for all possible telemetry channels.
+- `AVAILABLE_CHANNELS`: Ordered list of keys `["Speed", "Throttle", "Brake", "RPM", "Gear", "DRS"]`.
+- `CHANNEL_CONFIG`: Dictionary mapping each channel to a tuple containing `(Label, DataFrame Column, Y-Axis Label, Height Ratio, Special Flag)`.
+
+### Visualisation Layer (`build_chart` — `src/charts/matplotlib.py`)
+- Accepts a `selected_channels` list (defaults to `AVAILABLE_CHANNELS`).
+- Filters `CHANNEL_CONFIG` based on user selection.
+- **Dynamic Layout Scaling**: Calculates the optimal figure height using `max(2.8, sum(h_ratios) * 1.05 + 0.5)` to ensure that charts don't compress vertically when multiple traces are disabled, maintaining aspect ratios for remaining traces.
+- Renders `matplotlib` subplots dynamically using `GridSpec` with calculated `height_ratios`.
+- Hides X-axis labels on all subplots except the bottom-most active trace.
+- Fails safely (returns `None`) if `selected_channels` is empty or all selections are invalid.
+
+### UI Layer (`app.py`)
+- Uses `st.multiselect` in the Telemetry section, allowing users to toggle and reorder channels.
+- Passes the selected list to `build_chart`.
+
+### Robustness Notes
+- Invalid channel selections in the array are ignored gracefully.
+- Maintains the legacy method signature for backward compatibility, automatically falling back to rendering all 6 channels if `selected_channels` is omitted.
 
 ---
 
