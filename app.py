@@ -16,7 +16,7 @@ st.set_page_config(
 # Modular imports
 from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
-    load_schedule, load_session, clear_session_cache, format_laptime, driver_colour,
+    load_schedule, load_session, clear_session_cache, format_laptime, driver_colour, hex_to_rgb,
     _build_driver_labels, get_telemetry_cached, _format_classification_time,
     _map_driver_id_to_number, _get_session_winner, _get_default_gp_index,
     get_constructor_colour, is_same_team, _build_constructor_standings,
