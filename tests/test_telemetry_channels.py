@@ -136,3 +136,4 @@ def test_build_delta_chart(mock_telemetry_df, mock_telemetry_df2):
     assert len(fig.axes) == 1
     assert fig.axes[0].get_ylabel() == "Δ Speed (km/h)"
     plt.close(fig)
+
