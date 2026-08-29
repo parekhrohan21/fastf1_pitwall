@@ -17,7 +17,7 @@ Your primary responsibilities are:
 ## Project Overview
 
 | Property | Value |
-|---|---|
+| --- | --- |
 | **Stack** | Python 3.11+ · Streamlit ≥ 1.44 · FastF1 ≥ 3.3 |
 | **Entry point** | `app.py` (orchestrating `src/` package modules) |
 | **Data source** | FastF1 library → official F1 timing API + Ergast |
@@ -62,7 +62,7 @@ fastf1_pitwall/
 The application logic is modularised into individual packages under `src/` to separate data loading, UI layouts, and charts:
 
 | Module | Purpose |
-|---|---|
+| --- | --- |
 | `app.py` | Streamlit entry point. Initialises page configurations, loads UI sidebars, invokes data builders, and renders layout blocks. |
 | `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, and hosts all `@st.cache_data` session fetching and statistical data-builders (`_build_consistency_analysis`, `_build_tyre_deg_data`, `_build_grid_heatmap_data`, etc.). |
 | `src/ui/styles.py` | Housed with team/compound color constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
@@ -75,18 +75,21 @@ The application logic is modularised into individual packages under `src/` to se
 ## Key Design Decisions
 
 ### 1. Modular Architecture
+
 The app has been refactored into a modular layout under `src/` to isolate data loading, UI layout rendering, and chart figures. All state variables (like `driver1`, `compare`, `sess_key`) must be passed explicitly into functions to prevent circular import loops.
 
 ### 2. CSS injection over Streamlit theming
+
 The app injects raw CSS via `st.markdown(..., unsafe_allow_html=True)` to override Streamlit's BaseWeb components. This is necessary because Streamlit's native theme API does not expose enough hooks for full dark/light mode control. Maintain this approach.
 
 When customising or animating the sidebar (`[data-testid="stSidebar"]`), do not apply transform keyframe animations directly to the base `[data-testid="stSidebar"]` container using `forwards` or `infinite` fill-mode. Doing so overrides Streamlit's native inline collapsed state `transform` translation, preventing the sidebar from sliding off-screen on mobile. Always scope entry transitions to the open sidebar selector (`section[data-testid="stSidebar"][data-collapsed="false"]`).
 
-
 ### 3. `format_func` for all driver selectboxes
+
 Driver numbers (e.g. `"4"`) are the internal keys throughout. The display layer uses `_fmt_driver(num)` → `"NOR · Norris"` via `format_func=`. Never change the underlying session state / FastF1 calls to use names — always use raw numbers internally.
 
 `_fmt_driver` is applied in **every** user-visible location:
+
 - Driver 1 / Driver 2 `st.selectbox` — via `format_func=_fmt_driver`
 - Lap selector label and warning — `f"Lap — {_fmt_driver(driver)}"`
 - Fastest Laps Leaderboard Driver column — `_fmt_driver(drv)` in HTML table cell
@@ -95,20 +98,26 @@ Driver numbers (e.g. `"4"`) are the internal keys throughout. The display layer 
 When adding new UI that shows a driver identifier, always wrap it with `_fmt_driver(drv)`.
 
 ### 4. `@st.cache_data` + `sess_key` pattern
+
 All data-builder functions are cached with `@st.cache_data(ttl=3600)`. The cache key always includes `sess_key` (a string `"{year}_{gp}_{session_type}"`). Do **not** add new session-state accesses inside `@st.cache_data` functions — pass data as parameters instead.
 
 ### 5. Single canonical compound colour dict
+
 `COMPOUND_COLOURS` at line ~1157 is the **only** definition of compound colours in the entire codebase.
 It carries three keys per compound: `fill` (hex background), `text` (label contrast colour), `letter` (badge abbreviation).
 `_CMP_PALETTE` and all other inline dicts (`cmp_dot`, `cmp_colours_map`) have been removed.
 When adding new chart types, always derive colours with:
+
 ```python
 pal = COMPOUND_COLOURS.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])
 ```
+
 Do **not** define a new inline compound colour dict anywhere in `app.py`.
 
 ### 6. Official Session Classification Leaderboard
-The official classification results are fetched from `sess.results` and cached using `_build_final_classification(sess_key, sess.results)`. 
+
+The official classification results are fetched from `sess.results` and cached using `_build_final_classification(sess_key, sess.results)`.
+
 - Practice sessions (`FP1`, `FP2`, `FP3`) do not contain official standings in `results.Position` (all values are NaN). The app detects this and prints a clean warning pointing the user to the Fastest Laps Leaderboard.
 - Race/Sprint sessions format absolute time for the winner, relative gaps for subsequent finishers, and DNFs/laps using their status value.
 - Qualifying/Shootout sessions display `Q1`, `Q2`, and `Q3` lap times.
@@ -116,14 +125,18 @@ The official classification results are fetched from `sess.results` and cached u
 - To prevent Streamlit's cache manager from throwing an `UnhashableParamError`, the results DataFrame argument must be prefixed with a leading underscore in the function signature (e.g. `_results_df`), telling Streamlit to skip hashing this complex Pandas subclass object.
 
 ### 7. Track Map Telemetry Fallback
+
 When telemetry data is incomplete (e.g., missing `Speed` or `Throttle`/`Brake` channels), the track maps must fall back gracefully rather than failing or showing a generic error.
+
 - Check for `X` and `Y` coordinate columns first. If coordinate data is present, draw a gray track outline (in single or comparison sector dominance map).
 - Draw the Start/Finish marker on the coordinates if coordinate data is available.
 - If specific channels are missing, display an informational warning below the chart via `st.info()` (e.g., `"Speed telemetry is not available; showing track outline only."` or `"Throttle/Brake inputs telemetry is not available; showing track outline only."`).
 - Unpack the return tuples `(fig, warning_msg)` safely in the UI callback layers.
 
 ### 8. Constructors' Championship Standings Table
+
 To provide seasonal championship context, a Constructors' Championship standings table is rendered directly above the official session classification table at the bottom of the page.
+
 - The standings data is fetched dynamically from the Jolpi (Ergast) API for the season and round being viewed: `https://api.jolpi.ca/ergast/f1/{year}/{round_no}/constructorStandings.json`.
 - Standings are fetched and cached using `@st.cache_data(show_spinner=False, ttl=3600)` to prevent excessive network requests.
 - Suffix cleaning (`F1 Team`, `Racing`) and substring matching are used to match team names dynamically against `TEAM_COLOURS` for coloured row indicators.
@@ -131,35 +144,45 @@ To provide seasonal championship context, a Constructors' Championship standings
 - If the API call fails or there are no standings (e.g., pre-season testing), the dashboard recovers gracefully by displaying an informational warning instead of crashing.
 
 ### 9. Driver Standing Points in Session Classification Table
+
 To give a holistic view of the championship standings alongside session results, the total Drivers' Championship standings points are rendered as an additional column (`CH Points`) in the official classification table.
+
 - Driver standing records are fetched dynamically from the Jolpi (Ergast) API: `https://api.jolpi.ca/ergast/f1/{year}/{round_no}/driverStandings.json`.
 - Requests are cached using `@st.cache_data(show_spinner=False, ttl=3600)` to ensure optimal performance.
 - Drivers in the session classification DataFrame are mapped to their standing records by checking abbreviation codes (e.g., `NOR`), car/driver number strings, or driver last name substrings.
 - If standings data is not available, the points column gracefully displays `—`.
 
 ### 10. Default Selected Driver as Race/Session Winner
+
 To ensure the dashboard loads displaying the most relevant driver first, the default selected driver is set dynamically to the winner of that session:
+
 - For Race, Sprint, and Qualifying sessions, the winner is determined by looking up the driver with Position 1 in `session.results`.
 - For Practice sessions, where standings are not defined, the winner is resolved to the driver who set the overall fastest lap in `session.laps`.
 - In cases where the F1 identifier returned by results or laps is a number or alternative key format, a mapping resolver matches it to the respective key in `all_drivers1` (which uses abbreviations or numbers depending on the session data).
 - The default index falls back to Norris ("NOR" / "4") or index 0 if the winner cannot be resolved.
 
 ### 11. Default Season and Session/Event Selection to the Most Recent Ones
+
 To improve user experience, the dashboard initialises both Season 1 and Season 2 selectors to the most recent season (the first entry in the descending list of years, currently 2026).
 Furthermore, the default Grand Prix index is resolved dynamically by filtering the season's calendar schedule to locate the most recent completed Grand Prix (where the event date is less than or equal to the current system date).
 If no races have occurred yet in the selected season, the dashboard falls back gracefully to the first event of the calendar (Round 1).
 
 ### 12. Combined Driver Car Number and Name in Classification Table
+
 To provide clear mappings between driver numbers and full names, the Driver column in the final session classification table displays both the car number and the formatted name together (e.g., `44 · HAM · Hamilton` instead of just `HAM · Hamilton`). Rather than using selectbox formatting functions (which map from abbreviation strings and cause lookup key mismatches with car numbers), this is resolved directly from the `Abbreviation` and `LastName` columns in the FastF1 results DataFrame. A clean conditional fallback ensures that if driver name info is missing, only the car number is displayed.
 
 ### 13. Pit Stop Count in Session Classification Table
+
 To provide a complete overview of the race strategy alongside results, a `Stops` column is displayed in the final official session classification table for Race and Sprint sessions. The number of stops is calculated dynamically by filtering the session's laps DataFrame for each driver and counting the number of laps containing both non-null `PitInTime` and `PitOutTime` values.
 
 ### 14. AWS-Style Mini-Sector Speed Dominance Map
+
 In compare mode, the track map is divided into `NUM_MINISECTORS = 25` micro-sectors based on distance telemetry (roughly 150-250m per segment). Average speeds of both drivers are calculated in each distance interval, and the segment line is drawn using the colour of the fastest driver. To prevent visual gaps, each segment includes the first coordinate of the subsequent segment.
 
 ### 15. Corner-by-Corner Performance Analysis
+
 An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block` to compare driver performance through specific turns. The analysis renders a **4-subplot Plotly layout** via `build_corner_fig`:
+
 - Retrieves corner coordinates and apex distances via `session_obj.get_circuit_info()`.
 - Slices telemetry to a distance window `[apex_distance - 200, apex_distance + 100]` around the apex.
 - **Subplot 1 — Racing Line**: X/Y coordinate scatter with star marker (apex) and cross marker (braking point).
@@ -170,14 +193,18 @@ An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block`
 - Graceful fallback annotations rendered if Steering or DRS data is all-NaN for the corner window.
 
 ### 16. Tyre Degradation Modeling and Pace Drop-off
+
 To model pace drop-off and tyre wear characteristics:
+
 - The data builder function `_build_tyre_deg_data` filters for valid flyer laps using `IsAccurate == True` and filters out yellow flags/safety car/virtual safety car periods.
 - Linear regression (OLS) is performed using `np.polyfit` for stints with at least 4 valid laps to compute stint slope (degradation rate in seconds lost/gained per lap) and base pace.
 - Laps are plotted on a Plotly scatter chart, overlaying stint OLS regression trendlines. Points and lines are coloured in driver team constructor colours (circular points and solid lines for primary driver, square points and dashed lines for secondary driver).
 - Stint lengths and degradation rates are summarised in an HTML table, colour-coded to highlight positive or negative degradation trends.
 
 ### 17. Monolithic app.py Refactoring & Modular Structure
+
 To resolve technical debt and maintainability issues:
+
 - The monolithic `app.py` has been split into a modular directory structure under the `src/` directory.
 - `src/data/loader.py` handles F1 data caching, proxy bypass patching, and raw telemetry wrangling.
 - `src/ui/styles.py` encapsulates stylesheet injections, custom CSS classes, and team/tyre color constants.
@@ -201,23 +228,26 @@ To resolve technical debt and maintainability issues:
 
 ---
 
-
 ## Running the Project
 
 ### Local (development)
+
 ```bash
 python3.11 -m streamlit run app.py
 # Access at http://localhost:8501
 ```
 
 ### Docker
+
 ```bash
 docker build -t pitwall .
 docker run -p 8501:8501 -v $(pwd)/cache:/app/cache pitwall
 ```
 
 ### Health check
+
 The app is healthy when:
+
 - The sidebar loads with year / GP / session selectors
 - Clicking **⬇️ Load Session** loads data without a Python traceback
 - The driver banner, lap summary metrics, Lap Time History, Stint Timeline, and Telemetry charts all render
@@ -265,7 +295,7 @@ The app is healthy when:
 ## Coding Standards
 
 | Standard | Rule |
-|---|---|
+| --- | --- |
 | **Python version** | 3.11+ syntax only |
 | **Streamlit API** | Use `width='stretch'` / `width='content'` — never `use_container_width` |
 | **HTML injection** | Always include `unsafe_allow_html=True`; always sanitise user-derived values |
@@ -292,6 +322,7 @@ curl-cffi>=0.5.10
 ```
 
 When upgrading any dependency:
+
 1. Test locally with the new version.
 2. Update `requirements.txt`.
 3. Rebuild the Docker image and verify.
@@ -302,7 +333,7 @@ When upgrading any dependency:
 ## Known Limitations
 
 | Limitation | Notes |
-|---|---|
+| --- | --- |
 | Active & ongoing sessions | Live timing streaming is not supported. Active sessions will fail validation with empty lap data until the final static database is published to F1's CDN (usually 2–24h after session ends). |
 | Very recent sessions | FastF1 may not have timing data for sessions less than ~24h old. Show a clear `st.error` message. |
 | Safety Car / Red Flag laps | Filtered out of Lap Time History and Fuel-Adjusted Pace using `> 2.5× median` outlier removal. |
@@ -355,29 +386,32 @@ This section defines the mandatory git procedure for all changes to this reposit
 ### Safety & Robustness Standards
 
 When modifying session loading or accessing session attributes, you must implement the following safeguards:
+
 - **Validate Lap Data on Load**: Immediately after loading a session using `load_session()`, verify that the laps data is available and not empty. Accessing `.laps` throws a `ValueError` if the session is cancelled or too recent.
+
   ```python
   sess = load_session(year, gp, session_type)
   if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
       raise ValueError("No lap data available for this session.")
   ```
+
 - **Prevent Stuck UI Lockups**: When loading or validating data fails and raises an exception, clear any invalid session objects from `st.session_state` inside the `except` handler before calling `st.stop()`. This ensures that subsequent Streamlit reruns return the user to a clean landing page rather than locking them in a broken state loop.
+
   ```python
   st.session_state["session"] = None
   st.session_state["session2"] = None
   st.session_state["sess_key"] = None
   st.session_state["sess_key2"] = None
   ```
+
 - **Requests Monkey-Patching Caching Compatibility**: When monkey-patching `requests` (e.g., to bypass CloudFront blocks via `curl_cffi`), the returned custom `Response` objects must mock the `raw` attribute using a local `MockRaw` class. If `resp.raw` is `None` or lacks essential properties, `requests_cache` will crash during serialization with `AttributeError: 'NoneType' object has no attribute '_request_url'`.
 
-
 ---
-
 
 ### Commit message convention
 
 | Prefix | When to use | Example |
-|---|---|---|
+| --- | --- | --- |
 | `feat:` | New user-visible feature added | `feat: add Ideal Lap vs Actual Lap section` |
 | `fix:` | Bug or runtime error corrected | `fix: _all_laps cast to plain DataFrame to avoid UnhashableParamError` |
 | `refactor:` | Internal code restructure, no behaviour change | `refactor: fix cache isolation — pass laps_df to all builder functions` |
@@ -392,7 +426,7 @@ Keep the summary under 72 characters. Add a body after a blank line for complex 
 ### What must be committed together
 
 | Change made | Must also commit |
-|---|---|
+| --- | --- |
 | New feature in `app.py` | `README.md` (feature bullet) + `DOCS.md` (pipeline, chart inventory, roadmap) + `AGENT.md` (architecture map if lines shifted) |
 | Bug fix in `app.py` | `DOCS.md` and `AGENT.md` if the fix changes documented behaviour or known limitations |
 | Architecture change (e.g. caching pattern) | `DOCS.md` §5 caching section + `AGENT.md` coding standards + known limitations |
@@ -406,9 +440,11 @@ Keep the summary under 72 characters. Add a body after a blank line for complex 
 ### Syncing with remote (daily start-of-session)
 
 Always pull before starting any work session:
+
 ```bash
 git pull
 ```
+
 If there are conflicts in `app.py`, resolve manually. The file is a linear script — conflicts are usually in disjoint sections and can be resolved without context loss.
 
 ---
@@ -426,7 +462,7 @@ GitHub Issues track bugs, feature requests, and technical debt items.
 **When to raise an issue:**
 
 | Situation | Type | Label |
-|---|---|---|
+| --- | --- | --- |
 | Chart crashes or shows wrong data | Bug report | `bug` |
 | New analytical feature request | Feature request | `enhancement` |
 | FastF1 API deprecation / breaking change | Maintenance | `chore` |
@@ -434,6 +470,7 @@ GitHub Issues track bugs, feature requests, and technical debt items.
 | Documentation gap or error | Docs | `documentation` |
 
 **Managing via GitHub CLI (`gh`):**
+
 ```bash
 gh issue list                    # View all open issues
 gh issue view 1                  # View details for issue #1
@@ -460,6 +497,7 @@ What is happening / what is needed?
 ```
 
 **Auto-closing via commit message:**
+
 ```
 fix: correct lap outlier filter for sprint sessions
 
@@ -473,17 +511,20 @@ Closes #12
 Opening a PR before merging significant changes creates a reviewable diff and documents intent — recommended even for solo work. Whenever there is a separate branch merging into the main branch, follow the pull request steps to make sure everything is stable and working correctly.
 
 **Open a PR for:**
+
 - Any change adding more than ~50 lines to `app.py`
 - New sections in the rendering pipeline
 - Architectural changes (caching, state, helper functions)
 - Changes touching more than one file
 
 **Direct push to `main` is acceptable for:**
+
 - One-line bug fixes
 - Documentation-only changes
 - Trivial copy / wording updates
 
 **PR title** — same format as commit messages:
+
 ```
 feat: add Sector Heatmap section
 fix: resolve UnhashableParamError on fastf1.core.Laps
@@ -491,6 +532,7 @@ docs: sync DOCS.md with Ideal Lap implementation
 ```
 
 **Managing via GitHub CLI (`gh`):**
+
 ```bash
 gh pr create --title "feat: ..." --body "Closes #1"  # Push branch and open PR
 gh pr list                                           # View open PRs
@@ -531,6 +573,7 @@ Closes #[issue number]
 Before merging any PR or pushing a significant change directly to `main`, you **MUST** perform a formal code review and generate a markdown artifact named `code_review_issue_<number>.md` summarising the verification of the following checklist:
 
 **Correctness**
+
 - [ ] No `st.session_state["session"].laps` accessed inside a `@st.cache_data` function
 - [ ] `laps_df` passed as `pd.DataFrame(sess.laps.copy())` — not raw `fastf1.core.Laps`
 - [ ] Driver filtering uses `laps_df[laps_df["Driver"] == driver]` — not `.pick_drivers()`
@@ -539,6 +582,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 - [ ] No new inline compound colour dicts — `COMPOUND_COLOURS` is the only source of truth
 
 **Code quality**
+
 - [ ] Type hints on all new functions
 - [ ] One-line docstring on all new `@st.cache_data` and data-builder functions
 - [ ] Section headers follow `# ── Name ────────────────────────────` format
@@ -546,6 +590,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 - [ ] All FastF1 data access wrapped in `try/except Exception`
 
 **Documentation**
+
 - [ ] `README.md` updated if user-visible behaviour changed
 - [ ] `DOCS.md` rendering pipeline updated if a new section was added
 - [ ] `DOCS.md` chart inventory updated if a new chart was added
@@ -553,6 +598,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 - [ ] `DOCS.md` roadmap item marked ✅ Done if it was implemented
 
 **Syntax & Testing**
+
 - [ ] Pytest unit tests pass (`python3.11 -m pytest tests/`)
 - [ ] Codebase compile check passes (`python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py`)
 
@@ -561,6 +607,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 ## Escalation & Out-of-Scope Rules
 
 The agent must **not** autonomously:
+
 - Change the project's single-file architecture to a multi-module structure.
 - Switch from Streamlit to any other framework.
 - Add paid API keys or external data sources beyond FastF1 + Ergast.
