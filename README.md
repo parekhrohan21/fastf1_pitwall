@@ -67,6 +67,7 @@ fastf1_pitwall/
 │   └── ui/
 │       ├── styles.py    # CSS design system, constants & themes
 │       └── components.py # UI cards, headers, tables & map blocks
+├── tests/              # Pytest unit and integration tests
 ├── requirements.txt    # Pinned Python dependencies
 ├── Dockerfile          # Containerisation setup
 ├── README.md           # User documentation
