@@ -26,7 +26,7 @@ from src.data.loader import (
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
     get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request,
-    _build_race_control_messages
+    _build_race_control_messages, _build_export_csv, _build_export_parquet, _build_export_json
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
@@ -35,7 +35,7 @@ from src.ui.components import (
     _render_pit_table, _render_leaderboard, _render_ideal_lap_section,
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
-    _render_consistency_section, _render_weather_correlation_section,
+    render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix
 )
 from src.charts.plotly import (
@@ -1588,76 +1588,15 @@ else:
 
 
 # ── Export Telemetry ──────────────────────────────────────────────────────────
-with st.expander("⬇️  Export Telemetry Data", expanded=False):
-    st.markdown(
-        "<div style='font-size:12px; opacity:0.65; margin-bottom:10px;'>"
-        "Download the raw telemetry for the selected lap(s) as a CSV file. "
-        "Includes Distance, Speed, Throttle, Brake, RPM, Gear, DRS, "
-        "Sector 1/2/3 times, and lap metadata."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    def _build_export_csv(driver: str, tel_df, lap_obj) -> bytes:
-        """Merge lap metadata into the telemetry dataframe and return CSV bytes."""
-        if tel_df is None or tel_df.empty:
-            return b""
-        export_cols = [c for c in
-                       ["Distance", "Speed", "Throttle", "Brake", "RPM", "nGear", "DRS",
-                        "X", "Y", "Z", "Time", "SessionTime"]
-                       if c in tel_df.columns]
-        df = tel_df[export_cols].copy()
-        # Rename nGear → Gear for clarity
-        df = df.rename(columns={"nGear": "Gear"})
-        # Inject lap metadata as constant columns at the front
-        df.insert(0, "Driver",    driver)
-        df.insert(1, "LapNumber", int(lap_obj.get("LapNumber", 0)) if lap_obj is not None else "")
-        df.insert(2, "LapTime",   format_laptime(lap_obj.get("LapTime")) if lap_obj is not None else "")
-        df.insert(3, "Compound",  str(lap_obj.get("Compound", "?")).title() if lap_obj is not None else "")
-        # Sector times — formatted as seconds (3 dp) for readability
-        for _scol, _slabel in [
-            ("Sector1Time", "Sector1Time_s"),
-            ("Sector2Time", "Sector2Time_s"),
-            ("Sector3Time", "Sector3Time_s"),
-        ]:
-            _sval = lap_obj.get(_scol) if lap_obj is not None else None
-            try:
-                _ssec = round(_sval.total_seconds(), 3) if _sval is not None and pd.notna(_sval) else ""
-            except Exception:
-                _ssec = ""
-            df.insert(4, _slabel, _ssec)
-        return df.to_csv(index=False).encode("utf-8")
-
-    # ── Driver 1 download
-    exp_cols = [st.columns(2)[0]]   # left half
-    if compare and driver2 and tel2 is not None:
-        exp_cols = list(st.columns(2))
-
-    with exp_cols[0]:
-        csv1 = _build_export_csv(driver1, tel1, lap1)
-        fname1 = f"pitwall_{driver1}_lap{int(lap1.get('LapNumber', 0)) if lap1 is not None else 'X'}.csv"
-        st.download_button(
-            label=f"📥  {driver1} — Download CSV",
-            data=csv1,
-            file_name=fname1,
-            mime="text/csv",
-            disabled=(csv1 == b""),
-            width="stretch",
-        )
-
-    # ── Driver 2 download (comparison mode only)
-    if compare and driver2 and tel2 is not None and len(exp_cols) > 1:
-        with exp_cols[1]:
-            csv2 = _build_export_csv(driver2, tel2, lap2)
-            fname2 = f"pitwall_{driver2}_lap{int(lap2.get('LapNumber', 0)) if lap2 is not None else 'X'}.csv"
-            st.download_button(
-                label=f"📥  {driver2} — Download CSV",
-                data=csv2,
-                file_name=fname2,
-                mime="text/csv",
-                disabled=(csv2 == b""),
-                width="stretch",
-            )
+render_telemetry_export_panel(
+    driver1,
+    tel1,
+    lap1,
+    driver2=driver2 if compare else None,
+    tel2=tel2 if compare else None,
+    lap2=lap2 if compare else None,
+    compare=compare,
+)
 
 # ── Speed delta (overlapping + comparison) ────────────────────────────────────
 
