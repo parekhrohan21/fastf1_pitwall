@@ -488,7 +488,7 @@ build_undercut_chart()  ← Pit Strategy & Undercut Analysis (Plotly gap line ch
         │
 build_chart()           ← 6-channel Telemetry (Matplotlib)
         │
-_build_export_csv()     ← Export panel — Distance, Speed, Throttle, Brake, RPM, Gear, DRS, Sector1/2/3 times, lap metadata
+render_telemetry_export_panel() ← Multi-Format Export panel — CSV, Apache Parquet (.parquet), JSON (.json)
         │
 Speed Delta             ← Matplotlib fill-between (compare mode only)
 Time Delta (Cont.)      ← Matplotlib fill-between (compare mode only)
@@ -535,7 +535,7 @@ Each chart section follows the same pattern:
 | Tyre Degradation + Crossover Matrix | Plotly + HTML | `_build_tyre_deg_data` | `build_tyre_deg_fig` + `render_tyre_crossover_matrix` | `laps_df` filtered by driver; linear & quadratic OLS + cliff lap prediction. |
 | Driver Consistency | Plotly | `_build_consistency_analysis` | `build_stint_consistency_fig` | `laps_df` filtered by driver; std dev, clean air vs traffic, violin/boxplot stint distribution. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
-| Export Telemetry CSV | CSV bytes | `_build_export_csv` | — | `tel_df` + `lap_obj` sector times |
+| Export Telemetry (CSV, Parquet, JSON) | CSV/Parquet/JSON | `_build_export_csv`, `_build_export_parquet`, `_build_export_json` | `render_telemetry_export_panel` | `tel_df` + `lap_obj` metadata & sector times |
 | Speed Delta | Matplotlib | — (inline) | — (inline) | `tel1`, `tel2` DataFrames |
 | Time Delta | Matplotlib | `build_time_delta_chart` | `src/charts/matplotlib.py` | `lap1`, `lap2` Laps |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `laps_df` grouped by driver |
@@ -908,7 +908,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Multi-Year Historical Lap Comparison**~~ | ✅ **Done** — `_build_multi_year_comparison` aligns two telemetry traces to a 500-pt distance grid. Plots speed profile overlays and continuous time delta curves (`build_multi_year_comparison_fig`). |
 | ~~Medium~~ | ~~**Driver Steering & DRS Subplots in Corner Analysis**~~ | ✅ **Done** — `build_corner_fig` expanded to 4 subplots: Racing Line, Speed, Steering Angle (°), DRS Activation. Metrics include Max Steering Angle and DRS Activated status. |
 | ~~Medium~~ | ~~**Interactive Telemetry Channel Toggle & Custom Trace Filtering**~~ | ✅ **Done** — Added dynamic multiselect channel filter in `app.py` and updated `build_chart` in `src/charts/matplotlib.py` with custom channel filtering and proportional layout height scaling. |
-| Low | **High-Throughput Telemetry Data Exporter (Parquet & JSON)** | Add Parquet and JSON export options alongside the existing CSV exporter, with batch multi-lap export support. |
+| ~~Low~~ | ~~**High-Throughput Telemetry Data Exporter (Parquet & JSON)**~~ | ✅ **Done** — Added dynamic format selector (CSV, Parquet, JSON) in `render_telemetry_export_panel`, with `_build_export_parquet` and `_build_export_json` in `src/data/loader.py`. |
 
 
 
@@ -921,6 +921,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #158** / **Issue #139** (`feat: High-Throughput Telemetry Data Exporter (Parquet & JSON)`): Added multi-format export support under the Telemetry section for Apache Parquet (`.parquet`) and structured JSON (`.json`) alongside CSV. Refactored telemetry export panel into `render_telemetry_export_panel` in `src/ui/components.py`, implemented `_build_export_telemetry_df`, `_build_export_parquet`, and `_build_export_json` in `src/data/loader.py`, added `pyarrow>=14.0.0` to requirements, and added full test suite (9 unit tests in `tests/test_telemetry_export.py`).
 - **PR #147** / **Issue #138** (`feat: Interactive Telemetry Channel Toggle & Custom Trace Filtering`): Added dynamic channel selection multiselect in `app.py` under the Telemetry section, updated `build_chart` in `src/charts/matplotlib.py` to support dynamic channel subset filtering (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) with proportional figure height scaling (`max(2.8, sum(h_ratios) * 1.05 + 0.5)`), restored missing `CHANNEL_CONFIG` and `mpatches` definitions, and added comprehensive pytest suite (9 new unit tests).
 - **Commit `3741b0d`** (`fix: resolve NameError for hex_to_rgb in app.py`): Fixed a crash in the Ideal Lap vs Actual Lap leaderboard by adding the missing `hex_to_rgb` import in `app.py` after recent file refactoring.
 

@@ -10,7 +10,8 @@ from src.data.loader import (
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
     _build_grid_heatmap_data, _build_consistency_analysis,
-    _build_weather_correlation_data, _build_multi_year_comparison
+    _build_weather_correlation_data, _build_multi_year_comparison,
+    _build_export_csv, _build_export_parquet, _build_export_json
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1248,6 +1249,98 @@ def render_export_section(session_name: str, driver1: str, driver2: str, figs: d
                 st.success("PDF generated! Click above to download.")
             except Exception as e:
                 st.error(f"Error generating PDF: {e}")
+
+
+def render_telemetry_export_panel(
+    driver1: str,
+    tel1: pd.DataFrame | None,
+    lap1: dict | pd.Series | None,
+    driver2: str | None = None,
+    tel2: pd.DataFrame | None = None,
+    lap2: dict | pd.Series | None = None,
+    compare: bool = False,
+):
+    """Render the Telemetry Export expander panel with CSV, Parquet, and JSON download formats."""
+    with st.expander("⬇️  Export Telemetry Data", expanded=False):
+        st.markdown(
+            "<div style='font-size:12px; opacity:0.65; margin-bottom:12px;'>"
+            "Export high-frequency telemetry channels (Distance, Speed, Throttle, Brake, RPM, Gear, DRS, coordinates) "
+            "and lap metadata for the selected lap(s)."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        export_format = st.radio(
+            "Select Export Format:",
+            options=["CSV", "Parquet", "JSON"],
+            index=0,
+            horizontal=True,
+            key="telemetry_export_format_radio",
+        )
+
+        fmt_meta = {
+            "CSV": {
+                "mime": "text/csv",
+                "ext": "csv",
+                "desc": "Universal table format compatible with Excel, Google Sheets, and data tools.",
+            },
+            "Parquet": {
+                "mime": "application/octet-stream",
+                "ext": "parquet",
+                "desc": "High-performance columnar binary format with Snappy compression for Pandas, Polars, and PyArrow.",
+            },
+            "JSON": {
+                "mime": "application/json",
+                "ext": "json",
+                "desc": "Structured records format ideal for web applications, APIs, and custom dashboards.",
+            },
+        }
+
+        meta = fmt_meta.get(export_format, fmt_meta["CSV"])
+        st.caption(f"ℹ️ **{export_format}**: {meta['desc']}")
+
+        def _get_export_bytes(drv: str, tel: pd.DataFrame | None, lap: dict | pd.Series | None) -> bytes:
+            if export_format == "Parquet":
+                return _build_export_parquet(drv, tel, lap)
+            elif export_format == "JSON":
+                return _build_export_json(drv, tel, lap)
+            else:
+                return _build_export_csv(drv, tel, lap)
+
+        exp_cols = [st.columns(2)[0]]
+        if compare and driver2 and tel2 is not None:
+            exp_cols = list(st.columns(2))
+
+        # ── Driver 1 download
+        with exp_cols[0]:
+            data1 = _get_export_bytes(driver1, tel1, lap1)
+            lap_num1 = int(lap1.get("LapNumber", 0)) if (lap1 is not None and hasattr(lap1, "get") and pd.notna(lap1.get("LapNumber", 0))) else "X"
+            fname1 = f"pitwall_{driver1}_lap{lap_num1}.{meta['ext']}"
+            st.download_button(
+                label=f"📥  {driver1} — Download {export_format}",
+                data=data1,
+                file_name=fname1,
+                mime=meta["mime"],
+                disabled=(data1 == b"" or data1 is None),
+                width="stretch",
+                key=f"dl_btn_{driver1}_{meta['ext']}",
+            )
+
+        # ── Driver 2 download (comparison mode only)
+        if compare and driver2 and tel2 is not None and len(exp_cols) > 1:
+            with exp_cols[1]:
+                data2 = _get_export_bytes(driver2, tel2, lap2)
+                lap_num2 = int(lap2.get("LapNumber", 0)) if (lap2 is not None and hasattr(lap2, "get") and pd.notna(lap2.get("LapNumber", 0))) else "X"
+                fname2 = f"pitwall_{driver2}_lap{lap_num2}.{meta['ext']}"
+                st.download_button(
+                    label=f"📥  {driver2} — Download {export_format}",
+                    data=data2,
+                    file_name=fname2,
+                    mime=meta["mime"],
+                    disabled=(data2 == b"" or data2 is None),
+                    width="stretch",
+                    key=f"dl_btn_{driver2}_{meta['ext']}",
+                )
 
 
 def _render_consistency_section(laps_df: pd.DataFrame, highlight_drivers: list, highlight_colours: list, fmt_func=None):

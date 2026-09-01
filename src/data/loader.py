@@ -1,4 +1,5 @@
 import os
+import io
 import streamlit as st
 import fastf1
 import pandas as pd
@@ -1848,3 +1849,117 @@ def _build_race_control_messages(sess_k: str, _sess_obj) -> pd.DataFrame | None:
         return df.reset_index(drop=True)
     except Exception:
         return None
+
+
+# ── Multi-Format Telemetry Data Exporters ────────────────────────────────────
+
+def _build_export_telemetry_df(driver: str, tel_df: pd.DataFrame | None, lap_obj: dict | pd.Series | None = None) -> pd.DataFrame | None:
+    """Merge lap metadata, compound info, and sector times into a structured telemetry DataFrame."""
+    if tel_df is None or (hasattr(tel_df, "empty") and tel_df.empty):
+        return None
+    try:
+        export_cols = [c for c in
+                       ["Distance", "Speed", "Throttle", "Brake", "RPM", "nGear", "DRS",
+                        "X", "Y", "Z", "Time", "SessionTime"]
+                       if c in tel_df.columns]
+        df = tel_df[export_cols].copy()
+        if "nGear" in df.columns:
+            df = df.rename(columns={"nGear": "Gear"})
+
+        # Resolve lap metadata
+        lap_num = ""
+        lap_time_str = ""
+        compound_str = ""
+        if lap_obj is not None:
+            try:
+                ln = lap_obj.get("LapNumber") if hasattr(lap_obj, "get") else getattr(lap_obj, "LapNumber", None)
+                if ln is not None and pd.notna(ln):
+                    lap_num = int(ln)
+            except Exception:
+                lap_num = ""
+            try:
+                lt = lap_obj.get("LapTime") if hasattr(lap_obj, "get") else getattr(lap_obj, "LapTime", None)
+                if lt is not None and pd.notna(lt):
+                    lap_time_str = format_laptime(lt)
+            except Exception:
+                lap_time_str = ""
+            try:
+                cmp_val = lap_obj.get("Compound") if hasattr(lap_obj, "get") else getattr(lap_obj, "Compound", None)
+                if cmp_val is not None and pd.notna(cmp_val):
+                    compound_str = str(cmp_val).title()
+                else:
+                    compound_str = "?"
+            except Exception:
+                compound_str = "?"
+
+        df.insert(0, "Driver", str(driver))
+        df.insert(1, "LapNumber", lap_num)
+        df.insert(2, "LapTime", lap_time_str)
+        df.insert(3, "Compound", compound_str)
+
+        # Sector times formatted as seconds (3 dp)
+        for _scol, _slabel in [
+            ("Sector1Time", "Sector1Time_s"),
+            ("Sector2Time", "Sector2Time_s"),
+            ("Sector3Time", "Sector3Time_s"),
+        ]:
+            _sval = (lap_obj.get(_scol) if hasattr(lap_obj, "get") else getattr(lap_obj, _scol, None)) if lap_obj is not None else None
+            try:
+                _ssec = round(_sval.total_seconds(), 3) if _sval is not None and pd.notna(_sval) else ""
+            except Exception:
+                _ssec = ""
+            df.insert(4, _slabel, _ssec)
+
+        return df.reset_index(drop=True)
+    except Exception:
+        return None
+
+
+def _build_export_csv(driver: str, tel_df: pd.DataFrame | None, lap_obj: dict | pd.Series | None = None) -> bytes:
+    """Export unified telemetry and lap metadata as CSV bytes."""
+    try:
+        df = _build_export_telemetry_df(driver, tel_df, lap_obj)
+        if df is None or df.empty:
+            return b""
+        return df.to_csv(index=False).encode("utf-8")
+    except Exception:
+        return b""
+
+
+def _build_export_parquet(driver: str, tel_df: pd.DataFrame | None, lap_obj: dict | pd.Series | None = None) -> bytes:
+    """Export unified telemetry and lap metadata as Apache Parquet binary bytes."""
+    try:
+        df = _build_export_telemetry_df(driver, tel_df, lap_obj)
+        if df is None or df.empty:
+            return b""
+        df_pq = df.copy()
+        # Coerce mixed/object metadata columns to string for clean Arrow schema serialization
+        for col in ["Driver", "LapTime", "Compound"]:
+            if col in df_pq.columns:
+                df_pq[col] = df_pq[col].astype(str)
+        # Convert numeric columns where possible
+        for col in ["LapNumber", "Sector1Time_s", "Sector2Time_s", "Sector3Time_s"]:
+            if col in df_pq.columns:
+                df_pq[col] = pd.to_numeric(df_pq[col], errors="coerce")
+        buf = io.BytesIO()
+        df_pq.to_parquet(buf, index=False, engine="pyarrow")
+        return buf.getvalue()
+    except Exception:
+        return b""
+
+
+def _build_export_json(driver: str, tel_df: pd.DataFrame | None, lap_obj: dict | pd.Series | None = None, indent: int = 2) -> bytes:
+    """Export unified telemetry and lap metadata as formatted JSON bytes."""
+    try:
+        df = _build_export_telemetry_df(driver, tel_df, lap_obj)
+        if df is None or df.empty:
+            return b""
+        df_js = df.copy()
+        # Convert timedeltas to float seconds for intuitive JSON consumption
+        for t_col in ["Time", "SessionTime"]:
+            if t_col in df_js.columns and pd.api.types.is_timedelta64_dtype(df_js[t_col]):
+                df_js[t_col] = df_js[t_col].dt.total_seconds()
+        return df_js.to_json(orient="records", indent=indent).encode("utf-8")
+    except Exception:
+        return b""
+
