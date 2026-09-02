@@ -173,7 +173,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 9. **Tyre Stint Timeline** — View the complete tyre strategy as a horizontal colour-coded bar chart. In comparison mode both drivers are stacked for easy strategy comparison.
 10. **Pit Stop Summary** — See a detailed breakdown of every pit stop made by your selected driver(s), including the exact duration and tyre change strategy.
 11. **Telemetry & Channel Toggle** — Inspect high-resolution telemetry traces. Use the **Telemetry Channels** multiselect dropdown to toggle specific channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them dynamically with proportional chart height scaling.
-12. **Export Telemetry** — Expand the *Export Telemetry Data* panel beneath the telemetry charts to download the raw channel data as a CSV file.
+12. **Export Telemetry (CSV, Parquet, JSON)** — Expand the *Export Telemetry Data* panel beneath the telemetry charts to select your preferred format (**CSV**, **Apache Parquet (`.parquet`)**, or **structured JSON (`.json`)**) and download the high-frequency channel data and lap metadata.
 13. **Fastest Laps Leaderboard** — A ranked table of every driver's best lap with gap to P1, compound, and top speed. Your selected driver(s) are highlighted.
 14. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
 15. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map, driver input pedal traces, or build the full multi-car Race Replay animation!

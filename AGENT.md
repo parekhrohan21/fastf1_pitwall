@@ -64,12 +64,12 @@ The application logic is modularised into individual packages under `src/` to se
 | Module | Purpose |
 | --- | --- |
 | `app.py` | Streamlit entry point. Initialises page configurations, loads UI sidebars, invokes data builders, and renders layout blocks. |
-| `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, and hosts all `@st.cache_data` session fetching and statistical data-builders (`_build_consistency_analysis`, `_build_tyre_deg_data`, `_build_grid_heatmap_data`, etc.). |
+| `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, hosts all `@st.cache_data` session fetching and statistical data-builders (`_build_consistency_analysis`, `_build_tyre_deg_data`, `_build_grid_heatmap_data`, etc.), and provides multi-format telemetry exporters (`_build_export_csv`, `_build_export_parquet`, `_build_export_json`). |
 | `src/ui/styles.py` | Housed with team/compound color constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
-| `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, consistency section (`_render_consistency_section`), weather correlation section (`_render_weather_correlation_section`), multi-year comparison section (`_render_multi_year_comparison_section`), tyre crossover prediction matrix (`render_tyre_crossover_matrix`), grid heatmap section (`_render_grid_heatmap_section`), export section (`render_export_section`), layout maps block tabs, and footer. |
+| `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, consistency section (`_render_consistency_section`), weather correlation section (`_render_weather_correlation_section`), multi-year comparison section (`_render_multi_year_comparison_section`), tyre crossover prediction matrix (`render_tyre_crossover_matrix`), grid heatmap section (`_render_grid_heatmap_section`), PDF export section (`render_export_section`), multi-format telemetry export panel (`render_telemetry_export_panel`), layout maps block tabs, and footer. |
 | `src/charts/plotly.py` | Constructs and returns interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, tyre degradation (linear + quadratic thermal curves + cliff vlines), stint consistency violin/boxplots (`build_stint_consistency_fig`), weather correlation dual-axis (`build_weather_correlation_fig`), multi-year comparison speed delta (`build_multi_year_comparison_fig`), animated replays, and 4-subplot corner analysis (`build_corner_fig`). |
 | `src/charts/matplotlib.py` | Creates static Matplotlib figures for 6-channel telemetry profiles and speed delta overlays. |
-| `tests/` | Pytest unit and integration tests (e.g. `test_telemetry_channels.py`, `test_cf.py`). |
+| `tests/` | Pytest unit and integration tests (e.g. `test_telemetry_export.py`, `test_telemetry_channels.py`, `test_tyre_crossover.py`, `test_cf.py`). |
 
 ---
 
@@ -321,6 +321,12 @@ pandas>=2.2.0
 numpy>=1.26.0
 plotly>=5.18.0
 curl-cffi>=0.5.10
+kaleido>=0.2.1
+fpdf2>=2.7.5
+Pillow>=10.0.0
+pyarrow>=14.0.0
+pytest>=8.0.0
+pytest-mock>=3.12.0
 ```
 
 When upgrading any dependency:
@@ -336,7 +342,7 @@ When upgrading any dependency:
 
 | Limitation | Notes |
 | --- | --- |
-| Active & ongoing sessions | Live timing streaming is not supported. Active sessions will fail validation with empty lap data until the final static database is published to F1's CDN (usually 2–24h after session ends). |
+| Active & ongoing sessions | Live sessions can be streamed in real-time via the sidebar **🔴 Real-Time Live Timing Mode** (SignalR client). For historical analysis, static timing databases become available on F1's CDN typically 2–24h after the session concludes. |
 | Very recent sessions | FastF1 may not have timing data for sessions less than ~24h old. Show a clear `st.error` message. |
 | Safety Car / Red Flag laps | Filtered out of Lap Time History and Fuel-Adjusted Pace using `> 2.5× median` outlier removal. |
 | ~~`@st.cache_data` + `session_state`~~ | ✅ **Resolved** — All 7 data-builder functions now receive `laps_df` as an explicit parameter. `_all_laps` extracted once after session load. No cached function accesses `st.session_state["session"]` internally. |
@@ -610,7 +616,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 
 The agent must **not** autonomously:
 
-- Change the project's single-file architecture to a multi-module structure.
+- Change the project's modular `src/` architecture or introduce unauthorized third-party framework layers.
 - Switch from Streamlit to any other framework.
 - Add paid API keys or external data sources beyond FastF1 + Ergast.
 - Modify or delete the `cache/` directory contents.
