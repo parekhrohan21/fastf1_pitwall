@@ -49,6 +49,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Driver Consistency Index & Stint Pace Distribution**: Calculates driver lap time variance per stint after filtering out in-laps, out-laps, and Safety Car / Red Flag periods. Evaluates a **Consistency Score** (0–100%), Lap Time Std Dev (±s), Clean Air Pace vs. **Traffic Deficit** (+s/lap), and renders interactive Plotly Violin and Boxplot distributions with raw lap points alongside a stint breakdown table.
 - **Track Temperature & Weather Impact Correlation**: Correlates track and air temperature shifts, rainfall intensity, and humidity with lap time drop-offs and tyre compound performance. Renders a dual-axis Plotly chart overlaying Track Temperature (°C) on driver pace, featuring automatic detection of **Rain Crossover Windows** (Slicks ↔ Intermediates/Wets) and Pearson pace-heat sensitivity scores.
 - **Multi-Year Historical Lap Comparison**: Enables multi-season telemetry comparisons for the same circuit across different technical regulation eras (e.g. 2024 ground-effect vs 2020 high-downforce era). Aligns distance-based telemetry to plot speed profile overlays (km/h) and continuous time delta curves (Δ seconds), displaying comparative metrics for Era Lap Time Delta, Top Speed, Minimum Apex Speed, and Full Throttle Ratio.
+- **Comprehensive Automated Test Suite**: Fully automated test coverage with **52 pytest unit and integration tests** across 10 dedicated test modules, validating telemetry export (CSV, Parquet, JSON), dynamic channel toggles, predictive tyre degradation, consistency distributions, weather correlation, and live timing streaming.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -60,19 +61,29 @@ fastf1_pitwall/
 ├── app.py              # Main Streamlit entry point & orchestration
 ├── src/                # Modular source package
 │   ├── data/
-│   │   └── loader.py   # FastF1 data loaders, caching & proxy bypass
+│   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
-│   │   ├── plotly.py   # Interactive Plotly chart builders
-│   │   └── matplotlib.py # Static Matplotlib telemetry charts
+│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners)
+│   │   └── matplotlib.py # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
-│       ├── styles.py    # CSS design system, constants & themes
-│       └── components.py # UI cards, headers, tables & map blocks
-├── tests/              # Pytest unit and integration tests
-├── requirements.txt    # Pinned Python dependencies
+│       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
+│       └── components.py # UI layout components, metrics cards, map blocks & telemetry export panel
+├── tests/              # Pytest automated test suite (52 tests across 10 modules)
+│   ├── test_telemetry_export.py       # CSV, Apache Parquet & JSON export serialization
+│   ├── test_telemetry_channels.py     # Channel toggle configuration & figure scaling
+│   ├── test_tyre_crossover.py         # Quadratic degradation regression & cliff prediction
+│   ├── test_consistency.py            # Driver Consistency Index & Stint distributions
+│   ├── test_weather_correlation.py    # Track temperature correlation & rain detection
+│   ├── test_multi_year_comparison.py  # 500-pt distance grid cross-era comparisons
+│   ├── test_corner_analysis.py        # Corner telemetry (braking, apex, steering, DRS)
+│   ├── test_grid_heatmap.py           # Multi-driver heatmap matrix data wrangling
+│   ├── test_live_timing.py            # SignalR live timing stream recorder
+│   └── test_data_wrangling.py         # Lap filtering & session statistics
+├── requirements.txt    # Pinned Python dependencies (FastF1, Streamlit, PyArrow, etc.)
 ├── Dockerfile          # Containerisation setup
-├── README.md           # User documentation
-├── AGENT.md            # AI developer agent guidelines
-└── DOCS.md             # Developer manual
+├── README.md           # User documentation & feature guide
+├── AGENT.md            # AI developer agent guidelines & architecture decisions
+└── DOCS.md             # Technical developer manual & pipeline architecture
 ```
 
 ---
@@ -240,10 +251,11 @@ When modifying modules in `src/` or `app.py`, adhere to the following safety pat
   ```
 
 ### Step 4 — Run Unit Tests & Verify Syntax
-Before staging or committing any code, always run the pytest automated test suite to ensure that data wrangling functions have no regressions:
+Before staging or committing any code, always run the pytest automated test suite to ensure that all data wrangling, telemetry export, channel filtering, and model fitting functions pass cleanly without regression:
 ```bash
 python3.11 -m pytest tests/
 ```
+All **52 unit and integration tests** across 10 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
