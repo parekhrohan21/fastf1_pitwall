@@ -1516,7 +1516,10 @@ _render_weather_correlation_section(sess_key, _all_laps1, sess, _hl_drivers, _hl
 # ── Braking Efficiency & Trail-Braking Zone Analysis ───────────────────────
 st.markdown("<div class='section-title'>Braking Efficiency & Trail-Braking Zone Analysis</div>", unsafe_allow_html=True)
 if tel1 is not None:
-    _render_braking_analysis_section(sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare)
+    _render_braking_analysis_section(
+        sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare,
+        fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+    )
 
 
 # ── Multi-Year Historical Lap Comparison ─────────────────────────────────
