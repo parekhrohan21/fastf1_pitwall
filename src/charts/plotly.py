@@ -1562,5 +1562,101 @@ def build_multi_year_comparison_fig(
     return fig
 
 
+def build_braking_efficiency_fig(win1, win2, driver1, driver2, colour1, colour2, apex_dist):
+    """
+    Build a 3-row Plotly figure comparing braking efficiency:
+    1. Speed vs Distance to Apex
+    2. Brake % vs Distance to Apex
+    3. Deceleration (G) vs Distance to Apex
+    """
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=("<b>Speed (km/h)</b>", "<b>Brake Pressure (%)</b>", "<b>Longitudinal Deceleration (G)</b>")
+    )
 
+    def _add_traces(df, drv, col):
+        if df is None or df.empty:
+            return
+        
+        df = df.copy()
+        # Distance relative to apex
+        df["DistToApex"] = df["Distance"] - apex_dist
+        
+        # Calculate deceleration (G)
+        # dv in m/s, dt in seconds
+        dt = df["Time"].dt.total_seconds().diff()
+        dv = df["Speed"].diff() / 3.6
+        
+        # Avoid division by zero by setting dt=0 to NaN or small number
+        dt = dt.replace(0, np.nan)
+        accel_ms2 = dv / dt
+        # G force (negative is deceleration)
+        df["G_Force"] = accel_ms2 / 9.81
+        
+        # Apply smoothing to G_Force since differential can be noisy
+        df["G_Force"] = df["G_Force"].rolling(window=3, min_periods=1, center=True).mean()
+        
+        # Clip to realistic F1 bounds (-6G to +2.5G)
+        df["G_Force"] = df["G_Force"].clip(lower=-6.0, upper=2.5)
 
+        # 1. Speed
+        fig.add_trace(go.Scatter(
+            x=df["DistToApex"], y=df["Speed"],
+            mode="lines", line=dict(color=col, width=2.5),
+            name=drv, legendgroup=drv,
+            hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+        ), row=1, col=1)
+
+        # 2. Brake %
+        brake_col = "Brake" if "Brake" in df.columns else None
+        if brake_col:
+            # Some datasets have Brake as boolean, some as 0-100%
+            brake_vals = df[brake_col]
+            if brake_vals.max() <= 1.0:
+                brake_vals = brake_vals * 100
+                
+            fig.add_trace(go.Scatter(
+                x=df["DistToApex"], y=brake_vals,
+                mode="lines", line=dict(color=col, width=2.5),
+                name=drv, legendgroup=drv, showlegend=False,
+                hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Brake: %{{y:.0f}}%<extra></extra>"
+            ), row=2, col=1)
+
+        # 3. Deceleration
+        fig.add_trace(go.Scatter(
+            x=df["DistToApex"], y=df["G_Force"],
+            mode="lines", line=dict(color=col, width=2.5),
+            name=drv, legendgroup=drv, showlegend=False,
+            hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Decel: %{{y:.2f}} G<extra></extra>"
+        ), row=3, col=1)
+
+    _add_traces(win1, driver1, colour1)
+    if win2 is not None:
+        _add_traces(win2, driver2, colour2)
+
+    fig.update_layout(
+        height=600,
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1)
+    )
+
+    # Add a vertical line at apex (DistToApex = 0)
+    for i in range(1, 4):
+        fig.add_vline(x=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", row=i, col=1)
+        fig.update_xaxes(
+            gridcolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.4)",
+            row=i, col=1
+        )
+        if i == 3:
+            fig.update_xaxes(title_text="Distance to Apex (m)", row=i, col=1)
+
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=1, col=1)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", range=[0, 105], row=2, col=1)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.4)", range=[-6, 3], row=3, col=1)
+
+    return fig

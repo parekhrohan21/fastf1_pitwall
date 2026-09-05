@@ -17,7 +17,7 @@ from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
-    build_multi_year_comparison_fig
+    build_multi_year_comparison_fig, build_braking_efficiency_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
