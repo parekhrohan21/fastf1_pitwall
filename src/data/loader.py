@@ -1963,3 +1963,87 @@ def _build_export_json(driver: str, tel_df: pd.DataFrame | None, lap_obj: dict |
     except Exception:
         return b""
 
+
+def _calculate_braking_metrics(df: pd.DataFrame | None, apex_dist: float) -> dict:
+    """
+    Calculate braking dynamics and trail-braking metrics around a circuit corner apex.
+    Returns:
+        dict with initial_brake_dist, peak_decel, trail_brake_release, trail_braking_dist,
+        brake_to_throttle_ms, apex_speed, entry_speed, and df_processed.
+    """
+    metrics = {
+        "initial_brake_dist": None,
+        "peak_decel": None,
+        "trail_brake_release": None,
+        "trail_braking_dist": None,
+        "brake_to_throttle_ms": None,
+        "apex_speed": None,
+        "entry_speed": None,
+        "df_processed": None,
+    }
+    if df is None or df.empty or not {"Distance", "Speed", "Time"}.issubset(df.columns):
+        return metrics
+
+    try:
+        df_calc = df.copy()
+        df_calc["DistToApex"] = df_calc["Distance"] - apex_dist
+
+        # Compute time delta in seconds
+        if pd.api.types.is_timedelta64_dtype(df_calc["Time"]):
+            dt = df_calc["Time"].dt.total_seconds().diff()
+        else:
+            dt = pd.to_numeric(df_calc["Time"], errors="coerce").diff()
+
+        dt = dt.replace(0, np.nan)
+        dv = df_calc["Speed"].diff() / 3.6  # km/h to m/s
+        accel_ms2 = dv / dt
+        # G force (negative is deceleration)
+        df_calc["G_Force"] = (accel_ms2 / 9.81).rolling(window=3, min_periods=1, center=True).mean().clip(-6.0, 2.5)
+
+        # Apex speed
+        metrics["apex_speed"] = float(df_calc["Speed"].min())
+
+        pre_apex = df_calc[df_calc["Distance"] <= apex_dist]
+        if "Brake" in df_calc.columns and not pre_apex.empty:
+            # Handle both boolean (0/1) and analog (0-100) Brake channels
+            brake_thresh = 0 if df_calc["Brake"].max() <= 1.0 else 5
+            brake_active = pre_apex[pre_apex["Brake"] > brake_thresh]
+
+            if not brake_active.empty:
+                init_brake = brake_active.iloc[0]
+                init_d = float(init_brake["Distance"])
+                metrics["initial_brake_dist"] = float(apex_dist - init_d)
+                metrics["entry_speed"] = float(init_brake["Speed"])
+
+                # Peak deceleration during braking phase
+                braking_phase = df_calc[(df_calc["Distance"] >= init_d) & (df_calc["Distance"] <= apex_dist + 20)]
+                if not braking_phase.empty and "G_Force" in braking_phase.columns and not braking_phase["G_Force"].isna().all():
+                    metrics["peak_decel"] = float(braking_phase["G_Force"].min())
+
+                # Trail braking release (first point after initial braking where brake <= threshold)
+                after_init = pre_apex[pre_apex["Distance"] > init_d]
+                brake_release = after_init[after_init["Brake"] <= brake_thresh]
+                if not brake_release.empty:
+                    release_pt = brake_release.iloc[0]
+                    release_d = float(release_pt["Distance"])
+                    metrics["trail_brake_release"] = float(apex_dist - release_d)
+                    metrics["trail_braking_dist"] = float(release_d - init_d)
+
+                    # Brake to throttle transition
+                    after_release = df_calc[df_calc["Distance"] >= release_d]
+                    if "Throttle" in after_release.columns:
+                        throttle_active = after_release[after_release["Throttle"] > 5]
+                        if not throttle_active.empty:
+                            throttle_pt = throttle_active.iloc[0]
+                            if pd.api.types.is_timedelta64_dtype(df_calc["Time"]):
+                                trans_time = (throttle_pt["Time"] - release_pt["Time"]).total_seconds() * 1000.0
+                            else:
+                                trans_time = (float(throttle_pt["Time"]) - float(release_pt["Time"])) * 1000.0
+                            if 0 <= trans_time <= 2500:
+                                metrics["brake_to_throttle_ms"] = float(trans_time)
+
+        metrics["df_processed"] = df_calc
+        return metrics
+    except Exception:
+        return metrics
+

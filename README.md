@@ -69,7 +69,8 @@ fastf1_pitwall/
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
 │       └── components.py # UI layout components, metrics cards, map blocks & telemetry export panel
-├── tests/              # Pytest automated test suite (52 tests across 10 modules)
+├── tests/              # Pytest automated test suite (58 tests across 11 modules)
+│   ├── test_braking_analysis.py       # Braking dynamics, trail-braking & G-force metrics
 │   ├── test_telemetry_export.py       # CSV, Apache Parquet & JSON export serialization
 │   ├── test_telemetry_channels.py     # Channel toggle configuration & figure scaling
 │   ├── test_tyre_crossover.py         # Quadratic degradation regression & cliff prediction
@@ -196,6 +197,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 20. **Track Temperature & Weather Correlation** — Scroll to the **Weather Impact Correlation** section. View the dual-axis Plotly chart overlaying Track Temperature (°C) on driver pace, with auto-detected Rain Crossover Windows and Pearson pace-heat sensitivity scores.
 21. **Multi-Year Historical Lap Comparison** — Scroll to the **Multi-Year Comparison** section. Select a second year and Grand Prix to compare telemetry from different technical regulation eras. Speed profile overlays and a continuous time delta curve (Δ seconds vs Distance) are rendered with metric cards for Era Lap Time Delta, Top Speed, Min Apex Speed, and Full Throttle %.
 22. **Tyre Life & Crossover Prediction Matrix** — Within the **Tyre Degradation Modelling** section, the Crossover Prediction Matrix table shows the predicted cliff lap (TyreLife at +1.5 s pace drop), remaining laps to cliff, and a colour-coded pit window recommendation per stint.
+23. **Braking Efficiency & Trail-Braking Zone Analysis** — Scroll to the Braking Efficiency section. Pick any corner from the track selector to analyze driver braking dynamics. Inspect metric cards for Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked Speed, Brake %, and Deceleration G-force traces with later-braking advantage callouts.
 
 
 ---
@@ -256,7 +258,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **52 unit and integration tests** across 10 test modules should pass cleanly.
+All **58 unit and integration tests** across 11 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash

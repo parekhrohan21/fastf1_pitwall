@@ -1562,12 +1562,15 @@ def build_multi_year_comparison_fig(
     return fig
 
 
-def build_braking_efficiency_fig(win1, win2, driver1, driver2, colour1, colour2, apex_dist):
+def build_braking_efficiency_fig(
+    win1, win2, driver1: str, driver2: str | None, colour1: str, colour2: str | None,
+    apex_dist: float, fmt_func1=None, fmt_func2=None
+):
     """
     Build a 3-row Plotly figure comparing braking efficiency:
     1. Speed vs Distance to Apex
     2. Brake % vs Distance to Apex
-    3. Deceleration (G) vs Distance to Apex
+    3. Longitudinal Deceleration (G) vs Distance to Apex
     """
     fig = make_subplots(
         rows=3, cols=1,
@@ -1576,68 +1579,74 @@ def build_braking_efficiency_fig(win1, win2, driver1, driver2, colour1, colour2,
         subplot_titles=("<b>Speed (km/h)</b>", "<b>Brake Pressure (%)</b>", "<b>Longitudinal Deceleration (G)</b>")
     )
 
-    def _add_traces(df, drv, col):
-        if df is None or df.empty:
+    def _add_traces(df, drv: str, col: str, drv_label: str):
+        if df is None or df.empty or not {"Distance", "Speed", "Time"}.issubset(df.columns):
             return
         
         df = df.copy()
-        # Distance relative to apex
         df["DistToApex"] = df["Distance"] - apex_dist
         
         # Calculate deceleration (G)
-        # dv in m/s, dt in seconds
-        dt = df["Time"].dt.total_seconds().diff()
+        if pd.api.types.is_timedelta64_dtype(df["Time"]):
+            dt = df["Time"].dt.total_seconds().diff()
+        else:
+            dt = pd.to_numeric(df["Time"], errors="coerce").diff()
+            
         dv = df["Speed"].diff() / 3.6
-        
-        # Avoid division by zero by setting dt=0 to NaN or small number
         dt = dt.replace(0, np.nan)
         accel_ms2 = dv / dt
-        # G force (negative is deceleration)
-        df["G_Force"] = accel_ms2 / 9.81
-        
-        # Apply smoothing to G_Force since differential can be noisy
-        df["G_Force"] = df["G_Force"].rolling(window=3, min_periods=1, center=True).mean()
-        
-        # Clip to realistic F1 bounds (-6G to +2.5G)
-        df["G_Force"] = df["G_Force"].clip(lower=-6.0, upper=2.5)
+        df["G_Force"] = (accel_ms2 / 9.81).rolling(window=3, min_periods=1, center=True).mean().clip(-6.0, 2.5)
 
         # 1. Speed
         fig.add_trace(go.Scatter(
             x=df["DistToApex"], y=df["Speed"],
             mode="lines", line=dict(color=col, width=2.5),
-            name=drv, legendgroup=drv,
-            hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+            name=drv_label, legendgroup=drv,
+            hovertemplate=f"<b>{drv_label}</b><br>Dist to Apex: %{{x:.0f}} m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
         ), row=1, col=1)
 
         # 2. Brake %
-        brake_col = "Brake" if "Brake" in df.columns else None
-        if brake_col:
-            # Some datasets have Brake as boolean, some as 0-100%
-            brake_vals = df[brake_col]
-            if brake_vals.max() <= 1.0:
-                brake_vals = brake_vals * 100
+        if "Brake" in df.columns:
+            brake_thresh = 0 if df["Brake"].max() <= 1.0 else 5
+            brake_vals = df["Brake"] * 100 if df["Brake"].max() <= 1.0 else df["Brake"]
                 
             fig.add_trace(go.Scatter(
                 x=df["DistToApex"], y=brake_vals,
                 mode="lines", line=dict(color=col, width=2.5),
-                name=drv, legendgroup=drv, showlegend=False,
-                hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Brake: %{{y:.0f}}%<extra></extra>"
+                name=drv_label, legendgroup=drv, showlegend=False,
+                hovertemplate=f"<b>{drv_label}</b><br>Dist to Apex: %{{x:.0f}} m<br>Brake: %{{y:.0f}}%<extra></extra>"
             ), row=2, col=1)
+
+            # Initial braking point marker on brake chart
+            pre_apex = df[df["DistToApex"] <= 0]
+            brake_active = pre_apex[pre_apex["Brake"] > brake_thresh]
+            if not brake_active.empty:
+                init_pt = brake_active.iloc[0]
+                init_val = init_pt["Brake"] * 100 if df["Brake"].max() <= 1.0 else init_pt["Brake"]
+                fig.add_trace(go.Scatter(
+                    x=[init_pt["DistToApex"]], y=[init_val],
+                    mode="markers", marker=dict(symbol="x", size=9, color=col, line=dict(color="white", width=1)),
+                    name=f"{drv_label} Brake Point", legendgroup=drv, showlegend=False,
+                    hovertemplate=f"<b>{drv_label} Initial Brake</b><br>Dist to Apex: %{{x:.0f}} m<extra></extra>"
+                ), row=2, col=1)
 
         # 3. Deceleration
         fig.add_trace(go.Scatter(
             x=df["DistToApex"], y=df["G_Force"],
             mode="lines", line=dict(color=col, width=2.5),
-            name=drv, legendgroup=drv, showlegend=False,
-            hovertemplate=f"<b>{drv}</b><br>Dist to Apex: %{{x:.0f}} m<br>Decel: %{{y:.2f}} G<extra></extra>"
+            name=drv_label, legendgroup=drv, showlegend=False,
+            hovertemplate=f"<b>{drv_label}</b><br>Dist to Apex: %{{x:.0f}} m<br>Decel: %{{y:.2f}} G<extra></extra>"
         ), row=3, col=1)
 
-    _add_traces(win1, driver1, colour1)
-    if win2 is not None:
-        _add_traces(win2, driver2, colour2)
+    label1 = fmt_func1(driver1) if fmt_func1 else driver1
+    _add_traces(win1, driver1, colour1, label1)
+
+    if win2 is not None and driver2 and colour2:
+        label2 = fmt_func2(driver2) if fmt_func2 else driver2
+        _add_traces(win2, driver2, colour2, label2)
 
     fig.update_layout(
-        height=600,
+        height=620,
         margin=dict(l=40, r=40, t=60, b=40),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -1653,10 +1662,10 @@ def build_braking_efficiency_fig(win1, win2, driver1, driver2, colour1, colour2,
             row=i, col=1
         )
         if i == 3:
-            fig.update_xaxes(title_text="Distance to Apex (m)", row=i, col=1)
+            fig.update_xaxes(title_text="Distance relative to Apex (m)", row=i, col=1)
 
     fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=1, col=1)
     fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", range=[0, 105], row=2, col=1)
-    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.4)", range=[-6, 3], row=3, col=1)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.4)", range=[-6, 2.5], row=3, col=1)
 
     return fig
