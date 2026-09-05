@@ -1702,7 +1702,132 @@ def render_tyre_crossover_matrix(
             "</tr>"
         )
 
+
     st.markdown(
         header_html + body_html + "</tbody></table></div>",
         unsafe_allow_html=True,
     )
+
+def _render_braking_analysis_section(sess_k: str, session_obj, l1, l2, driver1, driver2, colour1, colour2, compare: bool):
+    """Render the Braking Efficiency & Trail-Braking Zone Analysis section."""
+    if session_obj is None:
+        st.warning("Session object not available. Cannot load circuit geometry.")
+        return
+
+    try:
+        circuit_info = session_obj.get_circuit_info()
+    except Exception:
+        st.warning("Circuit geometry info is not available for this track.")
+        return
+
+    corners = circuit_info.corners
+    if corners.empty:
+        st.warning("No corner data available in circuit info.")
+        return
+
+    # Corner selectbox
+    corners_clean = corners.copy()
+    corners_clean["Number"] = corners_clean["Number"].astype(str)
+    corner_labels = [f"Turn {row['Number']}{row['Letter'] or ''}" for _, row in corners_clean.iterrows()]
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        selected_corner_label = st.selectbox("Select Corner for Braking Analysis", corner_labels, key="braking_corner_selector")
+    
+    idx = corner_labels.index(selected_corner_label)
+    selected_corner = corners_clean.iloc[idx]
+    apex_dist = selected_corner["Distance"]
+
+    try:
+        tel1_all = _get_telemetry_for_map(l1, driver1, sess_k)
+        tel2_all = _get_telemetry_for_map(l2, driver2, sess_k) if compare else None
+    except Exception:
+        st.warning("Could not load telemetry for braking analysis.")
+        return
+
+    if tel1_all is None or tel1_all.empty:
+        st.warning(f"No telemetry available for {driver1}.")
+        return
+
+    # Wider window for braking (up to 350m before apex, 100m after)
+    win1 = tel1_all[(tel1_all["Distance"] >= apex_dist - 350) & (tel1_all["Distance"] <= apex_dist + 100)].copy()
+    win2 = tel2_all[(tel2_all["Distance"] >= apex_dist - 350) & (tel2_all["Distance"] <= apex_dist + 100)].copy() if compare and tel2_all is not None and not tel2_all.empty else None
+
+    if win1.empty:
+        st.warning("Insufficient telemetry around this corner.")
+        return
+
+    def calculate_braking_metrics(df):
+        metrics = {
+            "initial_brake_dist": None,
+            "peak_decel": None,
+            "trail_brake_release": None,
+            "brake_to_throttle_ms": None
+        }
+        if df is None or df.empty or "Brake" not in df.columns:
+            return metrics
+            
+        df = df.copy()
+        dt = df["Time"].dt.total_seconds().diff().replace(0, np.nan)
+        dv = df["Speed"].diff() / 3.6
+        df["G_Force"] = (dv / dt) / 9.81
+        df["G_Force"] = df["G_Force"].rolling(window=3, min_periods=1, center=True).mean().clip(-6, 2.5)
+        
+        pre_apex = df[df["Distance"] <= apex_dist]
+        brake_active = pre_apex[pre_apex["Brake"] > 0]
+        
+        if not brake_active.empty:
+            # Initial brake application
+            init_brake = brake_active.iloc[0]
+            metrics["initial_brake_dist"] = apex_dist - init_brake["Distance"]
+            
+            # Peak deceleration
+            # Deceleration is negative, so min() gets the peak G-force during braking
+            metrics["peak_decel"] = df["G_Force"].min()
+            
+            # Trail braking release (first point where brake returns to 0 after initial brake)
+            after_init = pre_apex[pre_apex["Distance"] > init_brake["Distance"]]
+            brake_release = after_init[after_init["Brake"] == 0]
+            if not brake_release.empty:
+                release_pt = brake_release.iloc[0]
+                metrics["trail_brake_release"] = apex_dist - release_pt["Distance"]
+                
+                # Brake to throttle transition
+                after_release = df[df["Distance"] > release_pt["Distance"]]
+                throttle_active = after_release[after_release["Throttle"] > 0]
+                if not throttle_active.empty:
+                    throttle_pt = throttle_active.iloc[0]
+                    trans_time = (throttle_pt["Time"] - release_pt["Time"]).total_seconds() * 1000
+                    if 0 <= trans_time <= 2000: # filter anomalies > 2 seconds
+                        metrics["brake_to_throttle_ms"] = trans_time
+                        
+        return metrics
+
+    m1 = calculate_braking_metrics(win1)
+    m2 = calculate_braking_metrics(win2) if win2 is not None else None
+
+    # Render Metrics
+    st.markdown("##### Braking Metrics")
+    c1, c2, c3, c4 = st.columns(4)
+    
+    def render_metric(col, title, val1, val2, unit=""):
+        v1_str = f"{val1:.1f}{unit}" if val1 is not None else "—"
+        v2_str = f"{val2:.1f}{unit}" if val2 is not None else "—"
+        
+        html = f"<div style='font-size:13px; color:#aaa; margin-bottom:4px;'>{title}</div>"
+        html += f"<div style='font-size:16px; font-weight:bold; color:{colour1};'>{v1_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({driver1})</span></div>"
+        if compare and driver2:
+            html += f"<div style='font-size:16px; font-weight:bold; color:{colour2}; margin-top:2px;'>{v2_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({driver2})</span></div>"
+        
+        col.markdown(html, unsafe_allow_html=True)
+
+    render_metric(c1, "Initial Braking (m before apex)", m1["initial_brake_dist"], m2["initial_brake_dist"] if m2 else None, "m")
+    render_metric(c2, "Peak Deceleration", abs(m1["peak_decel"]) if m1["peak_decel"] else None, abs(m2["peak_decel"]) if m2 and m2["peak_decel"] else None, "G")
+    render_metric(c3, "Trail-Brake Release (m to apex)", m1["trail_brake_release"], m2["trail_brake_release"] if m2 else None, "m")
+    render_metric(c4, "Brake ➔ Throttle Transition", m1["brake_to_throttle_ms"], m2["brake_to_throttle_ms"] if m2 else None, "ms")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    fig = build_braking_efficiency_fig(win1, win2, driver1, driver2, colour1, colour2, apex_dist)
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})

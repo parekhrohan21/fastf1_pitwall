@@ -36,7 +36,8 @@ from src.ui.components import (
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
-    _render_multi_year_comparison_section, render_tyre_crossover_matrix
+    _render_multi_year_comparison_section, render_tyre_crossover_matrix,
+    _render_braking_analysis_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1511,6 +1512,12 @@ _render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Temperature & Weather Impact Correlation ─────────────────────────
 _render_weather_correlation_section(sess_key, _all_laps1, sess, _hl_drivers, _hl_colours, _fmt_driver1)
+
+# ── Braking Efficiency & Trail-Braking Zone Analysis ───────────────────────
+st.markdown("<div class='section-title'>Braking Efficiency & Trail-Braking Zone Analysis</div>", unsafe_allow_html=True)
+if tel1 is not None:
+    _render_braking_analysis_section(sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare)
+
 
 # ── Multi-Year Historical Lap Comparison ─────────────────────────────────
 if compare and tel1 is not None and tel2 is not None:
