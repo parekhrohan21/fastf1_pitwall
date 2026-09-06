@@ -6,6 +6,8 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 
 ---
 
+update the current docs
+
 ## 🚀 Key Features
 
 - **Any Session**: Supports data from 2018 → present (Race, Qualifying, Sprint, Practice 1/2/3).
