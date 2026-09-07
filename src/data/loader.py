@@ -2047,3 +2047,131 @@ def _calculate_braking_metrics(df: pd.DataFrame | None, apex_dist: float) -> dic
     except Exception:
         return metrics
 
+
+def _calculate_gear_shift_metrics(tel_df: pd.DataFrame | None) -> dict:
+    """
+    Calculate powertrain metrics, gear shift events, and gear usage distributions.
+    Returns:
+        dict with avg_rpm, max_rpm, total_upshifts, total_downshifts, total_shifts,
+        short_shifts_count, redline_shifts_count, upshift_rpm_mean,
+        gear_distribution (dict mapping gear 1..8 to % distance),
+        shifts_df (DataFrame of individual shift events with Distance, RPM, Speed, from_gear, to_gear, type, is_short_shift),
+        df_processed (DataFrame with Gear, RPM, Distance).
+    """
+    default_dist = {g: 0.0 for g in range(1, 9)}
+    metrics = {
+        "avg_rpm": None,
+        "max_rpm": None,
+        "total_upshifts": 0,
+        "total_downshifts": 0,
+        "total_shifts": 0,
+        "short_shifts_count": 0,
+        "redline_shifts_count": 0,
+        "upshift_rpm_mean": None,
+        "gear_distribution": default_dist,
+        "shifts_df": pd.DataFrame(),
+        "df_processed": None,
+    }
+    if tel_df is None or tel_df.empty:
+        return metrics
+
+    try:
+        df = tel_df.copy()
+        gear_col = "Gear" if "Gear" in df.columns else ("nGear" if "nGear" in df.columns else None)
+        if not gear_col or "RPM" not in df.columns or "Distance" not in df.columns:
+            return metrics
+
+        df["Gear"] = pd.to_numeric(df[gear_col], errors="coerce").fillna(0).astype(int)
+        df["RPM"] = pd.to_numeric(df["RPM"], errors="coerce")
+        df["Distance"] = pd.to_numeric(df["Distance"], errors="coerce")
+        df = df.dropna(subset=["RPM", "Distance"]).reset_index(drop=True)
+
+        if df.empty:
+            return metrics
+
+        valid_rpm = df[df["RPM"] > 2000]["RPM"]
+        if not valid_rpm.empty:
+            metrics["avg_rpm"] = float(valid_rpm.mean())
+            metrics["max_rpm"] = float(valid_rpm.max())
+        else:
+            metrics["avg_rpm"] = float(df["RPM"].mean())
+            metrics["max_rpm"] = float(df["RPM"].max())
+
+        df["Dist_Delta"] = df["Distance"].diff().fillna(0).clip(lower=0)
+        total_dist = df["Dist_Delta"].sum()
+        gear_dist = {}
+        if total_dist > 0:
+            for g in range(1, 9):
+                g_dist = df[df["Gear"] == g]["Dist_Delta"].sum()
+                gear_dist[g] = round(float((g_dist / total_dist) * 100.0), 1)
+        else:
+            gear_dist = default_dist
+        metrics["gear_distribution"] = gear_dist
+
+        df["Gear_Diff"] = df["Gear"].diff().fillna(0).astype(int)
+        shift_indices = df[df["Gear_Diff"] != 0].index.tolist()
+
+        shifts_records = []
+        short_shifts = 0
+        redline_shifts = 0
+        upshift_rpms = []
+
+        for idx in shift_indices:
+            if idx == 0:
+                continue
+            prev_gear = int(df.loc[idx - 1, "Gear"])
+            new_gear = int(df.loc[idx, "Gear"])
+            if prev_gear == new_gear or prev_gear <= 0 or new_gear <= 0:
+                continue
+
+            dist = float(df.loc[idx, "Distance"])
+            speed = float(df.loc[idx, "Speed"]) if "Speed" in df.columns else 0.0
+            rpm_pre = float(df.loc[idx - 1, "RPM"])
+            rpm_post = float(df.loc[idx, "RPM"])
+            throttle = float(df.loc[idx - 1, "Throttle"]) if "Throttle" in df.columns else 100.0
+
+            if new_gear > prev_gear:
+                shift_type = "upshift"
+                upshift_rpms.append(rpm_pre)
+                is_short = bool(rpm_pre < 11000 and throttle > 60 and prev_gear >= 2)
+                is_redline = bool(rpm_pre >= 11800)
+                if is_short:
+                    short_shifts += 1
+                if is_redline:
+                    redline_shifts += 1
+            else:
+                shift_type = "downshift"
+                is_short = False
+                is_redline = False
+
+            shifts_records.append({
+                "Distance": dist,
+                "Speed": speed,
+                "RPM": rpm_pre,
+                "RPM_Post": rpm_post,
+                "from_gear": prev_gear,
+                "to_gear": new_gear,
+                "type": shift_type,
+                "is_short_shift": is_short,
+                "is_redline": is_redline,
+            })
+
+        shifts_df = pd.DataFrame(shifts_records)
+        metrics["shifts_df"] = shifts_df
+
+        upshifts_count = len([s for s in shifts_records if s["type"] == "upshift"])
+        downshifts_count = len([s for s in shifts_records if s["type"] == "downshift"])
+        metrics["total_upshifts"] = upshifts_count
+        metrics["total_downshifts"] = downshifts_count
+        metrics["total_shifts"] = upshifts_count + downshifts_count
+        metrics["short_shifts_count"] = short_shifts
+        metrics["redline_shifts_count"] = redline_shifts
+
+        if upshift_rpms:
+            metrics["upshift_rpm_mean"] = float(np.mean(upshift_rpms))
+
+        metrics["df_processed"] = df
+        return metrics
+    except Exception:
+        return metrics
+

@@ -12,13 +12,13 @@ from src.data.loader import (
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_multi_year_comparison,
     _build_export_csv, _build_export_parquet, _build_export_json,
-    _calculate_braking_metrics
+    _calculate_braking_metrics, _calculate_gear_shift_metrics
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
-    build_multi_year_comparison_fig, build_braking_efficiency_fig
+    build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1820,3 +1820,95 @@ def _render_braking_analysis_section(
     )
     if fig:
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _render_gear_analysis_section(
+    sess_k: str, tel1: pd.DataFrame | None, tel2: pd.DataFrame | None,
+    driver1: str, driver2: str | None,
+    colour1: str, colour2: str | None, compare: bool,
+    fmt_func1=None, fmt_func2=None
+):
+    """Render the Gear Shift Strategy & RPM Power Band Optimization section."""
+    if tel1 is None or tel1.empty:
+        st.warning(f"No telemetry available for {fmt_func1(driver1) if fmt_func1 else driver1}.")
+        return
+
+    gear_data1 = _calculate_gear_shift_metrics(tel1)
+    gear_data2 = _calculate_gear_shift_metrics(tel2) if (compare and driver2 and tel2 is not None and not tel2.empty) else None
+
+    if gear_data1["df_processed"] is None or gear_data1["df_processed"].empty:
+        st.warning("Insufficient telemetry (RPM / Gear / Distance) for gear shift strategy analysis.")
+        return
+
+    drv1_name = fmt_func1(driver1) if fmt_func1 else driver1
+    drv2_name = fmt_func2(driver2) if (fmt_func2 and driver2) else driver2
+
+    # Render 4 Metric Cards
+    st.markdown("##### Powertrain & Gear Strategy Metrics")
+    c1, c2, c3, c4 = st.columns(4)
+
+    def render_metric(col, title, val1_str, val2_str=None):
+        html = f"<div style='font-size:13px; color:#aaa; margin-bottom:4px;'>{title}</div>"
+        html += f"<div style='font-size:16px; font-weight:bold; color:{colour1};'>{val1_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({drv1_name})</span></div>"
+        if compare and driver2 and val2_str is not None:
+            html += f"<div style='font-size:16px; font-weight:bold; color:{colour2}; margin-top:2px;'>{val2_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({drv2_name})</span></div>"
+        col.markdown(html, unsafe_allow_html=True)
+
+    # Card 1: Total Shifts
+    val1_shifts = f"{gear_data1['total_shifts']} ({gear_data1['total_upshifts']}↑ / {gear_data1['total_downshifts']}↓)"
+    val2_shifts = f"{gear_data2['total_shifts']} ({gear_data2['total_upshifts']}↑ / {gear_data2['total_downshifts']}↓)" if gear_data2 else None
+    render_metric(c1, "Total Shifts (↑ / ↓)", val1_shifts, val2_shifts)
+
+    # Card 2: Average RPM
+    val1_rpm = f"{gear_data1['avg_rpm']:.0f} RPM" if gear_data1["avg_rpm"] is not None else "—"
+    val2_rpm = f"{gear_data2['avg_rpm']:.0f} RPM" if (gear_data2 and gear_data2["avg_rpm"] is not None) else None
+    render_metric(c2, "Average Engine RPM", val1_rpm, val2_rpm)
+
+    # Card 3: Short-Shifts
+    val1_short = f"{gear_data1['short_shifts_count']} shifts"
+    val2_short = f"{gear_data2['short_shifts_count']} shifts" if gear_data2 else None
+    render_metric(c3, "Tactical Short-Shifts", val1_short, val2_short)
+
+    # Card 4: Mean Upshift RPM
+    val1_up_rpm = f"{gear_data1['upshift_rpm_mean']:.0f} RPM" if gear_data1["upshift_rpm_mean"] is not None else "—"
+    val2_up_rpm = f"{gear_data2['upshift_rpm_mean']:.0f} RPM" if (gear_data2 and gear_data2["upshift_rpm_mean"] is not None) else None
+    render_metric(c4, "Mean Upshift RPM", val1_up_rpm, val2_up_rpm)
+
+    # Comparative Summary Banner
+    if compare and gear_data2 and gear_data1["avg_rpm"] and gear_data2["avg_rpm"]:
+        s1 = gear_data1["short_shifts_count"]
+        s2 = gear_data2["short_shifts_count"]
+        r1 = gear_data1["avg_rpm"]
+        r2 = gear_data2["avg_rpm"]
+
+        parts = []
+        if s1 > s2:
+            parts.append(f"<b>{drv1_name}</b> executed <b>{s1 - s2} more short-shifts</b> ({s1} vs {s2}), prioritizing rear traction and torque management.")
+        elif s2 > s1:
+            parts.append(f"<b>{drv2_name}</b> executed <b>{s2 - s1} more short-shifts</b> ({s2} vs {s1}), prioritizing rear traction and torque management.")
+        else:
+            parts.append(f"Both drivers executed an identical short-shift strategy (<b>{s1}</b> short-shifts each).")
+
+        rpm_diff = abs(r1 - r2)
+        if rpm_diff >= 50:
+            higher_drv = drv1_name if r1 > r2 else drv2_name
+            parts.append(f"<b>{higher_drv}</b> operated at an average of <b>{rpm_diff:.0f} higher RPM</b> across the lap.")
+
+        summary_txt = " ".join(parts)
+        border_col = colour1 if s1 >= s2 else colour2
+        st.markdown(
+            f"<div style='background:rgba(255,255,255,0.03); border-left:4px solid {border_col}; "
+            f"padding:10px 14px; border-radius:6px; margin:12px 0 16px 0; font-size:13px;'>"
+            f"{summary_txt}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    fig = build_gear_shift_fig(
+        gear_data1, gear_data2, driver1, driver2, colour1, colour2,
+        fmt_func1=fmt_func1, fmt_func2=fmt_func2
+    )
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
