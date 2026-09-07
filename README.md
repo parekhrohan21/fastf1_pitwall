@@ -51,8 +51,9 @@ update the current docs
 - **Multi-Driver Grid Analysis & Heatmaps**: Grid-wide analytical matrix allowing users to select 3 to 20 drivers across the field. Renders interactive Plotly heatmaps color-coded by time deltas or speed deficits for **Sector Split Deltas** (S1, S2, S3, Theoretical Best), **Lap-by-Lap Pace Heatmap** (Drivers × Laps), and **Top Speed Matrix** (ST, I1, I2, FL).
 - **Driver Consistency Index & Stint Pace Distribution**: Calculates driver lap time variance per stint after filtering out in-laps, out-laps, and Safety Car / Red Flag periods. Evaluates a **Consistency Score** (0–100%), Lap Time Std Dev (±s), Clean Air Pace vs. **Traffic Deficit** (+s/lap), and renders interactive Plotly Violin and Boxplot distributions with raw lap points alongside a stint breakdown table.
 - **Track Temperature & Weather Impact Correlation**: Correlates track and air temperature shifts, rainfall intensity, and humidity with lap time drop-offs and tyre compound performance. Renders a dual-axis Plotly chart overlaying Track Temperature (°C) on driver pace, featuring automatic detection of **Rain Crossover Windows** (Slicks ↔ Intermediates/Wets) and Pearson pace-heat sensitivity scores.
-- **Multi-Year Historical Lap Comparison**: Enables multi-season telemetry comparisons for the same circuit across different technical regulation eras (e.g. 2024 ground-effect vs 2020 high-downforce era). Aligns distance-based telemetry to plot speed profile overlays (km/h) and continuous time delta curves (Δ seconds), displaying comparative metrics for Era Lap Time Delta, Top Speed, Minimum Apex Speed, and Full Throttle Ratio.
-- **Comprehensive Automated Test Suite**: Fully automated test coverage with **52 pytest unit and integration tests** across 10 dedicated test modules, validating telemetry export (CSV, Parquet, JSON), dynamic channel toggles, predictive tyre degradation, consistency distributions, weather correlation, and live timing streaming.
+- **Braking Efficiency & Trail-Braking Zone Analysis**: High-precision braking telemetry around circuit turn apexes. Extracts longitudinal deceleration (G-force), initial braking distance (m before apex), peak deceleration (G), trail-braking release point, and brake-to-throttle transition time (ms), rendered across a stacked 3-subplot Plotly figure with comparative advantage callouts.
+- **Gear Shift Strategy & RPM Power Band Optimization**: Extracts engine RPM, gear selection, throttle application, and track distance to detect every upshift and downshift. Identifies tactical short-shifts (< 11,000 RPM under > 60% throttle) and redline shift events (≥ 11,800 RPM). Renders a dual-subplot Plotly figure with an RPM operating curve, interactive shift event markers, and horizontal percentage gear usage breakdown (Gears 1 through 8), accompanied by comparative shift count and RPM metrics cards.
+- **Comprehensive Automated Test Suite**: Fully automated test coverage with **64 pytest unit and integration tests** across 12 dedicated test modules, validating telemetry export (CSV, Parquet, JSON), dynamic channel toggles, predictive tyre degradation, consistency distributions, weather correlation, braking dynamics, gear shift strategies, and live timing streaming.
 - **High Performance**: FastF1 caching combined with Streamlit session state keeps the heavy data processing instant after the first load.
 
 ---
@@ -66,12 +67,13 @@ fastf1_pitwall/
 │   ├── data/
 │   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
-│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners)
+│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, gears)
 │   │   └── matplotlib.py # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
 │       └── components.py # UI layout components, metrics cards, map blocks & telemetry export panel
-├── tests/              # Pytest automated test suite (58 tests across 11 modules)
+├── tests/              # Pytest automated test suite (64 tests across 12 modules)
+│   ├── test_gear_shifts.py            # Powertrain dynamics, shift detection & gear distributions
 │   ├── test_braking_analysis.py       # Braking dynamics, trail-braking & G-force metrics
 │   ├── test_telemetry_export.py       # CSV, Apache Parquet & JSON export serialization
 │   ├── test_telemetry_channels.py     # Channel toggle configuration & figure scaling
@@ -200,6 +202,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 21. **Multi-Year Historical Lap Comparison** — Scroll to the **Multi-Year Comparison** section. Select a second year and Grand Prix to compare telemetry from different technical regulation eras. Speed profile overlays and a continuous time delta curve (Δ seconds vs Distance) are rendered with metric cards for Era Lap Time Delta, Top Speed, Min Apex Speed, and Full Throttle %.
 22. **Tyre Life & Crossover Prediction Matrix** — Within the **Tyre Degradation Modelling** section, the Crossover Prediction Matrix table shows the predicted cliff lap (TyreLife at +1.5 s pace drop), remaining laps to cliff, and a colour-coded pit window recommendation per stint.
 23. **Braking Efficiency & Trail-Braking Zone Analysis** — Scroll to the Braking Efficiency section. Pick any corner from the track selector to analyze driver braking dynamics. Inspect metric cards for Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked Speed, Brake %, and Deceleration G-force traces with later-braking advantage callouts.
+24. **Gear Shift Strategy & RPM Power Band Optimization** — Scroll to the Gear Shift Strategy section. Analyze engine RPM curves with interactive shift event markers (upshifts and diamond short-shift markers), compare percentage gear usage across gears 1 to 8, and review metric cards for Total Shifts (upshift/downshift split), Average Engine RPM, Tactical Short-Shifts, and Mean Upshift RPM with automated comparative driver advantage summaries.
 
 
 ---
@@ -260,7 +263,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **58 unit and integration tests** across 11 test modules should pass cleanly.
+All **64 unit and integration tests** across 12 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash

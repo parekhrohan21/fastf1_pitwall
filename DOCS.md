@@ -547,6 +547,7 @@ Each chart section follows the same pattern:
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |
 | Corner Analysis (4-subplot) | Plotly subplots | `_get_telemetry_for_map` | `build_corner_fig` (`with map_tab4`) | `lap.get_car_data()`. 4 subplots: Racing Line, Speed Profile, Steering Angle (°), DRS Activation Status. |
 | Braking Efficiency & Trail-Braking (3-subplot) | Plotly subplots | `_calculate_braking_metrics` | `build_braking_efficiency_fig` | `_render_braking_analysis_section`. 3 subplots: Speed, Brake Pressure (%), Deceleration (G) vs distance to apex. |
+| Gear Shift Strategy & RPM Power Band (2-subplot) | Plotly subplots | `_calculate_gear_shift_metrics` | `build_gear_shift_fig` | `_render_gear_analysis_section`. 2 subplots: Engine RPM vs Track Distance with shift markers & Horizontal gear distribution (% distance in gears 1-8). |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Weather Correlation | Plotly dual-axis | `_build_weather_correlation_data` | `build_weather_correlation_fig` | `sess.weather_data` merged on `Time` via `pd.merge_asof`. Pearson pace-temp correlation, rain crossover detection. |
 | Multi-Year Comparison | Plotly dual-subplot | `_build_multi_year_comparison` | `build_multi_year_comparison_fig` | Interpolated telemetry on 500-pt distance grid. Speed overlay + continuous time delta. |
@@ -911,6 +912,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Medium~~ | ~~**Interactive Telemetry Channel Toggle & Custom Trace Filtering**~~ | ✅ **Done** — Added dynamic multiselect channel filter in `app.py` and updated `build_chart` in `src/charts/matplotlib.py` with custom channel filtering and proportional layout height scaling. |
 | ~~Low~~ | ~~**High-Throughput Telemetry Data Exporter (Parquet & JSON)**~~ | ✅ **Done** — Added dynamic format selector (CSV, Parquet, JSON) in `render_telemetry_export_panel`, with `_build_export_parquet` and `_build_export_json` in `src/data/loader.py`. |
 | ~~High~~ | ~~**Braking Efficiency & Trail-Braking Zone Analysis**~~ | ✅ **Done** — Added dedicated braking dynamics and trail-braking analytics in `_calculate_braking_metrics`, `build_braking_efficiency_fig`, and `_render_braking_analysis_section`. |
+| ~~High~~ | ~~**Gear Shift Strategy & RPM Power Band Optimization**~~ | ✅ **Done** — Added powertrain telemetry analytics in `_calculate_gear_shift_metrics`, `build_gear_shift_fig`, and `_render_gear_analysis_section`. Detects tactical short-shifts, redline shifts, and gear distributions with Plotly dual-subplot visualizations. |
 
 
 
@@ -923,6 +925,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #149** (`feat: Gear Shift Strategy & RPM Power Band Optimization`): Added powertrain dynamics and gear shift strategy telemetry analytics. Extracts engine RPM, gear selection (`nGear` / `Gear`), speed, and throttle application across lap distance to detect every individual upshift and downshift event. Detects tactical short-shifts (< 11,000 RPM under > 60% throttle) used for rear traction / tyre management and redline shifts (≥ 11,800 RPM), and computes distance-weighted gear usage distributions (% in gears 1 through 8). Renders a dual-subplot Plotly figure (`build_gear_shift_fig` for Engine RPM vs Track Distance with shift markers & horizontal gear distribution bar chart) and an interactive comparison section (`_render_gear_analysis_section`) with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM in operating band > 2000 RPM, Tactical Short-Shifts, and Mean Upshift RPM) and automated comparative driver advantage summaries. 6/6 unit tests pass in `tests/test_gear_shifts.py`.
 - **Issue #148** (`feat: Braking Efficiency & Trail-Braking Zone Analysis`): Added dedicated braking dynamics and trail-braking telemetry analytics. Slices corner telemetry around circuit apexes, calculating longitudinal Deceleration (G-force = $\Delta v / (\Delta t \cdot 9.81)$) with 3-point moving average smoothing. Automatically detects Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point (m to apex), Trail-Braking Zone Length, and Brake-to-Throttle Transition Time (ms). Renders a stacked 3-subplot Plotly figure (`build_braking_efficiency_fig` for Speed, Brake %, and Deceleration G) and interactive comparison section (`_render_braking_analysis_section`) with driver formatting and later-braking strategic advantage callouts. 6/6 unit tests pass in `tests/test_braking_analysis.py`.
 - **PR #158** / **Issue #139** (`feat: High-Throughput Telemetry Data Exporter (Parquet & JSON)`): Added multi-format export support under the Telemetry section for Apache Parquet (`.parquet`) and structured JSON (`.json`) alongside CSV. Refactored telemetry export panel into `render_telemetry_export_panel` in `src/ui/components.py`, implemented `_build_export_telemetry_df`, `_build_export_parquet`, and `_build_export_json` in `src/data/loader.py`, added `pyarrow>=14.0.0` to requirements, and added full test suite (9 unit tests in `tests/test_telemetry_export.py`).
 - **PR #147** / **Issue #138** (`feat: Interactive Telemetry Channel Toggle & Custom Trace Filtering`): Added dynamic channel selection multiselect in `app.py` under the Telemetry section, updated `build_chart` in `src/charts/matplotlib.py` to support dynamic channel subset filtering (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) with proportional figure height scaling (`max(2.8, sum(h_ratios) * 1.05 + 0.5)`), restored missing `CHANNEL_CONFIG` and `mpatches` definitions, and added comprehensive pytest suite (9 new unit tests).
@@ -1229,4 +1232,38 @@ The **Interactive Telemetry Channel Toggle & Custom Trace Filtering** module enh
 
 ---
 
-*Last updated: August 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+## 27. Gear Shift Strategy & RPM Power Band Optimization Architecture
+
+The **Gear Shift Strategy & RPM Power Band Optimization** module provides powertrain and transmission telemetry analysis for individual laps and head-to-head driver comparisons.
+
+### Computational Layer (`_calculate_gear_shift_metrics` — `src/data/loader.py`)
+- Accepts a lap telemetry DataFrame (`tel_df`). Supports both `"nGear"` and `"Gear"` channels dynamically.
+- Drops invalid or missing RPM and Distance records.
+- Computes average RPM across the internal combustion engine (ICE) active operating band (`RPM > 2000`) and peak RPM.
+- Calculates distance-weighted gear usage distribution (% of lap distance spent in Gears 1 through 8) using forward distance deltas (`Dist_Delta = Distance.diff().fillna(0).clip(lower=0)`).
+- Identifies shift points via non-zero diffs in `Gear`. For each shift event:
+  - Records track `Distance`, `Speed`, pre-shift `RPM`, post-shift `RPM_Post`, `from_gear`, `to_gear`, and shift `type` (`upshift` or `downshift`).
+  - Flags tactical **Short-Shifts**: defined as upshifts where `RPM < 11,000`, `Throttle > 60%`, and `from_gear >= 2`. These signify intentional early upshifts out of traction-limited low/medium-speed corners to mitigate wheelspin and preserve rear tyres.
+  - Flags **Redline Shifts**: defined as upshifts where pre-shift `RPM >= 11,800`, representing maximum power-band extraction.
+  - Computes `upshift_rpm_mean` across all upshifts.
+- Returns a structured dictionary containing all scalar metrics, gear distributions, and the shift events DataFrame (`shifts_df`).
+
+### Visualisation Layer (`build_gear_shift_fig` — `src/charts/plotly.py`)
+- Constructs a 2-row stacked Plotly figure:
+  1. **Engine RPM Operating Curve & Shift Points**: Continuous RPM trace vs track distance (m). Includes circular markers for normal upshifts and distinct gold diamond markers (`#ffd700`) for tactical short-shifts, complete with hover tooltips detailing gear transitions (e.g. `2 ➔ 3`) and pre-shift RPM.
+  2. **Gear Usage Distribution (% of Lap Distance)**: Grouped horizontal bar chart showing the percentage of lap distance spent in Gears 1 through 8, colour-coded by driver/team colours.
+- Fully formats driver names using `fmt_func1` and `fmt_func2` per AGENT.md guidelines.
+
+### UI Layer (`_render_gear_analysis_section` — `src/ui/components.py`)
+- Renders 4 high-density metric cards:
+  - **Total Shifts**: Total count with `(N↑ / M↓)` breakdown.
+  - **Average Engine RPM**: Mean RPM in active operating range.
+  - **Tactical Short-Shifts**: Count of early traction upshifts.
+  - **Mean Upshift RPM**: Average RPM at upshift execution.
+- Generates an automated comparative summary banner comparing short-shift counts and average RPM between drivers.
+- Renders the interactive 2-row Plotly figure via `st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})`.
+
+---
+
+*Last updated: September 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+

@@ -1669,3 +1669,147 @@ def build_braking_efficiency_fig(
     fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.4)", range=[-6, 2.5], row=3, col=1)
 
     return fig
+
+
+def build_gear_shift_fig(
+    gear_data1: dict, gear_data2: dict | None,
+    driver1: str, driver2: str | None,
+    colour1: str, colour2: str | None,
+    fmt_func1=None, fmt_func2=None
+) -> go.Figure:
+    """
+    Build a 2-row Plotly figure comparing gear shift strategies:
+    1. Engine RPM vs Track Distance with Shift Event Markers
+    2. Gear Usage Distribution (% of Lap Distance in Gears 1-8)
+    """
+    label1 = fmt_func1(driver1) if fmt_func1 else driver1
+    label2 = fmt_func2(driver2) if (fmt_func2 and driver2) else (driver2 if driver2 else "")
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=False,
+        vertical_spacing=0.14,
+        subplot_titles=(
+            "<b>Engine RPM Operating Curve & Shift Points</b>",
+            "<b>Gear Usage Distribution (% of Lap Distance)</b>"
+        ),
+        row_heights=[0.58, 0.42]
+    )
+
+    # 1. RPM traces on Row 1
+    df1 = gear_data1.get("df_processed") if gear_data1 else None
+    if df1 is not None and not df1.empty and {"Distance", "RPM"}.issubset(df1.columns):
+        fig.add_trace(go.Scatter(
+            x=df1["Distance"], y=df1["RPM"],
+            mode="lines", line=dict(color=colour1, width=2.2),
+            name=f"{label1} RPM", legendgroup=driver1,
+            hovertemplate=f"<b>{label1}</b><br>Distance: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<extra></extra>"
+        ), row=1, col=1)
+
+        # Upshift markers
+        shifts1 = gear_data1.get("shifts_df")
+        if shifts1 is not None and not shifts1.empty:
+            upshifts1 = shifts1[shifts1["type"] == "upshift"]
+            if not upshifts1.empty:
+                normal1 = upshifts1[~upshifts1["is_short_shift"]]
+                if not normal1.empty:
+                    fig.add_trace(go.Scatter(
+                        x=normal1["Distance"], y=normal1["RPM"],
+                        mode="markers",
+                        marker=dict(symbol="circle", size=6, color=colour1, line=dict(color="#ffffff", width=1)),
+                        name=f"{label1} Upshifts", legendgroup=driver1,
+                        hovertemplate=f"<b>{label1} Upshift</b><br>Dist: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<br>Gear: %{{customdata[0]}} ➔ %{{customdata[1]}}<extra></extra>",
+                        customdata=np.stack((normal1["from_gear"], normal1["to_gear"]), axis=-1)
+                    ), row=1, col=1)
+
+                short1 = upshifts1[upshifts1["is_short_shift"]]
+                if not short1.empty:
+                    fig.add_trace(go.Scatter(
+                        x=short1["Distance"], y=short1["RPM"],
+                        mode="markers",
+                        marker=dict(symbol="diamond", size=9, color="#ffd700", line=dict(color=colour1, width=1.5)),
+                        name=f"{label1} Short-Shift", legendgroup=driver1,
+                        hovertemplate=f"<b>{label1} Short-Shift (Traction)</b><br>Dist: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<br>Gear: %{{customdata[0]}} ➔ %{{customdata[1]}}<extra></extra>",
+                        customdata=np.stack((short1["from_gear"], short1["to_gear"]), axis=-1)
+                    ), row=1, col=1)
+
+    # Driver 2 on Row 1
+    if gear_data2 is not None and driver2 and colour2:
+        df2 = gear_data2.get("df_processed")
+        if df2 is not None and not df2.empty and {"Distance", "RPM"}.issubset(df2.columns):
+            fig.add_trace(go.Scatter(
+                x=df2["Distance"], y=df2["RPM"],
+                mode="lines", line=dict(color=colour2, width=2.2),
+                name=f"{label2} RPM", legendgroup=driver2,
+                hovertemplate=f"<b>{label2}</b><br>Distance: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<extra></extra>"
+            ), row=1, col=1)
+
+            shifts2 = gear_data2.get("shifts_df")
+            if shifts2 is not None and not shifts2.empty:
+                upshifts2 = shifts2[shifts2["type"] == "upshift"]
+                if not upshifts2.empty:
+                    normal2 = upshifts2[~upshifts2["is_short_shift"]]
+                    if not normal2.empty:
+                        fig.add_trace(go.Scatter(
+                            x=normal2["Distance"], y=normal2["RPM"],
+                            mode="markers",
+                            marker=dict(symbol="circle", size=6, color=colour2, line=dict(color="#ffffff", width=1)),
+                            name=f"{label2} Upshifts", legendgroup=driver2,
+                            hovertemplate=f"<b>{label2} Upshift</b><br>Dist: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<br>Gear: %{{customdata[0]}} ➔ %{{customdata[1]}}<extra></extra>",
+                            customdata=np.stack((normal2["from_gear"], normal2["to_gear"]), axis=-1)
+                        ), row=1, col=1)
+
+                    short2 = upshifts2[upshifts2["is_short_shift"]]
+                    if not short2.empty:
+                        fig.add_trace(go.Scatter(
+                            x=short2["Distance"], y=short2["RPM"],
+                            mode="markers",
+                            marker=dict(symbol="diamond", size=9, color="#ffd700", line=dict(color=colour2, width=1.5)),
+                            name=f"{label2} Short-Shift", legendgroup=driver2,
+                            hovertemplate=f"<b>{label2} Short-Shift (Traction)</b><br>Dist: %{{x:.0f}} m<br>RPM: %{{y:.0f}}<br>Gear: %{{customdata[0]}} ➔ %{{customdata[1]}}<extra></extra>",
+                            customdata=np.stack((short2["from_gear"], short2["to_gear"]), axis=-1)
+                        ), row=1, col=1)
+
+    # 2. Gear Usage Distribution on Row 2 (Gears 1 to 8)
+    gears = [f"Gear {g}" for g in range(1, 9)]
+    dist1 = [gear_data1.get("gear_distribution", {}).get(g, 0.0) for g in range(1, 9)] if gear_data1 else [0.0] * 8
+    
+    fig.add_trace(go.Bar(
+        y=gears, x=dist1,
+        orientation="h",
+        name=label1,
+        marker=dict(color=colour1),
+        legendgroup=driver1,
+        showlegend=False,
+        hovertemplate=f"<b>{label1}</b><br>%{{y}}: %{{x:.1f}}% of lap<extra></extra>"
+    ), row=2, col=1)
+
+    if gear_data2 is not None and driver2 and colour2:
+        dist2 = [gear_data2.get("gear_distribution", {}).get(g, 0.0) for g in range(1, 9)]
+        fig.add_trace(go.Bar(
+            y=gears, x=dist2,
+            orientation="h",
+            name=label2,
+            marker=dict(color=colour2),
+            legendgroup=driver2,
+            showlegend=False,
+            hovertemplate=f"<b>{label2}</b><br>%{{y}}: %{{x:.1f}}% of lap<extra></extra>"
+        ), row=2, col=1)
+
+    fig.update_layout(
+        height=680,
+        barmode="group",
+        margin=dict(l=50, r=40, t=60, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1)
+    )
+
+    fig.update_xaxes(title_text="Track Distance (m)", gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=1, col=1)
+    fig.update_yaxes(title_text="Engine RPM", gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=1, col=1)
+
+    fig.update_xaxes(title_text="% of Lap Distance", gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", range=[0, 100], row=2, col=1)
+    fig.update_yaxes(title_text="Gear Ratio", gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=2, col=1)
+
+    return fig
+
