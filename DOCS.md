@@ -35,6 +35,9 @@
 24. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
 25. [Predictive Tyre Degradation & Thermal Crossover Matrix Architecture](#25-predictive-tyre-degradation--thermal-crossover-matrix-architecture)
 26. [Interactive Telemetry Channel Toggle & Custom Trace Filtering Architecture](#26-interactive-telemetry-channel-toggle--custom-trace-filtering-architecture)
+27. [High-Throughput Multi-Format Telemetry Exporter Architecture](#27-high-throughput-multi-format-telemetry-exporter-architecture)
+28. [Braking Efficiency & Trail-Braking Zone Analysis Architecture](#28-braking-efficiency--trail-braking-zone-analysis-architecture)
+29. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
 
 
 
@@ -382,6 +385,34 @@ Builds grid-wide analytical data matrices for multi-driver heatmap analysis. Sup
 ### `render_tyre_crossover_matrix(table_rows, fmt_driver1, fmt_driver2, driver1, ...)`
 Renders the full-field **Tyre Life & Crossover Prediction Matrix** HTML table after the degradation summary. Reads `cliff_lap`, `remaining_laps`, `pit_window_low/high` from `table_rows` (produced by `build_tyre_deg_fig`). Applies urgency colour-coding per row (🟢/🟡/🔴/✅). Returns early silently if no cliff estimates are available.
 
+### `_build_export_telemetry_df(tel_df, lap_obj, driver_code: str) -> pd.DataFrame`
+Prepares high-resolution telemetry data for export by injecting contextual metadata columns (`Driver`, `LapNumber`, `LapTime`, `Compound`, `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s`) and normalizing column names (`nGear` → `Gear`).
+
+### `_build_export_csv(tel_df, lap_obj, driver_code: str) -> bytes` / `_build_export_parquet(...)` / `_build_export_json(...)`
+Serializes normalized telemetry DataFrames into downloadable binary buffers for CSV, Apache Parquet (compressed with snappy/gzip), and formatted JSON (records orientation).
+
+### `render_telemetry_export_panel(tel1, lap1, driver1, tel2=None, lap2=None, driver2=None, compare=False, ...)`
+Renders the interactive multi-format export UI beneath the telemetry traces, featuring format toggle buttons (`CSV`, `Parquet`, `JSON`) and dynamic Streamlit download buttons for Driver 1 and Driver 2.
+
+### `_calculate_braking_metrics(corner_df: pd.DataFrame, apex_dist: float) -> dict`
+Evaluates longitudinal deceleration and corner entry braking dynamics:
+- Calculates deceleration $G$-force ($G = -\frac{\Delta v}{\Delta t \cdot 9.81}$) smoothed with a 3-point rolling average.
+- Slices telemetry in an entry window $[d_{\text{apex}} - 350, d_{\text{apex}} + 100]$.
+- Extracts `initial_brake_dist` (meters before apex where brake is first applied), `peak_decel` (maximum negative $G$), `trail_brake_release` (distance from apex where brake releases below 5%), `trail_brake_dist` (length of trail-braking phase), and `brake_to_throttle_ms` (time delay between full brake release and initial throttle re-application).
+
+### `_render_braking_analysis_section(sess_k, session_obj, l1, l2, driver1, driver2, ...)`
+Renders the Braking Efficiency & Trail-Braking Zone Analysis section with an interactive corner selectbox, 4 high-density metric cards, comparative later-braking advantage callouts, and the 3-subplot Plotly figure (`build_braking_efficiency_fig`).
+
+### `_calculate_gear_shift_metrics(tel_df: pd.DataFrame | None) -> dict`
+Calculates powertrain and transmission operating metrics:
+- Normalizes `Gear` and `nGear` channels, computing average and peak RPM across the active operating band (`RPM > 2000`).
+- Slices distance intervals to compute distance-weighted percentage gear distribution across Gears 1 through 8.
+- Extracts individual shift events (`Gear.diff() != 0`), detecting tactical short-shifts (`RPM < 11,000`, `Throttle > 60%`, `from_gear >= 2`) and redline shifts (`RPM >= 11,800`).
+- Calculates `upshift_rpm_mean` across all upshifts.
+
+### `_render_gear_analysis_section(sess_k, tel1, tel2, driver1, driver2, colour1, colour2, compare, ...)`
+Renders the Gear Shift Strategy & RPM Power Band Optimization section with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM, Tactical Short-Shifts, Mean Upshift RPM), comparative traction/RPM strategy callout banners, and the 2-subplot Plotly figure (`build_gear_shift_fig`).
+
 ### `render_summary(lap, driver, colour)`
 Renders the full driver banner section:
 - Circular headshot (`HeadshotUrl`) with team-coloured ring
@@ -470,46 +501,58 @@ A `MutationObserver` (injected via `components.html`) watches for Streamlit's `d
 After data is loaded, the script renders sections in this fixed order:
 
 ```
-_session_info_header()  ← Session banner (circuit, country, round, session type, date)
+_session_info_header()           ← Session banner (circuit, country, round, session type, date)
         │
-render_summary()        ← Driver banner, metrics, tyre, weather
+render_summary()                 ← Driver banner, metrics, tyre, weather
         │
-render_session_stats()  ← Session Statistics (Grid, Finish, Pace, Speed)
+render_session_stats()           ← Session Statistics (Grid, Finish, Pace, Speed)
         │
-_lap_history_fig()      ← Lap Time History (Plotly) + compound multiselect filter
+_lap_history_fig()               ← Lap Time History (Plotly) + compound multiselect filter
         │
-_fuel_pace_fig()        ← Fuel-Adjusted Pace (Plotly, dual traces)
+_fuel_pace_fig()                 ← Fuel-Adjusted Pace (Plotly, dual traces)
         │
-_stint_fig()            ← Tyre Stint Timeline (Plotly Gantt bars)
+_stint_fig()                     ← Tyre Stint Timeline (Plotly Gantt bars)
         │
-_render_pit_stops()     ← Pit Stop Summary (HTML table)
+_render_pit_stops()              ← Pit Stop Summary (HTML table)
         │
-build_undercut_chart()  ← Pit Strategy & Undercut Analysis (Plotly gap line chart + metrics)
+build_undercut_chart()           ← Pit Strategy & Undercut Analysis (Plotly gap line chart + metrics)
         │
-build_chart()           ← 6-channel Telemetry (Matplotlib)
+build_tyre_deg_fig()             ← Tyre Degradation & Predictive Thermal Crossover Matrix
         │
-render_telemetry_export_panel() ← Multi-Format Export panel — CSV, Apache Parquet (.parquet), JSON (.json)
+_render_consistency_section()    ← Driver Consistency Index & Stint Pace Distribution
         │
-Speed Delta             ← Matplotlib fill-between (compare mode only)
-Time Delta (Cont.)      ← Matplotlib fill-between (compare mode only)
+_render_weather_correlation_section() ← Track Temperature & Weather Impact Correlation
         │
-_render_leaderboard()   ← Fastest Laps Leaderboard (HTML table)
+_render_braking_analysis_section() ← Braking Efficiency & Trail-Braking Zone Analysis
         │
-_build_ideal_lap()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver, delta cards + full table
+_render_gear_analysis_section()  ← Gear Shift Strategy & RPM Power Band Optimization
         │
-Gap to Leader           ← Plotly line chart (all drivers)
+_render_multi_year_comparison_section() ← Multi-Year Historical Lap Comparison (compare mode only)
         │
-Race Control Feed       ← Filterable st.dataframe of flag events + flag zones overlaid on Lap History & Gap charts
+build_chart()                    ← Telemetry with Dynamic Channel Filter (Matplotlib)
         │
-Race Position           ← Plotly line chart — all drivers faded, selected highlighted (_build_position_data)
+render_telemetry_export_panel()  ← Multi-Format Export panel — CSV, Apache Parquet (.parquet), JSON (.json)
         │
-Track Map               ← Plotly scatter (speed-coloured path)
+Speed Delta                      ← Matplotlib fill-between (compare mode only)
+Time Delta (Continuous)          ← Matplotlib fill-between (compare mode only)
         │
-Race Replay             ← Plotly animated scatter (all drivers)
+_render_leaderboard()            ← Fastest Laps Leaderboard (HTML table)
         │
-Constructors' Standings ← Constructors' Championship Standings (HTML table)
+_render_ideal_lap_section()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver, delta cards + full table
         │
-Official Classification ← Official Session Classification (HTML table)
+_render_grid_heatmap_section()   ← Multi-Driver Grid Analysis & Heatmaps (Sectors, Laps, Speed)
+        │
+_render_gap_to_leader_section()  ← Gap to Leader (Plotly line chart)
+        │
+Race Control Feed                ← Filterable st.dataframe of flag events + flag zones overlaid on charts
+        │
+_render_position_section()       ← Race Position (Plotly line chart)
+        │
+render_maps_block()              ← Track Map (Speed Map, Inputs Map, Corner Analysis 4-subplot, Race Replay)
+        │
+_render_constructor_standings()  ← Constructors' Championship Standings (HTML table)
+        │
+_render_final_classification()   ← Official Session Classification (HTML table)
 ```
 
 Each chart section follows the same pattern:
@@ -824,16 +867,21 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory:
+The tests reside in the `tests/` directory (64 tests across 12 modules):
 - `tests/__init__.py`: Package initialisation.
-- `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames. These fixtures allow testing the data wrangling pipeline entirely offline, avoiding slow API calls.
-- `tests/test_data_wrangling.py`: Tests the following core data-wrangling components:
-  - `_build_final_classification` under race (sorting and index conversion), qualifying (sector split-time validation), and practice (returning `"PRACTICE"` indicator code for NaN results) configurations.
-  - `_build_fuel_adjusted` checking fuel-load adjustments, exclusion of in-laps and out-laps (`PitInTime` and `PitOutTime`), and exclusion of outlier laps (>2.5x median pace).
-- `tests/test_live_timing.py`: Tests the following live timing components:
-  - `get_live_recorder_status`: Verifies status calculation, stream file existence, line counts, and file size formatting for missing vs mock stream files.
-  - `stop_live_recorder`: Validates inactive stream recorder shutdown handling.
-  - `load_live_session`: Verifies graceful fallback and error message handling for missing or empty live stream text files.
+- `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_gear_shifts.py`: Powertrain dynamics, shift detection (upshifts/downshifts), tactical short-shift and redline identification, distance-weighted gear distributions, and 2-subplot figure generation.
+- `tests/test_braking_analysis.py`: Braking dynamics, longitudinal deceleration $G$-force, initial braking point, peak decel, trail-braking release, and 3-subplot figure generation.
+- `tests/test_telemetry_export.py`: Telemetry serialization across CSV, Apache Parquet (`.parquet`), and structured JSON (`.json`) with metadata injection.
+- `tests/test_telemetry_channels.py`: Dynamic channel multiselect toggles, channel configuration maps, and proportional layout height scaling.
+- `tests/test_tyre_crossover.py`: Quadratic polynomial regression, cliff lap estimation (+1.5 s pace threshold), pit window prediction, and urgency matrices.
+- `tests/test_consistency.py`: Lap time standard deviation per stint, Consistency Score (0–100%), Clean Air Pace vs Traffic Deficit, and violin/boxplot distributions.
+- `tests/test_weather_correlation.py`: Timeseries weather data merging (`pd.merge_asof`), Pearson pace-heat correlation, and rain crossover window detection.
+- `tests/test_multi_year_comparison.py`: Cross-era telemetry interpolation on 500-pt distance grids and continuous time delta profiles.
+- `tests/test_corner_analysis.py`: Corner telemetry slicing, apex speed, braking points, steering angle (°), and DRS activation profiles.
+- `tests/test_grid_heatmap.py`: Grid-wide analytical matrices for Sector Deltas, Lap-by-Lap Pace, and Top Speed.
+- `tests/test_live_timing.py`: SignalR live timing stream recorder status, process management, and live session hydration.
+- `tests/test_data_wrangling.py`: Core data wrangling, official session classifications, and fuel-load pace corrections.
 
 To run the automated tests locally:
 ```bash
@@ -858,17 +906,19 @@ Run this after any significant change:
 - [ ] Tyre Stint Timeline shows coloured bars
 - [ ] Tyre Degradation chart renders with regression trendlines and cliff vlines
 - [ ] Tyre Life & Crossover Prediction Matrix renders with urgency badges
-- [ ] Telemetry chart renders all 6 channels
-- [ ] Export CSV button downloads a valid file with Sector1/2/3 columns
+- [ ] Driver Consistency section renders violin/boxplot with stat cards
+- [ ] Weather Impact Correlation chart renders with dual axis
+- [ ] Braking Efficiency section renders 3-subplot Plotly figure, corner selector, and 4 metric cards with advantage callouts
+- [ ] Gear Shift Strategy section renders 2-subplot Plotly figure (RPM curve + shift markers, gear distribution) and 4 metric cards
+- [ ] Multi-Year Comparison section renders dual-subplot figure and era metrics in compare mode
+- [ ] Telemetry chart renders selected channels with dynamic toggle and proportional height scaling
+- [ ] Export Telemetry panel switches between CSV, Apache Parquet, and JSON formats with working downloads
 - [ ] Fastest Laps Leaderboard shows all drivers
 - [ ] Ideal Lap table renders with correct S1/S2/S3 and theoretical times
 - [ ] Delta card shows green (≤0.05s) or red (>0.05s) colour correctly
 - [ ] Gap to Leader chart renders
 - [ ] Race Position chart renders (Race/Sprint sessions only)
-- [ ] Track Map renders with speed colours
-- [ ] Corner Analysis tab: 4-subplot layout (Racing Line, Speed, Steering, DRS) renders
-- [ ] Driver Consistency section renders violin/boxplot with stat cards
-- [ ] Weather Impact Correlation chart renders with dual axis
+- [ ] Track Map renders with speed colours, inputs map, corner analysis (4 subplots), and race replay
 - [ ] Dark mode toggle switches all backgrounds including top bar
 - [ ] Light mode toggle reverses all backgrounds
 
@@ -1232,7 +1282,69 @@ The **Interactive Telemetry Channel Toggle & Custom Trace Filtering** module enh
 
 ---
 
-## 27. Gear Shift Strategy & RPM Power Band Optimization Architecture
+## 27. High-Throughput Multi-Format Telemetry Exporter Architecture
+
+The **High-Throughput Multi-Format Telemetry Exporter** module allows engineers and data scientists to export lap-level high-frequency telemetry across three industry-standard formats: **CSV**, **Apache Parquet (`.parquet`)**, and **structured JSON (`.json`)**.
+
+### Data Transformation Layer (`_build_export_telemetry_df` — `src/data/loader.py`)
+- Takes raw lap telemetry (`tel_df`), the lap metadata object (`lap_obj`), and the driver code string (`driver_code`).
+- Injects contextual metadata columns to provide self-contained datasets:
+  - `Driver`: Three-letter driver abbreviation (e.g. `"VER"`, `"NOR"`).
+  - `LapNumber`: Integer lap number.
+  - `LapTime`: Timedelta string formatted as `M:SS.mmm`.
+  - `Compound`: Tyre compound name (e.g. `"SOFT"`, `"MEDIUM"`).
+  - `Sector1Time_s`, `Sector2Time_s`, `Sector3Time_s`: Floating-point duration of each sector in seconds (3 decimal places).
+- Column Normalization: Renames FastF1 internal `"nGear"` to canonical `"Gear"`.
+- Drops index columns to produce clean, export-ready tabular DataFrames.
+
+### Serialization Engines (`src/data/loader.py`)
+- **CSV Exporter (`_build_export_csv`)**: Formats floating-point numerical columns, formats timestamps, and writes UTF-8 encoded text buffers.
+- **Apache Parquet Exporter (`_build_export_parquet`)**: Utilizes `pyarrow` (`pyarrow.Table.from_pandas`) to serialize DataFrames into high-efficiency columnar binary buffers. Supports compressed columnar scans and rapid ingestion into DuckDB, Polars, and pandas. Falls back safely to empty bytes if `pyarrow` is unavailable or data is corrupted.
+- **JSON Exporter (`_build_export_json`)**: Serializes DataFrames using `records` orientation with ISO-8601 timedelta/datetime serialization for REST APIs and browser visualization engines.
+
+### UI Layer (`render_telemetry_export_panel` — `src/ui/components.py`)
+- Renders as an expandable container (`st.expander("📥 Export Telemetry Data")`) located directly below the Matplotlib telemetry charts.
+- Provides a dynamic format selector widget (`st.radio` with options `"CSV"`, `"Parquet (.parquet)"`, `"JSON (.json)"`).
+- Renders primary and secondary driver download buttons with dynamic MIME types (`text/csv`, `application/octet-stream`, `application/json`) and standardized filenames:
+  `{year}_{gp}_{session}_{driver}_lap_{lap_num}.{ext}`.
+
+---
+
+## 28. Braking Efficiency & Trail-Braking Zone Analysis Architecture
+
+The **Braking Efficiency & Trail-Braking Zone Analysis** module analyzes longitudinal deceleration physics and driver corner-entry technique around circuit turn apexes.
+
+### Mathematical & Physical Model (`_calculate_braking_metrics` — `src/data/loader.py`)
+- Circuit Geometry Alignment: Queries `session.get_circuit_info().corners` to locate precise apex coordinates ($d_{\text{apex}}$).
+- Window Slicing: Telemetry is sliced in an entry window $[d_{\text{apex}} - 350\text{ m}, d_{\text{apex}} + 100\text{ m}]$.
+- Longitudinal Deceleration Physics:
+  $$\Delta v = (v_i - v_{i-1}) \cdot \frac{1000}{3600}\text{ (m/s)}$$
+  $$\Delta t = t_i - t_{i-1}\text{ (seconds)}$$
+  $$a_{\text{long}} = \frac{\Delta v}{\Delta t}\text{ (m/s}^2)$$
+  $$\text{Decel } (G) = \frac{a_{\text{long}}}{9.81}$$
+- Smoothing: Deceleration values are smoothed using a 3-point rolling moving average to suppress sensor quantization spikes.
+- Extracted Corner Metrics:
+  - **Initial Braking Distance (`initial_brake_dist`)**: Distance (meters before apex) where brake application first exceeds 5%.
+  - **Peak Deceleration (`peak_decel`)**: Maximum longitudinal deceleration experienced during corner entry ($G$-force).
+  - **Trail-Brake Release Point (`trail_brake_release`)**: Distance to apex where brake pressure drops below 5% after initial peak.
+  - **Trail-Braking Distance (`trail_brake_dist`)**: Spatial length of the modulated brake release zone.
+  - **Brake-to-Throttle Transition Time (`brake_to_throttle_ms`)**: Latency (milliseconds) between brake release and initial throttle application ($>5\%$).
+
+### Visualisation Layer (`build_braking_efficiency_fig` — `src/charts/plotly.py`)
+- Stacked 3-row Plotly subplots sharing the X-axis (Distance to Apex in meters, ranging from $-350\text{ m}$ to $+100\text{ m}$):
+  1. **Speed Profile (km/h)**: Entry deceleration, minimum apex speed, and exit acceleration.
+  2. **Brake Pressure (%)**: Initial hit and trail-braking pressure decay curve.
+  3. **Deceleration ($G$)**: Continuous longitudinal $G$-force curve.
+- Vertical dashed reference line at apex ($x = 0\text{ m}$) and scatter markers at detected initial braking points.
+
+### UI Layer (`_render_braking_analysis_section` — `src/ui/components.py`)
+- Corner selectbox dynamically populated from `corners["Number"]` and `corners["Letter"]`.
+- 4 high-density metric cards displaying Initial Braking, Peak Deceleration, Trail-Brake Release, and Brake ➔ Throttle Transition.
+- Automated later-braking advantage callout banner: calculates $\Delta d_{\text{brake}}$ between drivers and announces who braked later into the turn.
+
+---
+
+## 29. Gear Shift Strategy & RPM Power Band Optimization Architecture
 
 The **Gear Shift Strategy & RPM Power Band Optimization** module provides powertrain and transmission telemetry analysis for individual laps and head-to-head driver comparisons.
 
@@ -1266,4 +1378,5 @@ The **Gear Shift Strategy & RPM Power Band Optimization** module provides powert
 ---
 
 *Last updated: September 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+
 
