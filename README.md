@@ -6,8 +6,6 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 
 ---
 
-update the current docs
-
 ## 🚀 Key Features
 
 - **Any Session**: Supports data from 2018 → present (Race, Qualifying, Sprint, Practice 1/2/3).
@@ -17,7 +15,6 @@ update the current docs
 - **AWS-Style Mini-Sector Speed Map**: In Compare Mode, the track map is dynamically divided into dozens of 200m mini-sectors based on distance telemetry. Each track segment is smoothly interpolated and coloured according to the driver who carried the highest average speed through that exact section, mimicking premium broadcast graphics.
 - **Driver Input Track Map**: A dedicated map mode visualising driver foot pedal telemetry (Green for 100% Throttle, Red for Braking, Yellow for Coasting). Supports side-by-side comparison in Compare Mode.
 - **Corner-by-Corner Analysis**: An advanced performance tab that fetches track layout coordinates via FastF1 to let you select a corner (e.g. Turn 1). Automatically calculates apex speed, braking points, max steering angle (°), and DRS activation status, plotting racing line overlays, speed profiles, steering wheel input curves, and DRS channel subplots in a multi-trace layout.
-- **Braking Efficiency & Trail-Braking Analysis**: A dedicated analysis module focusing purely on longitudinal driver braking dynamics into a specific corner. Slices telemetry precisely around the apex, calculating and applying noise filters to longitudinal Deceleration (G-force). Automatically extracts Initial Braking Distance, Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked plotting of Speed, Brake Pressure (%), and G-force overlays to see exactly who brakes later and trails off smoother.
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualisations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
 - **Driver Headshot in Banner**: The driver summary banner automatically fetches and renders the official F1 headshot photo (from FastF1's `HeadshotUrl` field) as a circular portrait with a team-coloured ring border. Falls back silently if the image is unavailable.
@@ -180,30 +177,34 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 
 > **Note:** On first load, the dashboard automatically defaults to the most recent season (currently 2026), the most recently completed Grand Prix of that season (or the first race of the calendar if no races have completed yet), and dynamically selects the driver who won that session (or the fastest driver for practice sessions).
 
-1. **Sidebar → Season** — pick a year (2018 – present)
-2. **Sidebar → Grand Prix** — pick any event from that season's calendar
-3. **Sidebar → Session** — choose Race, Qualifying, Sprint, FP1, FP2, or FP3
-4. **Click ⬇️ Load Session** — The first load streams the data from the F1 API and takes ~10-30 seconds. Afterwards, it is cached down to milliseconds.
-5. **Select Drivers and Laps** — Pick a driver and select *Fastest* or a specific lap number.
-6. **Compare Drivers** — Tick **👥 Compare with Driver 2** to overlay traces and generate the Speed Delta chart.
-7. **Lap Time History** — Scroll past the driver banner to see the full race pace chart with compound-coloured dots, pit-out markers, and a highlighted line for your selected lap.
-8. **Fuel-Adjusted Pace** — The next section removes the fuel-load penalty from each lap. Tune the fuel effect slider to explore sensitivity; the solid trace shows corrected pace, the faded dotted trace shows raw pace.
-9. **Tyre Stint Timeline** — View the complete tyre strategy as a horizontal colour-coded bar chart. In comparison mode both drivers are stacked for easy strategy comparison.
-10. **Pit Stop Summary** — See a detailed breakdown of every pit stop made by your selected driver(s), including the exact duration and tyre change strategy.
-11. **Telemetry & Channel Toggle** — Inspect high-resolution telemetry traces. Use the **Telemetry Channels** multiselect dropdown to toggle specific channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them dynamically with proportional chart height scaling.
-12. **Export Telemetry (CSV, Parquet, JSON)** — Expand the *Export Telemetry Data* panel beneath the telemetry charts to select your preferred format (**CSV**, **Apache Parquet (`.parquet`)**, or **structured JSON (`.json`)**) and download the high-frequency channel data and lap metadata.
-13. **Fastest Laps Leaderboard** — A ranked table of every driver's best lap with gap to P1, compound, and top speed. Your selected driver(s) are highlighted.
-14. **Gap to Leader** — Scroll to the Gap to Leader section to see every driver's time gap per lap vs the leader. Your selected driver(s) are highlighted; pit stops are marked with ▼ triangles. A stat card shows the final gap and peak deficit.
-15. **Track Map & Replay** — Scroll to the Track Map tabs to view the speed heat-map, driver input pedal traces, or build the full multi-car Race Replay animation!
-16. **Championship Standings & Classification** — Scroll to the very bottom to view the Constructors' Championship standings (dynamically matched to constructor colours) and the official final standings table (with points, retirements/laps, stops, and Q1/Q2/Q3 split times where applicable).
-17. **Real-Time Live Timing Mode** — Enable **🔴 Real-Time Live Timing Mode** in the sidebar during a live race weekend. Start the SignalR stream recorder to save WebSocket stream packets to disk, select an auto-refresh rate (5s, 10s, 15s, 30s), and click **⬇️ Load Session(s)** to view live streaming telemetry and lap times!
-18. **Multi-Driver Grid Analysis & Heatmaps** — Scroll to the Multi-Driver Grid Analysis section to select 3 to 20 drivers across the grid. Toggle between **Sector Split Deltas**, **Lap-by-Lap Pace Heatmap**, and **Top Speed Matrix** to view color-coded performance heatmaps.
-19. **Corner-by-Corner Analysis** — Navigate to the **Track Map → 🔍 Corner Analysis** tab. Select a corner from the dropdown. The dashboard automatically calculates apex speed, braking point, max steering angle (°), and DRS activation status, and renders a 4-subplot telemetry layout: Racing Line, Speed Profile, Steering Angle, and DRS channel.
-20. **Track Temperature & Weather Correlation** — Scroll to the **Weather Impact Correlation** section. View the dual-axis Plotly chart overlaying Track Temperature (°C) on driver pace, with auto-detected Rain Crossover Windows and Pearson pace-heat sensitivity scores.
-21. **Multi-Year Historical Lap Comparison** — Scroll to the **Multi-Year Comparison** section. Select a second year and Grand Prix to compare telemetry from different technical regulation eras. Speed profile overlays and a continuous time delta curve (Δ seconds vs Distance) are rendered with metric cards for Era Lap Time Delta, Top Speed, Min Apex Speed, and Full Throttle %.
-22. **Tyre Life & Crossover Prediction Matrix** — Within the **Tyre Degradation Modelling** section, the Crossover Prediction Matrix table shows the predicted cliff lap (TyreLife at +1.5 s pace drop), remaining laps to cliff, and a colour-coded pit window recommendation per stint.
-23. **Braking Efficiency & Trail-Braking Zone Analysis** — Scroll to the Braking Efficiency section. Pick any corner from the track selector to analyze driver braking dynamics. Inspect metric cards for Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked Speed, Brake %, and Deceleration G-force traces with later-braking advantage callouts.
-24. **Gear Shift Strategy & RPM Power Band Optimization** — Scroll to the Gear Shift Strategy section. Analyze engine RPM curves with interactive shift event markers (upshifts and diamond short-shift markers), compare percentage gear usage across gears 1 to 8, and review metric cards for Total Shifts (upshift/downshift split), Average Engine RPM, Tactical Short-Shifts, and Mean Upshift RPM with automated comparative driver advantage summaries.
+1. **Sidebar → Season, Grand Prix & Session** — Pick a year (2018 – present), Grand Prix event from that season's calendar, and session type (Race, Qualifying, Sprint, FP1, FP2, or FP3).
+2. **Click ⬇️ Load Session** — The first load streams the data from the F1 API and takes ~10-30 seconds. Afterwards, it is cached down to milliseconds.
+3. **Session Info Banner** — View the contextual header showing circuit name, country flag, round number, session type (with icon — 🏆 Race, ⏱ Qualifying, ⚡ Sprint, 🔧 Practice), and event date.
+4. **Select Drivers and Laps** — Pick a primary driver and select *Fastest* or a specific lap number. Optionally tick **👥 Compare with Driver 2** to enable head-to-head comparison mode.
+5. **Driver Summary Banner & Session Statistics** — Inspect the official driver headshot portrait, constructor team logo badge, tyre status, weather strip, and session statistics (Grid, Finish, Status, Best Lap, Race Pace, Top Speed).
+6. **Lap Time History & Compound Filter** — Scroll past the driver banner to view race pace with compound-coloured markers, pit-out markers, and selected lap lines. Use the **compound multiselect filter** above the chart to show or hide specific compounds.
+7. **Fuel-Adjusted Pace Analysis & Qualifying Simulation** — Correct pace for burning fuel loads with the interactive sensitivity slider. Expand the **Simulated Qualifying Leaderboard** to see the field ranked on fuel-corrected median pace.
+8. **Tyre Stint Timeline & Pit Stop Summary Table** — Inspect Gantt-style horizontal stint bars and the detailed pit stop summary table showing stop lap, duration, and compound transitions.
+9. **Pit Strategy & Undercut / Overcut Simulator** — In compare mode, automatically detect adjacent pit cycles (within ±3 laps), view pre/post pit gaps, and analyze undercut/overcut success on the dedicated gap chart.
+10. **Tyre Degradation Modeling & Crossover Prediction Matrix** — Review linear and quadratic regression models, thermal cliff lap predictions (+1.5 s pace drop), remaining laps, and full-field urgency badges (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
+11. **Driver Consistency Index & Stint Pace Distribution** — Inspect driver lap time variance per stint, Consistency Score (0–100%), Clean Air Pace vs. Traffic Deficit (+s/lap), and interactive Plotly violin/boxplots.
+12. **Track Temperature & Weather Impact Correlation** — Explore the dual-axis chart overlaying Track Temperature (°C) on driver pace, with auto-detected Rain Crossover Windows and Pearson pace-heat sensitivity scores.
+13. **Braking Efficiency & Trail-Braking Zone Analysis** — Select any corner from the track selector to analyze entry braking dynamics. Inspect metric cards for Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked Speed, Brake %, and Deceleration G-force profiles with later-braking advantage callouts.
+14. **Gear Shift Strategy & RPM Power Band Optimization** — Analyze continuous engine RPM operating curves with interactive shift event markers (upshifts and gold diamond short-shift markers), compare percentage gear usage across Gears 1 to 8, and review metric cards for Total Shifts, Average Engine RPM, Tactical Short-Shifts, and Mean Upshift RPM with automated comparative summaries.
+15. **Multi-Year Historical Lap Comparison** — In compare mode, select a second season and Grand Prix to compare cars across technical regulation eras on an interpolated 500-point distance grid, displaying speed profile overlays, continuous time delta curves, and era performance metrics.
+16. **High-Resolution Telemetry & Dynamic Channel Filter** — Inspect telemetry waveforms. Use the **Telemetry Channels** multiselect dropdown to toggle specific channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them dynamically with proportional chart height scaling.
+17. **Export Telemetry Data (CSV, Parquet, JSON)** — Expand the *Export Telemetry Data* panel beneath the telemetry charts to choose **CSV**, **Apache Parquet (`.parquet`)**, or **structured JSON (`.json`)** and download high-frequency channel data with sector splits and metadata.
+18. **Speed Delta & Continuous Time Delta per Meter** — In compare mode, view the distance-aligned Speed Delta (km/h) and continuous Time Delta (seconds gained/lost per meter) charts to identify exact track areas of advantage.
+19. **Fastest Laps Leaderboard** — Review the ranked table of every driver's best lap with gap to P1, tyre compound dot, lap number, and speed-trap top speed.
+20. **Ideal Lap vs Actual Lap (Theoretical Best)** — Evaluate independent Sector 1, 2, and 3 best times, theoretical best lap, and Time Left on Table indicator cards alongside the ranked theoretical leaderboard.
+21. **Multi-Driver Grid Analysis & Heatmaps** — Select 3 to 20 drivers across the grid to render colour-coded heatmaps for **Sector Split Deltas**, **Lap-by-Lap Pace Heatmap**, and **Top Speed Matrix**.
+22. **Gap to Leader Chart & Stat Cards** — Follow lap-by-lap time gaps to the race leader with pit markers (▼) and peak deficit stat cards.
+23. **Race Control Incident Timeline & Flag Overlays** — Review safety car and flag zone bands overlaid on the pace charts, or search the filterable **Race Control Feed** table for all official session messages.
+24. **Race Position Chart** — Track position changes across all race laps with an inverted Y-axis (P1 at top) for Race and Sprint sessions.
+25. **Track Maps, Corner Analysis & Animated Race Replay** — Explore the Track Map tabs to view the speed heat-map, AWS-style mini-sector dominance map, driver input pedal traces, 4-subplot corner analysis (racing line, speed, steering angle, DRS), or run the full animated multi-car Race Replay.
+26. **Constructors' Championship Standings & Official Session Classification** — Review official session classifications (with points, retirements, and pit stop counts) and season constructor standings dynamically loaded from the Ergast API.
+27. **Real-Time Live Timing Mode** — Enable **🔴 Real-Time Live Timing Mode** in the sidebar during a live race weekend to record WebSocket packets and stream live timing and telemetry.
+28. **Post-Race Debrief PDF Exporter** — Export printable broadcast-quality PDF reports capturing telemetry and strategy charts for offline sharing.
 
 
 ---
