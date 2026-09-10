@@ -2175,3 +2175,254 @@ def _calculate_gear_shift_metrics(tel_df: pd.DataFrame | None) -> dict:
     except Exception:
         return metrics
 
+
+# ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
+
+POWER_UNIT_SUPPLIERS: dict[str, str] = {
+    # Ferrari
+    "Ferrari": "Ferrari",
+    "Scuderia Ferrari": "Ferrari",
+    "Haas": "Ferrari",
+    "Haas F1 Team": "Ferrari",
+    "MoneyGram Haas F1 Team": "Ferrari",
+    "Sauber": "Ferrari",
+    "Alfa Romeo": "Ferrari",
+    "Alfa Romeo Racing": "Ferrari",
+    "Alfa Romeo F1 Team Stake": "Ferrari",
+    "Kick Sauber": "Ferrari",
+    "Stake F1 Team Kick Sauber": "Ferrari",
+
+    # Mercedes
+    "Mercedes": "Mercedes",
+    "Mercedes-AMG PETRONAS F1 Team": "Mercedes",
+    "Mercedes-AMG Petronas": "Mercedes",
+    "McLaren": "Mercedes",
+    "McLaren F1 Team": "Mercedes",
+    "Aston Martin": "Mercedes",
+    "Aston Martin Aramco F1 Team": "Mercedes",
+    "Racing Point": "Mercedes",
+    "Force India": "Mercedes",
+    "Williams": "Mercedes",
+    "Williams Racing": "Mercedes",
+
+    # Red Bull Powertrains / Honda
+    "Red Bull": "Red Bull Powertrains",
+    "Red Bull Racing": "Red Bull Powertrains",
+    "Oracle Red Bull Racing": "Red Bull Powertrains",
+    "AlphaTauri": "Red Bull Powertrains",
+    "Scuderia AlphaTauri": "Red Bull Powertrains",
+    "RB": "Red Bull Powertrains",
+    "Visa Cash App RB F1 Team": "Red Bull Powertrains",
+    "Racing Bulls": "Red Bull Powertrains",
+    "Toro Rosso": "Red Bull Powertrains",
+    "Scuderia Toro Rosso": "Red Bull Powertrains",
+
+    # Renault
+    "Alpine": "Renault",
+    "BWT Alpine F1 Team": "Renault",
+    "Alpine F1 Team": "Renault",
+    "Renault": "Renault",
+    "Renault F1 Team": "Renault",
+}
+
+
+def get_power_unit_supplier(constructor: str) -> str:
+    """Return the Power Unit manufacturer for an F1 constructor."""
+    if not constructor or pd.isna(constructor):
+        return "Unknown"
+    c_clean = str(constructor).strip()
+    if c_clean in POWER_UNIT_SUPPLIERS:
+        return POWER_UNIT_SUPPLIERS[c_clean]
+    c_lower = c_clean.lower()
+    for key, pu in POWER_UNIT_SUPPLIERS.items():
+        if key.lower() in c_lower:
+            return pu
+    return c_clean
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _calculate_speed_trap_metrics(sess_k: str, laps_df: pd.DataFrame) -> dict:
+    """
+    Extract maximum velocities recorded at SpeedST, SpeedI1, SpeedI2, and SpeedFL.
+    Separates DRS-assisted vs non-DRS speed traps and aggregates metrics across
+    drivers, constructors, and power unit manufacturers.
+    """
+    fallback = {
+        "drivers_df": pd.DataFrame(),
+        "constructor_summary": pd.DataFrame(),
+        "power_unit_summary": pd.DataFrame(),
+        "leaders": {},
+        "sensors": ["SpeedST", "SpeedI1", "SpeedI2", "SpeedFL"],
+        "has_data": False,
+    }
+    try:
+        if laps_df is None or laps_df.empty:
+            return fallback
+
+        laps = laps_df.copy()
+        if "Driver" not in laps.columns:
+            return fallback
+
+        sensors = ["SpeedST", "SpeedI1", "SpeedI2", "SpeedFL"]
+        avail_sensors = [s for s in sensors if s in laps.columns and laps[s].dropna().any()]
+        if not avail_sensors:
+            return fallback
+
+        records = []
+        for drv, grp in laps.groupby("Driver"):
+            team = "Unknown"
+            if "Team" in grp.columns:
+                teams = grp["Team"].dropna()
+                if not teams.empty:
+                    team = str(teams.iloc[0])
+
+            pu = get_power_unit_supplier(team)
+
+            rec = {
+                "Driver": str(drv),
+                "Team": team,
+                "PowerUnit": pu,
+            }
+
+            speeds_for_max = []
+            for s in sensors:
+                if s in grp.columns:
+                    s_vals = grp[s].dropna()
+                    max_s = float(s_vals.max()) if not s_vals.empty else np.nan
+                else:
+                    max_s = np.nan
+                rec[s] = max_s
+                if pd.notna(max_s):
+                    speeds_for_max.append(max_s)
+
+            rec["OverallMax"] = max(speeds_for_max) if speeds_for_max else np.nan
+
+            # DRS vs Non-DRS speed trap
+            drs_st_max = np.nan
+            non_drs_st_max = np.nan
+            drs_delta = np.nan
+
+            if "SpeedST" in grp.columns:
+                if "DRS" in grp.columns:
+                    drs_num = pd.to_numeric(grp["DRS"], errors="coerce")
+                    drs_mask = (drs_num >= 10) | (drs_num == 1) | (grp["DRS"] == True)
+                    drs_laps = grp.loc[drs_mask, "SpeedST"].dropna()
+                    non_drs_laps = grp.loc[~drs_mask, "SpeedST"].dropna()
+                    if not drs_laps.empty:
+                        drs_st_max = float(drs_laps.max())
+                    if not non_drs_laps.empty:
+                        non_drs_st_max = float(non_drs_laps.max())
+                    if pd.notna(drs_st_max) and pd.notna(non_drs_st_max):
+                        drs_delta = drs_st_max - non_drs_st_max
+
+            rec["SpeedST_DRS"] = drs_st_max
+            rec["SpeedST_NoDRS"] = non_drs_st_max
+            rec["DRS_Delta"] = drs_delta
+
+            records.append(rec)
+
+        if not records:
+            return fallback
+
+        drivers_df = pd.DataFrame(records)
+        # Sort primarily by SpeedST descending, then by OverallMax
+        sort_col = "SpeedST" if "SpeedST" in drivers_df.columns and drivers_df["SpeedST"].notna().any() else "OverallMax"
+        drivers_df = drivers_df.sort_values(by=[sort_col, "OverallMax"], ascending=[False, False]).reset_index(drop=True)
+        drivers_df["Pos"] = drivers_df.index + 1
+
+        # Constructor aggregation
+        cons_records = []
+        for team, cgrp in drivers_df.groupby("Team"):
+            pu = get_power_unit_supplier(team)
+            c_rec = {
+                "Team": team,
+                "PowerUnit": pu,
+                "DriverCount": len(cgrp),
+            }
+            for s in sensors:
+                c_rec[f"{s}_Max"] = cgrp[s].max()
+                c_rec[f"{s}_Mean"] = cgrp[s].mean()
+            c_rec["OverallMax"] = cgrp["OverallMax"].max()
+            cons_records.append(c_rec)
+
+        cons_df = pd.DataFrame(cons_records)
+        if not cons_df.empty:
+            c_sort = "SpeedST_Max" if "SpeedST_Max" in cons_df.columns and cons_df["SpeedST_Max"].notna().any() else "OverallMax"
+            cons_df = cons_df.sort_values(by=c_sort, ascending=False).reset_index(drop=True)
+
+        # Power unit aggregation
+        pu_records = []
+        for pu, pugrp in drivers_df.groupby("PowerUnit"):
+            pu_rec = {
+                "PowerUnit": pu,
+                "DriverCount": len(pugrp),
+                "Teams": ", ".join(sorted(pugrp["Team"].unique())),
+            }
+            for s in sensors:
+                pu_rec[f"{s}_Max"] = pugrp[s].max()
+                pu_rec[f"{s}_Mean"] = pugrp[s].mean()
+            pu_rec["OverallMax"] = pugrp["OverallMax"].max()
+            pu_records.append(pu_rec)
+
+        pu_df = pd.DataFrame(pu_records)
+        if not pu_df.empty:
+            pu_sort = "SpeedST_Mean" if "SpeedST_Mean" in pu_df.columns and pu_df["SpeedST_Mean"].notna().any() else "OverallMax"
+            pu_df = pu_df.sort_values(by=pu_sort, ascending=False).reset_index(drop=True)
+
+        # Leaders computation
+        leaders = {}
+        for s in sensors:
+            valid_s = drivers_df.dropna(subset=[s])
+            if not valid_s.empty:
+                best_row = valid_s.loc[valid_s[s].idxmax()]
+                leaders[s] = {
+                    "Driver": str(best_row["Driver"]),
+                    "Team": str(best_row["Team"]),
+                    "Speed": float(best_row[s]),
+                }
+            else:
+                leaders[s] = None
+
+        valid_max = drivers_df.dropna(subset=["OverallMax"])
+        if not valid_max.empty:
+            best_ov = valid_max.loc[valid_max["OverallMax"].idxmax()]
+            leaders["Overall"] = {
+                "Driver": str(best_ov["Driver"]),
+                "Team": str(best_ov["Team"]),
+                "Speed": float(best_ov["OverallMax"]),
+            }
+        else:
+            leaders["Overall"] = None
+
+        if not pu_df.empty and "SpeedST_Mean" in pu_df.columns and pu_df["SpeedST_Mean"].notna().any():
+            top_pu_row = pu_df.loc[pu_df["SpeedST_Mean"].idxmax()]
+            leaders["TopPU"] = {
+                "PowerUnit": str(top_pu_row["PowerUnit"]),
+                "SpeedMean": float(top_pu_row["SpeedST_Mean"]),
+            }
+        else:
+            leaders["TopPU"] = None
+
+        valid_drs = drivers_df.dropna(subset=["DRS_Delta"])
+        if not valid_drs.empty:
+            best_drs = valid_drs.loc[valid_drs["DRS_Delta"].idxmax()]
+            leaders["MaxDRSDelta"] = {
+                "Driver": str(best_drs["Driver"]),
+                "Team": str(best_drs["Team"]),
+                "Delta": float(best_drs["DRS_Delta"]),
+            }
+        else:
+            leaders["MaxDRSDelta"] = None
+
+        return {
+            "drivers_df": drivers_df,
+            "constructor_summary": cons_df,
+            "power_unit_summary": pu_df,
+            "leaders": leaders,
+            "sensors": sensors,
+            "has_data": True,
+        }
+    except Exception:
+        return fallback
+
+
