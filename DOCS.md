@@ -413,6 +413,17 @@ Calculates powertrain and transmission operating metrics:
 ### `_render_gear_analysis_section(sess_k, tel1, tel2, driver1, driver2, colour1, colour2, compare, ...)`
 Renders the Gear Shift Strategy & RPM Power Band Optimization section with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM, Tactical Short-Shifts, Mean Upshift RPM), comparative traction/RPM strategy callout banners, and the 2-subplot Plotly figure (`build_gear_shift_fig`).
 
+### `_calculate_speed_trap_metrics(sess_k: str, laps_df: pd.DataFrame) -> dict`
+Extracts and calculates timing sensor velocities across the grid:
+- Extracts maximum speeds recorded at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line).
+- Separates DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$).
+- Maps constructors to Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) via `get_power_unit_supplier`.
+- Aggregates mean and peak speeds by Constructor and Power Unit manufacturer.
+- Returns driver rankings, constructor summaries, power unit summaries, and sensor leader benchmarks.
+
+### `_render_speed_trap_section(sess_k, laps_df, driver1, driver2, colour1, colour2, compare, ...)`
+Renders the Speed Trap & Intermediate Velocity Radar Breakdown section with 5 top metric cards (ST, I1, I2, FL, Top PU/DRS Delta), tabbed 4-axis polar radar comparisons (`build_speed_trap_radar_fig`), grouped constructor/PU bar charts (`build_speed_trap_bar_fig`), and a classified Speed Trap Leaderboard table with driver highlighting.
+
 ### `render_summary(lap, driver, colour)`
 Renders the full driver banner section:
 - Circular headshot (`HeadshotUrl`) with team-coloured ring
@@ -538,6 +549,8 @@ Time Delta (Continuous)          ← Matplotlib fill-between (compare mode only)
         │
 _render_leaderboard()            ← Fastest Laps Leaderboard (HTML table)
         │
+_render_speed_trap_section()     ← Speed Trap & Intermediate Velocity Radar Breakdown (Radar, PU/Constructor Benchmarks, Table)
+        │
 _render_ideal_lap_section()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver, delta cards + full table
         │
 _render_grid_heatmap_section()   ← Multi-Driver Grid Analysis & Heatmaps (Sectors, Laps, Speed)
@@ -591,6 +604,8 @@ Each chart section follows the same pattern:
 | Corner Analysis (4-subplot) | Plotly subplots | `_get_telemetry_for_map` | `build_corner_fig` (`with map_tab4`) | `lap.get_car_data()`. 4 subplots: Racing Line, Speed Profile, Steering Angle (°), DRS Activation Status. |
 | Braking Efficiency & Trail-Braking (3-subplot) | Plotly subplots | `_calculate_braking_metrics` | `build_braking_efficiency_fig` | `_render_braking_analysis_section`. 3 subplots: Speed, Brake Pressure (%), Deceleration (G) vs distance to apex. |
 | Gear Shift Strategy & RPM Power Band (2-subplot) | Plotly subplots | `_calculate_gear_shift_metrics` | `build_gear_shift_fig` | `_render_gear_analysis_section`. 2 subplots: Engine RPM vs Track Distance with shift markers & Horizontal gear distribution (% distance in gears 1-8). |
+| Speed Trap Radar Profile (4-axis) | Plotly polar radar | `_calculate_speed_trap_metrics` | `build_speed_trap_radar_fig` | `_render_speed_trap_section`. 4 polar axes (ST, I1, I2, FL) with driver overlays and grid maximum baseline. |
+| Speed Trap / PU Benchmarks (Grouped Bars) | Plotly grouped bar | `_calculate_speed_trap_metrics` | `build_speed_trap_bar_fig` | `_render_speed_trap_section`. Compares timing trap velocities across constructors or power units (Max vs Mean). |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
 | Weather Correlation | Plotly dual-axis | `_build_weather_correlation_data` | `build_weather_correlation_fig` | `sess.weather_data` merged on `Time` via `pd.merge_asof`. Pearson pace-temp correlation, rain crossover detection. |
 | Multi-Year Comparison | Plotly dual-subplot | `_build_multi_year_comparison` | `build_multi_year_comparison_fig` | Interpolated telemetry on 500-pt distance grid. Speed overlay + continuous time delta. |
@@ -963,6 +978,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~Low~~ | ~~**High-Throughput Telemetry Data Exporter (Parquet & JSON)**~~ | ✅ **Done** — Added dynamic format selector (CSV, Parquet, JSON) in `render_telemetry_export_panel`, with `_build_export_parquet` and `_build_export_json` in `src/data/loader.py`. |
 | ~~High~~ | ~~**Braking Efficiency & Trail-Braking Zone Analysis**~~ | ✅ **Done** — Added dedicated braking dynamics and trail-braking analytics in `_calculate_braking_metrics`, `build_braking_efficiency_fig`, and `_render_braking_analysis_section`. |
 | ~~High~~ | ~~**Gear Shift Strategy & RPM Power Band Optimization**~~ | ✅ **Done** — Added powertrain telemetry analytics in `_calculate_gear_shift_metrics`, `build_gear_shift_fig`, and `_render_gear_analysis_section`. Detects tactical short-shifts, redline shifts, and gear distributions with Plotly dual-subplot visualizations. |
+| ~~High~~ | ~~**Speed Trap & Intermediate Velocity Radar Breakdown**~~ | ✅ **Done** — Added grid-wide speed trap and intermediate velocity analytics in `_calculate_speed_trap_metrics`, `build_speed_trap_radar_fig`, `build_speed_trap_bar_fig`, and `_render_speed_trap_section`. Evaluates ST, I1, I2, FL, DRS deltas, and constructor/PU hierarchies with polar radars and grouped bars. |
 
 
 
@@ -975,6 +991,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #150** (`feat: Speed Trap & Intermediate Velocity Radar Breakdown (ST, I1, I2, FL)`): Added grid-wide speed trap and intermediate micro-sector velocity analytics. Extracts maximum speeds at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line) from `sess.laps`. Detects DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$). Maps constructors to official Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) and aggregates top speeds. Renders a 4-axis polar radar chart (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), 5 top metric cards, and a classified Speed Trap Leaderboard table in `_render_speed_trap_section`. 7/7 unit tests pass in `tests/test_speed_trap.py` (71 total suite tests passing).
 - **Issue #149** (`feat: Gear Shift Strategy & RPM Power Band Optimization`): Added powertrain dynamics and gear shift strategy telemetry analytics. Extracts engine RPM, gear selection (`nGear` / `Gear`), speed, and throttle application across lap distance to detect every individual upshift and downshift event. Detects tactical short-shifts (< 11,000 RPM under > 60% throttle) used for rear traction / tyre management and redline shifts (≥ 11,800 RPM), and computes distance-weighted gear usage distributions (% in gears 1 through 8). Renders a dual-subplot Plotly figure (`build_gear_shift_fig` for Engine RPM vs Track Distance with shift markers & horizontal gear distribution bar chart) and an interactive comparison section (`_render_gear_analysis_section`) with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM in operating band > 2000 RPM, Tactical Short-Shifts, and Mean Upshift RPM) and automated comparative driver advantage summaries. 6/6 unit tests pass in `tests/test_gear_shifts.py`.
 - **Issue #148** (`feat: Braking Efficiency & Trail-Braking Zone Analysis`): Added dedicated braking dynamics and trail-braking telemetry analytics. Slices corner telemetry around circuit apexes, calculating longitudinal Deceleration (G-force = $\Delta v / (\Delta t \cdot 9.81)$) with 3-point moving average smoothing. Automatically detects Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point (m to apex), Trail-Braking Zone Length, and Brake-to-Throttle Transition Time (ms). Renders a stacked 3-subplot Plotly figure (`build_braking_efficiency_fig` for Speed, Brake %, and Deceleration G) and interactive comparison section (`_render_braking_analysis_section`) with driver formatting and later-braking strategic advantage callouts. 6/6 unit tests pass in `tests/test_braking_analysis.py`.
 - **PR #158** / **Issue #139** (`feat: High-Throughput Telemetry Data Exporter (Parquet & JSON)`): Added multi-format export support under the Telemetry section for Apache Parquet (`.parquet`) and structured JSON (`.json`) alongside CSV. Refactored telemetry export panel into `render_telemetry_export_panel` in `src/ui/components.py`, implemented `_build_export_telemetry_df`, `_build_export_parquet`, and `_build_export_json` in `src/data/loader.py`, added `pyarrow>=14.0.0` to requirements, and added full test suite (9 unit tests in `tests/test_telemetry_export.py`).

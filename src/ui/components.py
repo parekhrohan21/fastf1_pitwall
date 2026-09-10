@@ -12,13 +12,15 @@ from src.data.loader import (
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_multi_year_comparison,
     _build_export_csv, _build_export_parquet, _build_export_json,
-    _calculate_braking_metrics, _calculate_gear_shift_metrics
+    _calculate_braking_metrics, _calculate_gear_shift_metrics,
+    _calculate_speed_trap_metrics
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
-    build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig
+    build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig,
+    build_speed_trap_radar_fig, build_speed_trap_bar_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -1911,4 +1913,209 @@ def _render_gear_analysis_section(
     )
     if fig:
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+# ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
+
+def _render_speed_trap_section(
+    sess_k: str, laps_df: pd.DataFrame | None,
+    driver1: str, driver2: str | None,
+    colour1: str, colour2: str | None, compare: bool,
+    fmt_func1=None, fmt_func2=None
+):
+    """Render the Speed Trap & Intermediate Velocity Radar Breakdown section."""
+    if laps_df is None or laps_df.empty:
+        st.warning("No lap data available for Speed Trap & Intermediate Velocity breakdown.")
+        return
+
+    speed_data = _calculate_speed_trap_metrics(sess_k, laps_df)
+    if not speed_data or not speed_data.get("has_data"):
+        st.info("ℹ️ Speed trap sensor data (SpeedST, SpeedI1, SpeedI2, SpeedFL) is not available for this session.")
+        return
+
+    drivers_df = speed_data["drivers_df"]
+    leaders = speed_data.get("leaders", {})
+
+    # Top Metric Cards (5 Columns)
+    st.markdown("##### Grid Speed Trap & Micro-Sector Leaders")
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    def render_leader_card(col, title, leader_info, is_delta: bool = False):
+        if not leader_info:
+            col.markdown(f"<div style='font-size:12px; color:#aaa;'>{title}</div><div style='font-size:16px; color:#666;'>—</div>", unsafe_allow_html=True)
+            return
+        drv = leader_info.get("Driver", "")
+        drv_display = fmt_func1(drv) if fmt_func1 else drv
+        if is_delta:
+            val_str = f"+{leader_info.get('Delta', 0.0):.1f} km/h"
+        else:
+            val_str = f"{leader_info.get('Speed', 0.0):.1f} km/h"
+        team = leader_info.get("Team", "")
+        t_col = _team_colour(team) if team else "#00E5FF"
+
+        html = f"""
+        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>
+          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>{title}</div>
+          <div style='font-size:18px; font-weight:700; color:{t_col}; margin:2px 0;'>{val_str}</div>
+          <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{drv_display}</div>
+        </div>
+        """
+        col.markdown(html, unsafe_allow_html=True)
+
+    render_leader_card(col1, "Speed Trap (ST)", leaders.get("SpeedST"))
+    render_leader_card(col2, "Intermediate 1 (I1)", leaders.get("SpeedI1"))
+    render_leader_card(col3, "Intermediate 2 (I2)", leaders.get("SpeedI2"))
+    render_leader_card(col4, "Finish Line (FL)", leaders.get("SpeedFL"))
+
+    # Card 5: Top PU or Max DRS Delta
+    if leaders.get("MaxDRSDelta"):
+        render_leader_card(col5, "Max DRS Delta", leaders.get("MaxDRSDelta"), is_delta=True)
+    elif leaders.get("TopPU"):
+        top_pu = leaders.get("TopPU")
+        pu_name = top_pu.get("PowerUnit", "")
+        pu_speed = top_pu.get("SpeedMean", 0.0)
+        html_pu = f"""
+        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>
+          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Top Power Unit</div>
+          <div style='font-size:18px; font-weight:700; color:#FFD600; margin:2px 0;'>{pu_speed:.1f} km/h</div>
+          <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{pu_name}</div>
+        </div>
+        """
+        col5.markdown(html_pu, unsafe_allow_html=True)
+    else:
+        render_leader_card(col5, "Overall Top Speed", leaders.get("Overall"))
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Visualizations Tabs
+    tab_radar, tab_benchmark = st.tabs([
+        "🎯 Velocity Radar Profile",
+        "📊 Constructor & Power Unit Hierarchy"
+    ])
+
+    with tab_radar:
+        selected_drivers = [str(driver1)]
+        colours_list = [colour1]
+        if compare and driver2:
+            selected_drivers.append(str(driver2))
+            colours_list.append(colour2)
+
+        # Optional driver overlay selector
+        all_grid_drivers = drivers_df["Driver"].tolist()
+        extra_options = [d for d in all_grid_drivers if d not in selected_drivers]
+        with st.expander("➕ Add additional drivers to radar profile", expanded=False):
+            extra_sel = st.multiselect(
+                "Overlay drivers:",
+                options=extra_options,
+                format_func=fmt_func1 or str,
+                key=f"speed_radar_extra_{sess_k}"
+            )
+            for d in extra_sel:
+                selected_drivers.append(d)
+                team = drivers_df.loc[drivers_df["Driver"] == d, "Team"].iloc[0] if "Team" in drivers_df.columns else ""
+                colours_list.append(_team_colour(team) if team else "#999999")
+
+        fig_radar = build_speed_trap_radar_fig(
+            speed_data,
+            selected_drivers=selected_drivers,
+            driver_colours=colours_list,
+            fmt_func=fmt_func1,
+            include_grid_max=True
+        )
+        if fig_radar:
+            st.plotly_chart(fig_radar, width="stretch", config={"displayModeBar": False})
+
+    with tab_benchmark:
+        c_mode, c_metric = st.columns(2)
+        group_by = c_mode.radio(
+            "Group Benchmark By:",
+            ["Constructor", "Power Unit"],
+            horizontal=True,
+            key=f"st_group_by_{sess_k}"
+        )
+        group_key = "PowerUnit" if group_by == "Power Unit" else "Constructor"
+
+        metric_type = c_metric.radio(
+            "Velocity Metric:",
+            ["Max", "Mean"],
+            horizontal=True,
+            key=f"st_metric_type_{sess_k}"
+        )
+
+        fig_bar = build_speed_trap_bar_fig(speed_data, group_by=group_key, metric_type=metric_type)
+        if fig_bar:
+            st.plotly_chart(fig_bar, width="stretch", config={"displayModeBar": False})
+
+    # Speed Trap Leaderboard Table
+    st.markdown("##### Speed Trap & Intermediate Sensor Classification")
+
+    colour_map = {str(driver1): colour1}
+    if compare and driver2:
+        colour_map[str(driver2)] = colour2
+
+    rows_html = ""
+    for _, row in drivers_df.iterrows():
+        drv = str(row["Driver"])
+        is_hl = drv in colour_map
+        accent = colour_map.get(drv, "transparent")
+        row_bg = f"{accent}18" if is_hl else "transparent"
+        border_css = f"border-left: 3px solid {accent};" if is_hl else "border-left: 3px solid transparent;"
+        pos_col = f"<span style='color:{accent}; font-weight:700;'>{row['Pos']}</span>" if is_hl else str(row["Pos"])
+        drv_label = fmt_func1(drv) if fmt_func1 else drv
+
+        def fmt_speed(val):
+            return f"{val:.1f}" if pd.notna(val) else "—"
+
+        st_val = fmt_speed(row.get("SpeedST"))
+        i1_val = fmt_speed(row.get("SpeedI1"))
+        i2_val = fmt_speed(row.get("SpeedI2"))
+        fl_val = fmt_speed(row.get("SpeedFL"))
+        max_val = fmt_speed(row.get("OverallMax"))
+
+        drs_d = row.get("DRS_Delta")
+        drs_str = f"+{drs_d:.1f} km/h" if pd.notna(drs_d) else "—"
+
+        team = str(row.get("Team", "Unknown"))
+        pu = str(row.get("PowerUnit", "Unknown"))
+        t_col = _team_colour(team) if team else "#888"
+
+        rows_html += f"""
+        <tr style='background:{row_bg}; {border_css}'>
+          <td style='padding:7px 10px; text-align:center;'>{pos_col}</td>
+          <td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{drv_label}</td>
+          <td style='padding:7px 10px; color:{t_col};'>{team}</td>
+          <td style='padding:7px 10px; opacity:0.8;'>{pu}</td>
+          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{st_val}</td>
+          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i1_val}</td>
+          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i2_val}</td>
+          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{fl_val}</td>
+          <td style='padding:7px 10px; text-align:center; font-weight:700; font-family:monospace;'>{max_val}</td>
+          <td style='padding:7px 10px; text-align:center; font-family:monospace; color:#00E5FF;'>{drs_str}</td>
+        </tr>
+        """
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:8px 10px;'>Pos</th>
+          <th style='padding:8px 10px; text-align:left;'>Driver</th>
+          <th style='padding:8px 10px; text-align:left;'>Constructor</th>
+          <th style='padding:8px 10px; text-align:left;'>Power Unit</th>
+          <th style='padding:8px 10px;'>ST (km/h)</th>
+          <th style='padding:8px 10px;'>I1 (km/h)</th>
+          <th style='padding:8px 10px;'>I2 (km/h)</th>
+          <th style='padding:8px 10px;'>FL (km/h)</th>
+          <th style='padding:8px 10px;'>Max (km/h)</th>
+          <th style='padding:8px 10px;'>DRS Boost</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
 

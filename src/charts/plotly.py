@@ -1813,3 +1813,217 @@ def build_gear_shift_fig(
 
     return fig
 
+
+# ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
+
+def build_speed_trap_radar_fig(
+    speed_data: dict,
+    selected_drivers: list[str],
+    driver_colours: list[str] | dict[str, str],
+    fmt_func=None,
+    include_grid_max: bool = True
+) -> go.Figure | None:
+    """
+    Construct a 4-axis polar radar chart comparing drivers across SpeedST, SpeedI1, SpeedI2, and SpeedFL.
+    """
+    if not speed_data or not speed_data.get("has_data"):
+        return None
+
+    df = speed_data.get("drivers_df")
+    if df is None or df.empty:
+        return None
+
+    sensor_keys = ["SpeedST", "SpeedI1", "SpeedI2", "SpeedFL"]
+    sensor_labels = ["Speed Trap (ST)", "Intermediate 1 (I1)", "Intermediate 2 (I2)", "Finish Line (FL)"]
+    categories = sensor_labels + [sensor_labels[0]]
+
+    fig = go.Figure()
+
+    all_speeds = []
+    for s in sensor_keys:
+        if s in df.columns:
+            vals = df[s].dropna()
+            if not vals.empty:
+                all_speeds.extend(vals.tolist())
+
+    if not all_speeds:
+        return None
+
+    min_speed = max(0, float(np.floor(min(all_speeds) / 10) * 10) - 10)
+    max_speed = float(np.ceil(max(all_speeds) / 10) * 10) + 10
+
+    # Grid max benchmark
+    if include_grid_max:
+        grid_max_vals = []
+        for s in sensor_keys:
+            if s in df.columns and df[s].notna().any():
+                grid_max_vals.append(float(df[s].max()))
+            else:
+                grid_max_vals.append(min_speed)
+        grid_max_closed = grid_max_vals + [grid_max_vals[0]]
+
+        fig.add_trace(go.Scatterpolar(
+            r=grid_max_closed,
+            theta=categories,
+            fill="none",
+            name="Grid Maximum",
+            line=dict(color="rgba(255,215,0,0.5)", width=2, dash="dash"),
+            hovertemplate="<b>Grid Maximum</b><br>%{theta}: %{r:.1f} km/h<extra></extra>",
+        ))
+
+    # Convert colours to dict if list
+    if isinstance(driver_colours, list):
+        col_map = dict(zip(selected_drivers, driver_colours))
+    else:
+        col_map = driver_colours or {}
+
+    for drv in selected_drivers:
+        drv_str = str(drv)
+        drv_row = df[df["Driver"] == drv_str]
+        if drv_row.empty:
+            continue
+
+        row = drv_row.iloc[0]
+        speeds = []
+        for s in sensor_keys:
+            val = row[s] if s in row and pd.notna(row[s]) else min_speed
+            speeds.append(float(val))
+
+        speeds_closed = speeds + [speeds[0]]
+        drv_col = col_map.get(drv_str, "#00E5FF")
+        drv_label = fmt_func(drv_str) if fmt_func else drv_str
+
+        # Hex to rgba fill
+        fill_col = drv_col
+        if fill_col.startswith("#") and len(fill_col) == 7:
+            r_c = int(fill_col[1:3], 16)
+            g_c = int(fill_col[3:5], 16)
+            b_c = int(fill_col[5:7], 16)
+            fill_col = f"rgba({r_c},{g_c},{b_c},0.2)"
+
+        fig.add_trace(go.Scatterpolar(
+            r=speeds_closed,
+            theta=categories,
+            fill="toself",
+            fillcolor=fill_col,
+            name=drv_label,
+            line=dict(color=drv_col, width=2.5),
+            hovertemplate=f"<b>{drv_label}</b><br>%{{theta}}: %{{r:.1f}} km/h<extra></extra>",
+        ))
+
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[min_speed, max_speed],
+                gridcolor="rgba(128,128,128,0.2)",
+                linecolor="rgba(128,128,128,0.2)",
+                tickfont=dict(size=10, color="rgba(255,255,255,0.6)"),
+                angle=45,
+            ),
+            angularaxis=dict(
+                gridcolor="rgba(128,128,128,0.2)",
+                linecolor="rgba(128,128,128,0.2)",
+                tickfont=dict(size=12, color="rgba(255,255,255,0.85)"),
+            ),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=480,
+        margin=dict(l=40, r=40, t=40, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.05,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11)
+        ),
+    )
+
+    return fig
+
+
+def build_speed_trap_bar_fig(
+    speed_data: dict,
+    group_by: str = "Constructor",
+    metric_type: str = "Max"
+) -> go.Figure | None:
+    """
+    Construct a grouped bar chart comparing timing trap velocities across constructors or power units.
+    """
+    if not speed_data or not speed_data.get("has_data"):
+        return None
+
+    if group_by == "PowerUnit":
+        df = speed_data.get("power_unit_summary")
+        x_col = "PowerUnit"
+        title_text = "Power Unit Speed Trap Comparison"
+    else:
+        df = speed_data.get("constructor_summary")
+        x_col = "Team"
+        title_text = "Constructor Speed Trap Comparison"
+
+    if df is None or df.empty or x_col not in df.columns:
+        return None
+
+    sensor_map = [
+        ("SpeedST", "Speed Trap (ST)", "#FF1744"),
+        ("SpeedI1", "Intermediate 1 (I1)", "#00E5FF"),
+        ("SpeedI2", "Intermediate 2 (I2)", "#76FF03"),
+        ("SpeedFL", "Finish Line (FL)", "#FFD600"),
+    ]
+
+    suffix = "_Max" if metric_type == "Max" else "_Mean"
+    fig = go.Figure()
+
+    all_vals = []
+    for s_key, s_label, col in sensor_map:
+        col_name = f"{s_key}{suffix}"
+        if col_name in df.columns and df[col_name].notna().any():
+            vals = df[col_name].dropna().tolist()
+            all_vals.extend(vals)
+            fig.add_trace(go.Bar(
+                x=df[x_col],
+                y=df[col_name],
+                name=s_label,
+                marker=dict(color=col),
+                hovertemplate=f"<b>%{{x}}</b><br>{s_label} ({metric_type}): %{{y:.1f}} km/h<extra></extra>",
+            ))
+
+    if not all_vals:
+        return None
+
+    y_min = max(0, float(np.floor(min(all_vals) / 10) * 10) - 20)
+    y_max = float(np.ceil(max(all_vals) / 10) * 10) + 10
+
+    fig.update_layout(
+        barmode="group",
+        height=450,
+        margin=dict(l=50, r=30, t=50, b=50),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.04,
+            xanchor="right",
+            x=1,
+            font=dict(size=11),
+        ),
+        xaxis=dict(
+            gridcolor="rgba(128,128,128,0.2)",
+            tickangle=-25 if len(df) > 5 else 0,
+        ),
+        yaxis=dict(
+            title_text=f"Velocity ({metric_type} km/h)",
+            range=[y_min, y_max],
+            gridcolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.2)",
+        ),
+    )
+
+    return fig
+
+

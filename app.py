@@ -37,7 +37,8 @@ from src.ui.components import (
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix,
-    _render_braking_analysis_section, _render_gear_analysis_section
+    _render_braking_analysis_section, _render_gear_analysis_section,
+    _render_speed_trap_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1749,6 +1750,14 @@ else:
         _hl_drivers  = [driver1] + ([driver2] if compare and driver2 else [])
         _hl_colours  = [colour1] + ([colour2] if compare and driver2 else [])
         _render_leaderboard(_lb, _hl_drivers, _hl_colours, _fmt_driver1)
+
+# ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
+st.markdown("<div class='section-title'>Speed Trap & Intermediate Velocity Radar Breakdown</div>", unsafe_allow_html=True)
+_render_speed_trap_section(
+    sess_key, _all_laps1, driver1, driver2 if compare else None,
+    colour1, colour2 if compare else None, compare,
+    fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+)
 
 # ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
 st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_allow_html=True)
