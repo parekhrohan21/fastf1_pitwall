@@ -2,7 +2,7 @@
 
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry from any Formula 1 session since 2018.
 
-Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
+Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, braking dynamics, gear shift strategies, speed trap velocity radars, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
 
 ---
 
@@ -66,12 +66,13 @@ fastf1_pitwall/
 │   ├── data/
 │   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
-│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, gears)
+│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, braking, gears, speed traps)
 │   │   └── matplotlib.py # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
 │       └── components.py # UI layout components, metrics cards, map blocks & telemetry export panel
-├── tests/              # Pytest automated test suite (64 tests across 12 modules)
+├── tests/              # Pytest automated test suite (71 tests across 13 modules)
+│   ├── test_speed_trap.py             # Speed trap, intermediate velocity & radar metrics
 │   ├── test_gear_shifts.py            # Powertrain dynamics, shift detection & gear distributions
 │   ├── test_braking_analysis.py       # Braking dynamics, trail-braking & G-force metrics
 │   ├── test_telemetry_export.py       # CSV, Apache Parquet & JSON export serialization
@@ -267,7 +268,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **64 unit and integration tests** across 12 test modules should pass cleanly.
+All **71 unit and integration tests** across 13 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash

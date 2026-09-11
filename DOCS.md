@@ -38,6 +38,7 @@
 27. [High-Throughput Multi-Format Telemetry Exporter Architecture](#27-high-throughput-multi-format-telemetry-exporter-architecture)
 28. [Braking Efficiency & Trail-Braking Zone Analysis Architecture](#28-braking-efficiency--trail-braking-zone-analysis-architecture)
 29. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
+30. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
 
 
 
@@ -882,9 +883,10 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (64 tests across 12 modules):
+The tests reside in the `tests/` directory (71 tests across 13 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_speed_trap.py`: Speed trap extraction (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`), DRS delta calculation, constructor and power unit velocity benchmarks, polar radar profile, and classified leaderboard generation.
 - `tests/test_gear_shifts.py`: Powertrain dynamics, shift detection (upshifts/downshifts), tactical short-shift and redline identification, distance-weighted gear distributions, and 2-subplot figure generation.
 - `tests/test_braking_analysis.py`: Braking dynamics, longitudinal deceleration $G$-force, initial braking point, peak decel, trail-braking release, and 3-subplot figure generation.
 - `tests/test_telemetry_export.py`: Telemetry serialization across CSV, Apache Parquet (`.parquet`), and structured JSON (`.json`) with metadata injection.
@@ -1391,6 +1393,52 @@ The **Gear Shift Strategy & RPM Power Band Optimization** module provides powert
   - **Mean Upshift RPM**: Average RPM at upshift execution.
 - Generates an automated comparative summary banner comparing short-shift counts and average RPM between drivers.
 - Renders the interactive 2-row Plotly figure via `st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})`.
+
+---
+
+## 30. Speed Trap & Intermediate Velocity Radar Breakdown Architecture
+
+The **Speed Trap & Intermediate Velocity Radar Breakdown** module provides grid-wide maximum velocity tracking and aerodynamic efficiency benchmarking using official timing sensors.
+
+### Computational Layer (`_calculate_speed_trap_metrics` — `src/data/loader.py`)
+- Ingests `laps_df` for the current session.
+- Extracts official speed trap channels:
+  - `SpeedST`: Dedicated circuit speed trap.
+  - `SpeedI1`: Intermediate 1 sector timing split.
+  - `SpeedI2`: Intermediate 2 sector timing split.
+  - `SpeedFL`: Start/Finish line timing split.
+- Determines the overall maximum speed (`OverallMax`) across all available sensor channels per driver.
+- Calculates the **DRS Aerodynamic Efficiency Delta**:
+  - Compares driver speed trap records with DRS open (`DRS in [10, 12, 14]` or `True`) vs DRS closed (`DRS in [0, 1, 8]` or `False`).
+  - Evaluates the speed gain ($\Delta \text{km/h}$) directly attributable to drag reduction.
+- Power Unit Mapping:
+  - Maps constructors to official engine/power unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`).
+  - Aggregates maximum and mean velocities across constructor teams and engine suppliers.
+- Returns structured leader benchmarks, driver rankings DataFrame, constructor metrics, and power unit hierarchies.
+
+### Visualisation Layer (`src/charts/plotly.py`)
+- **Velocity Radar Profile (`build_speed_trap_radar_fig`)**:
+  - Constructs a 4-axis polar radar chart across `Speed Trap (ST)`, `Intermediate 1 (I1)`, `Intermediate 2 (I2)`, and `Finish Line (FL)`.
+  - Overlays selected drivers in their team colours with filled area transparencies.
+  - Includes a dashed reference polygon marking the session-wide grid maximum (`Grid Max`) across all four sensors.
+  - Formats driver labels using `fmt_func`.
+- **Constructor & Power Unit Benchmarks (`build_speed_trap_bar_fig`)**:
+  - Constructs grouped horizontal/vertical bar charts benchmarking velocities across constructors or power unit manufacturers.
+  - Supports dynamic toggling between `Max` (peak velocity) and `Mean` (average trap speed).
+
+### UI Layer (`_render_speed_trap_section` — `src/ui/components.py`)
+- Displays 5 high-level metric cards:
+  - `Speed Trap (ST)` leader.
+  - `Intermediate 1 (I1)` leader.
+  - `Intermediate 2 (I2)` leader.
+  - `Finish Line (FL)` leader.
+  - `Max DRS Delta` (or `Top Power Unit` / `Overall Top Speed`).
+- Tabbed interactive container:
+  - **Tab 1: 🎯 Velocity Radar Profile**: Interactive polar radar with an expander allowing users to overlay any additional drivers from the grid.
+  - **Tab 2: 📊 Constructor & Power Unit Hierarchy**: Grouped benchmark bar charts with interactive radio selectors for grouping (`Constructor` vs `Power Unit`) and metric (`Max` vs `Mean`).
+- **Classified Speed Trap Leaderboard Table**:
+  - Renders a ranked table with `Pos`, `Driver`, `Team`, `Power Unit`, `Speed Trap (ST)`, `Intermediate 1 (I1)`, `Intermediate 2 (I2)`, `Finish Line (FL)`, `Max Speed`, and `DRS Boost Delta`.
+  - Highlights selected primary and comparison drivers in team colours.
 
 ---
 
