@@ -104,6 +104,7 @@ fastf1_pitwall/
 > [!NOTE]
 > The app is built against **Streamlit 1.44+** and uses the current `width='stretch'` API (replacing the deprecated `use_container_width` parameter). Always use the version pinned in `requirements.txt`.
 
+## uodates all the required prerequirsites in the readme file
 ---
 
 ## 💻 Running Locally (Without Docker)
