@@ -94,17 +94,44 @@ fastf1_pitwall/
 
 ---
 
-## 🛠 Prerequisites
+## 🛠 Prerequisites & System Requirements
 
-| Without Docker | With Docker |
-|---|---|
-| Python 3.11+ | Docker Desktop installed & running |
-| pip | No Python needed locally |
+Depending on whether you choose to run the dashboard natively or via Docker, ensure the following requirements are met:
 
-> [!NOTE]
-> The app is built against **Streamlit 1.44+** and uses the current `width='stretch'` API (replacing the deprecated `use_container_width` parameter). Always use the version pinned in `requirements.txt`.
+### System & Environment Requirements
 
-## uodates all the required prerequirsites in the readme file
+| Requirement | Local (Without Docker) | Containerized (With Docker) |
+|---|---|---|
+| **Operating System** | macOS (Apple Silicon / Intel), Linux (Ubuntu/Debian/Fedora), Windows (WSL2 recommended) | Docker-supported host OS |
+| **Runtime** | **Python 3.11+** (tested up to 3.12; 3.11 recommended) | **Docker Desktop** (macOS/Windows) or **Docker Engine ≥ 20.10** |
+| **Package Manager** | `pip` (or `venv`, `uv`, `conda`) | Pre-packaged in image |
+| **Memory (RAM)** | **4 GB minimum**, **8 GB+ recommended** for multi-driver animated replays | 4 GB allocated to Docker container |
+| **Disk Space** | ~500 MB for Python environment + ~50–100 MB per cached Grand Prix session | ~1.5 GB for Docker image + local `./cache` volume |
+| **Network** | Outbound access to `livetiming.formula1.com:443` and `api.jolpi.ca:443` | Outbound access to F1 timing APIs |
+
+### Core Python Dependencies Matrix
+
+The application is built on a modern, high-performance telemetry analytics stack:
+
+| Package | Minimum Version | Purpose & Architectural Role |
+|---|---|---|
+| **`streamlit`** | `≥ 1.44.0` | Frontend dashboard framework using the modern `width='stretch'` responsive layout API and custom theme injection. |
+| **`fastf1`** | `≥ 3.3.0` | Core F1 timing, telemetry waveform, circuit layout, and Ergast integration data engine. |
+| **`pandas`** | `≥ 2.2.0` | High-frequency telemetry dataframe wrangling, lap filtering, and stint timeseries aggregation. |
+| **`numpy`** | `≥ 1.26.0` | Longitudinal deceleration ($G$), polynomial regressions, distance grids, and statistical operations. |
+| **`plotly`** | `≥ 5.18.0` | Interactive charts (lap time histories, stint Gantt bars, delta graphs, corner analysis, radar profiles). |
+| **`matplotlib`** | `≥ 3.8.0` | Static 6-channel high-frequency telemetry waveform visualizations and speed delta overlays. |
+| **`curl-cffi`** | `≥ 0.5.10` | TLS handshake browser impersonation (`chrome124`) to bypass F1 CloudFront / Cloudflare anti-bot blocks. |
+| **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
+| **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
+| **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (71 unit/integration tests across 13 modules). |
+
+> [!IMPORTANT]
+> **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
+
+> [!TIP]
+> **Network Proxy Configuration**: If running behind an enterprise firewall or restrictive proxy, set the `F1_PROXY` environment variable or Streamlit secret (`http://user:pass@proxy:port`) to route FastF1 and Ergast HTTP requests safely.
 ---
 
 ## 💻 Running Locally (Without Docker)
