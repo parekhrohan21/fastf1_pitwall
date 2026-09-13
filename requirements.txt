@@ -1,5 +1,5 @@
 fastf1>=3.3.0
-streamlit>=1.32.0
+streamlit>=1.44.0
 matplotlib>=3.8.0
 pandas>=2.2.0
 numpy>=1.26.0
@@ -7,10 +7,8 @@ plotly>=5.18.0
 curl-cffi>=0.5.10
 pytest>=8.0.0
 pytest-mock>=3.12.0
-
-
-
 kaleido>=0.2.1
 fpdf2>=2.7.5
 Pillow>=10.0.0
 pyarrow>=14.0.0
+
