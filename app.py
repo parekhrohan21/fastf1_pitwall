@@ -23,6 +23,7 @@ from src.data.loader import (
     get_driver_standings_points, _build_driver_standings, _build_final_classification,
     _make_fmt_driver, _build_lap_history, _build_fuel_adjusted,
     _build_fuel_sim_leaderboard, _build_stints, _build_pit_stops, _build_tyre_deg_data,
+    _build_fuel_decoupled_tyre_deg,
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
     get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request,
@@ -36,7 +37,7 @@ from src.ui.components import (
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
-    _render_multi_year_comparison_section, render_tyre_crossover_matrix,
+    _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_gear_analysis_section,
     _render_speed_trap_section
 )
@@ -1432,21 +1433,62 @@ if compare and driver2 and _pit_d1 and _pit_d2:
 st.markdown("<div class='section-title'>Tyre Degradation Analysis</div>", unsafe_allow_html=True)
 st.markdown(
     "<div style='font-size:11px; opacity:0.55; margin:-6px 0 10px; letter-spacing:0.3px;'>"
-    "Analyses tyre wear and pace drop-off by performing linear regression (OLS) on valid flyer laps. "
+    "Analyses tyre wear and pace drop-off by performing linear regression (OLS) and quadratic thermal modeling on valid flyer laps. "
     "Out-laps, in-laps, and laps under Safety Car / VSC are excluded. "
-    "Note: Fuel burn-off naturally masks tyre degradation by making the car lighter (~0.03 s per lap), "
-    "which may result in flat or negative slopes on highly durable compounds."
+    "Fuel decoupling removes artificial lap time gains from fuel mass burn (~0.3 kg/lap) to reveal true mechanical tyre degradation."
     "</div>",
     unsafe_allow_html=True,
 )
 
-_deg_d1 = _build_tyre_deg_data(driver1, _all_laps1)
-_deg_d2 = _build_tyre_deg_data(driver2, _all_laps2 if _all_laps2 is not None else _all_laps1) if compare and driver2 else None
+# Fuel Decoupler Controls
+col_fuel1, col_fuel2 = st.columns([1.8, 2.2])
+with col_fuel1:
+    decouple_fuel = st.toggle(
+        "⛽ Decouple Fuel Burn (True Tyre Wear)",
+        value=True,
+        help="Removes fuel burn mass gain (~0.035 s/lap) so tyre degradation rates reflect true mechanical wear rather than being masked by car weight loss."
+    )
+with col_fuel2:
+    if decouple_fuel:
+        fuel_burn_rate = st.slider(
+            "Fuel Burn Sensitivity (s/lap)",
+            min_value=0.010,
+            max_value=0.070,
+            value=0.035,
+            step=0.005,
+            format="%.3f s/lap",
+            help="Customizable pace gain per lap from burning race fuel. Standard Grand Prix average is ~0.035 s/lap."
+        )
+    else:
+        fuel_burn_rate = 0.0
+
+if decouple_fuel:
+    _deg_d1 = _build_fuel_decoupled_tyre_deg(driver1, _all_laps1, fuel_effect=fuel_burn_rate)
+    _deg_d2 = _build_fuel_decoupled_tyre_deg(driver2, _all_laps2 if _all_laps2 is not None else _all_laps1, fuel_effect=fuel_burn_rate) if compare and driver2 else None
+else:
+    _deg_d1 = _build_tyre_deg_data(driver1, _all_laps1)
+    _deg_d2 = _build_tyre_deg_data(driver2, _all_laps2 if _all_laps2 is not None else _all_laps1) if compare and driver2 else None
 
 if not _deg_d1 and not _deg_d2:
     st.info("Insufficient stint telemetry (minimum 4 consecutive green-flag laps per stint) to model tyre degradation.")
 else:
-    fig_deg, table_rows = build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, compare)
+    fig_deg, table_rows = build_tyre_deg_fig(
+        _deg_d1, _deg_d2, driver1, driver2, colour1, colour2, compare,
+        show_fuel_corrected=decouple_fuel
+    )
+
+    if decouple_fuel:
+        render_fuel_decoupled_deg_metrics(
+            table_rows=table_rows,
+            fuel_effect=fuel_burn_rate,
+            driver1=driver1,
+            driver2=driver2 if compare else None,
+            fmt_driver1=_fmt_driver1,
+            fmt_driver2=_fmt_driver2,
+            colour1=colour1,
+            colour2=colour2,
+        )
+
     st.plotly_chart(fig_deg, width="stretch", config={"displayModeBar": False})
 
     # Summary Table
@@ -1459,22 +1501,29 @@ else:
             f"<span style='display:inline-block; width:8px; height:8px; border-radius:50%; "
             f"background:{comp_pal['fill']}; margin-right:5px; vertical-align:middle;'></span>"
         )
-        
-        deg_rate_str = f"{row['deg_rate']:+.3f} s/lap"
+
         deg_color = "#00e400" if row["deg_rate"] <= 0 else "#ff2200"
-        
+        if decouple_fuel and row.get("is_fuel_decoupled"):
+            deg_rate_str = (
+                f"<span style='color:{deg_color}; font-weight:600;'>{row['deg_rate']:+.3f} s/lap</span> "
+                f"<span style='font-size:11px; opacity:0.6;'>(Raw: {row.get('raw_deg_rate', row['deg_rate']):+.3f})</span>"
+            )
+        else:
+            deg_rate_str = f"<span style='color:{deg_color}; font-weight:600;'>{row['deg_rate']:+.3f} s/lap</span>"
+
         fmt_name = _fmt_driver1(row["driver"]) if row["driver"] == driver1 else _fmt_driver2(row["driver"])
-        
+
         table_html += (
             f"<tr style='background:{row_bg};'>"
             f"<td style='padding:7px 10px; font-weight:600; color:{row['colour']};'>{fmt_name}</td>"
             f"<td style='padding:7px 10px;'>Stint {row['stint']}</td>"
             f"<td style='padding:7px 10px;'>{comp_dot}{comp}</td>"
             f"<td style='padding:7px 10px;'>{row['laps']} laps</td>"
-            f"<td style='padding:7px 10px; font-weight:600; color:{deg_color};'>{deg_rate_str}</td>"
+            f"<td style='padding:7px 10px;'>{deg_rate_str}</td>"
             f"</tr>"
         )
-        
+
+    rate_col_header = "Degradation Rate (True vs Raw)" if decouple_fuel else "Degradation Rate"
     st.markdown(
         f"<div style='background:var(--secondary-background-color); "
         f"border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
@@ -1487,7 +1536,7 @@ else:
         f"<th style='padding:5px 10px; text-align:left;'>Stint</th>"
         f"<th style='padding:5px 10px; text-align:left;'>Compound</th>"
         f"<th style='padding:5px 10px; text-align:left;'>Sample Size</th>"
-        f"<th style='padding:5px 10px; text-align:left;'>Degradation Rate</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>{rate_col_header}</th>"
         f"</tr></thead>"
         f"<tbody>{table_html}</tbody>"
         f"</table></div>",

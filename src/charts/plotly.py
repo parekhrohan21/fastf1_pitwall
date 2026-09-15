@@ -963,11 +963,22 @@ def build_corner_fig(win1, win2, driver, other_driver, colour, other_colour, ape
     return fig, stats1, stats2
 
 
-def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, compare):
+def build_tyre_deg_fig(
+    _deg_d1,
+    _deg_d2,
+    driver1: str,
+    driver2: str | None,
+    colour1: str,
+    colour2: str | None,
+    compare: bool,
+    show_fuel_corrected: bool = True
+):
     fig_deg = go.Figure()
     table_rows = []
+    has_decoupled = False
 
     def process_driver_deg(deg_data, drv_name, drv_colour, is_primary):
+        nonlocal has_decoupled
         if not deg_data:
             return
         marker_symbol = "circle" if is_primary else "square"
@@ -977,16 +988,59 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
             stint_num = s["stint"]
             compound = s["compound"]
             laps_list = s["laps"]
+            is_decoupled = s.get("is_fuel_decoupled", False) and show_fuel_corrected
+            if is_decoupled:
+                has_decoupled = True
 
-            x_vals = np.array([l["TyreLife"] for l in laps_list])
-            y_vals = np.array([l["LapTime_s"] for l in laps_list])
+            x_vals = np.array([l["TyreLife"] for l in laps_list], dtype=float)
+            if is_decoupled and "LapTime_s_fuel_corr" in laps_list[0]:
+                y_vals = np.array([l["LapTime_s_fuel_corr"] for l in laps_list], dtype=float)
+                y_raw = np.array([l.get("LapTime_s_raw", l.get("LapTime_s")) for l in laps_list], dtype=float)
+            else:
+                y_vals = np.array([l.get("LapTime_s_raw", l["LapTime_s"]) for l in laps_list], dtype=float)
+                y_raw = y_vals
 
-            # Use precomputed slope from enhanced builder; fall back to polyfit
-            slope = s.get("slope") if s.get("slope") is not None else np.polyfit(x_vals, y_vals, 1)[0]
-            intercept = s.get("base_pace") if s.get("base_pace") is not None else np.polyfit(x_vals, y_vals, 1)[1]
+            # Regression slope and intercept
+            if is_decoupled:
+                slope = s.get("fuel_corrected_slope", s.get("slope"))
+                intercept = s.get("fuel_corrected_base_pace", s.get("base_pace"))
+            else:
+                slope = s.get("raw_slope", s.get("slope"))
+                intercept = s.get("raw_base_pace", s.get("base_pace"))
+
+            if slope is None:
+                slope = float(np.polyfit(x_vals, y_vals, 1)[0])
+            if intercept is None:
+                intercept = float(np.polyfit(x_vals, y_vals, 1)[1])
+
+            raw_slope = s.get("raw_slope", slope)
+            fuel_effect = s.get("fuel_effect", 0.0)
+
             label_str = f"{drv_name} - Stint {stint_num} ({compound})"
+            if is_decoupled:
+                label_str += " [Fuel Decoupled]"
 
             # ── Scatter points ──────────────────────────────────────────────
+            if is_decoupled:
+                custom_data = np.stack((y_vals, y_raw), axis=-1)
+                hover_template = (
+                    f"<b>{drv_name}</b> (Stint {stint_num} - {compound})<br>"
+                    "Tyre Age: %{x} laps<br>"
+                    "True Pace: %{customdata[0]:.3f} s<br>"
+                    "Raw Lap Time: %{customdata[1]:.3f} s<br>"
+                    f"True Deg Rate: {slope:+.3f} s/lap<br>"
+                    f"Raw Timing Deg: {raw_slope:+.3f} s/lap<br>"
+                    f"Fuel Offset: -{fuel_effect:.3f} s/lap<extra></extra>"
+                )
+            else:
+                custom_data = y_vals
+                hover_template = (
+                    f"<b>{drv_name}</b> (Stint {stint_num} - {compound})<br>"
+                    "Tyre Age: %{x} laps<br>"
+                    "Lap Time: %{customdata:.3f} s<br>"
+                    f"Deg Rate: {slope:+.3f} s/lap<extra></extra>"
+                )
+
             fig_deg.add_trace(go.Scatter(
                 x=x_vals, y=y_vals,
                 mode="markers",
@@ -998,13 +1052,8 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
                 ),
                 name=label_str,
                 legendgroup=label_str,
-                hovertemplate=(
-                    f"<b>{drv_name}</b> (Stint {stint_num} - {compound})<br>"
-                    "Tyre Age: %{x} laps<br>"
-                    "Lap Time: %{customdata:.3f} s<br>"
-                    f"Deg Rate: {slope:+.3f} s/lap<extra></extra>"
-                ),
-                customdata=y_vals
+                hovertemplate=hover_template,
+                customdata=custom_data
             ))
 
             # ── Linear regression trendline ─────────────────────────────────
@@ -1021,7 +1070,7 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
             ))
 
             # ── Quadratic degradation curve overlay ─────────────────────────
-            quad_coeffs = s.get("quad_coeffs")
+            quad_coeffs = s.get("quad_coeffs") if is_decoupled else s.get("raw_quad_coeffs", s.get("quad_coeffs"))
             if quad_coeffs is not None:
                 a, b, c = quad_coeffs
                 x_quad = np.linspace(x_vals.min(), x_vals.max() + 8, 200)
@@ -1042,14 +1091,14 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
                 ))
 
             # ── Cliff lap vertical marker ────────────────────────────────────
-            cliff_lap = s.get("cliff_lap")
+            cliff_lap = s.get("cliff_lap") if is_decoupled else s.get("raw_cliff_lap", s.get("cliff_lap"))
             if cliff_lap is not None:
                 fig_deg.add_vline(
                     x=cliff_lap,
                     line_width=1.5,
                     line_dash="dot",
                     line_color=drv_colour,
-                    annotation_text=f"⚠ Cliff ~Lap {cliff_lap}",
+                    annotation_text=f"⚠ Cliff ~Lap {cliff_lap}" + (" (True)" if is_decoupled else ""),
                     annotation_position="top right",
                     annotation_font_size=10,
                     annotation_font_color=drv_colour,
@@ -1063,8 +1112,13 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
                 "compound": compound,
                 "laps": len(x_vals),
                 "deg_rate": slope,
+                "raw_deg_rate": raw_slope,
+                "true_deg_rate": s.get("true_deg_rate", slope),
                 "base_pace": intercept,
+                "fuel_effect": fuel_effect,
+                "is_fuel_decoupled": is_decoupled,
                 "cliff_lap": cliff_lap,
+                "raw_cliff_lap": s.get("raw_cliff_lap"),
                 "remaining_laps": s.get("remaining_laps"),
                 "pit_window_low": s.get("pit_window_low"),
                 "pit_window_high": s.get("pit_window_high"),
@@ -1075,6 +1129,8 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
     if compare and _deg_d2:
         process_driver_deg(_deg_d2, driver2, colour2, is_primary=False)
 
+    y_title = "Fuel-Corrected Pace (s) [0-Fuel Ref]" if has_decoupled else "Lap Time (Seconds)"
+
     fig_deg.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1084,7 +1140,7 @@ def build_tyre_deg_fig(_deg_d1, _deg_d2, driver1, driver2, colour1, colour2, com
             zeroline=False,
         ),
         yaxis=dict(
-            title="Lap Time (Seconds)",
+            title=y_title,
             gridcolor="rgba(128,128,128,0.15)",
             zeroline=False
         ),

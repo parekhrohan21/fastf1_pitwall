@@ -39,8 +39,7 @@
 28. [Braking Efficiency & Trail-Braking Zone Analysis Architecture](#28-braking-efficiency--trail-braking-zone-analysis-architecture)
 29. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
 30. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
-
-
+31. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
 
 ---
 
@@ -993,6 +992,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #151** (`feat: Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler`): Added mechanical tyre wear decoupling by removing race fuel burn mass gains (~0.3 kg/lap ≈ 0.035 s/lap) from lap times. Implemented `_build_fuel_decoupled_tyre_deg` in `src/data/loader.py`, calculating $t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$ (normalized to zero-fuel qualifying weight). Fits both linear OLS regression and degree-2 quadratic polynomial curves on decoupled pace to calculate True Degradation Rate ($\Delta\text{s/lap}$) and unmasked thermal cliff laps. Updated `build_tyre_deg_fig` in `src/charts/plotly.py` with dynamic fuel decoupling support, dual pace hover tooltips (True Pace, Raw Lap Time, Fuel Offset), and decoupled table statistics. Added `render_fuel_decoupled_deg_metrics` to `src/ui/components.py` (True Deg Rate, Raw Deg Rate, Fuel Effect, Fuel Masking Offset) and enhanced `render_tyre_crossover_matrix` with true vs raw rate indicators. In `app.py`, added interactive fuel decoupling toggle and sensitivity slider (0.010–0.070 s/lap). Added comprehensive automated test suite (8 unit tests in `tests/test_fuel_decoupled_tyre_deg.py`; 79 total suite tests passing across 14 modules).
 - **Issue #150** (`feat: Speed Trap & Intermediate Velocity Radar Breakdown (ST, I1, I2, FL)`): Added grid-wide speed trap and intermediate micro-sector velocity analytics. Extracts maximum speeds at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line) from `sess.laps`. Detects DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$). Maps constructors to official Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) and aggregates top speeds. Renders a 4-axis polar radar chart (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), 5 top metric cards, and a classified Speed Trap Leaderboard table in `_render_speed_trap_section`. 7/7 unit tests pass in `tests/test_speed_trap.py` (71 total suite tests passing).
 - **Issue #149** (`feat: Gear Shift Strategy & RPM Power Band Optimization`): Added powertrain dynamics and gear shift strategy telemetry analytics. Extracts engine RPM, gear selection (`nGear` / `Gear`), speed, and throttle application across lap distance to detect every individual upshift and downshift event. Detects tactical short-shifts (< 11,000 RPM under > 60% throttle) used for rear traction / tyre management and redline shifts (≥ 11,800 RPM), and computes distance-weighted gear usage distributions (% in gears 1 through 8). Renders a dual-subplot Plotly figure (`build_gear_shift_fig` for Engine RPM vs Track Distance with shift markers & horizontal gear distribution bar chart) and an interactive comparison section (`_render_gear_analysis_section`) with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM in operating band > 2000 RPM, Tactical Short-Shifts, and Mean Upshift RPM) and automated comparative driver advantage summaries. 6/6 unit tests pass in `tests/test_gear_shifts.py`.
 - **Issue #148** (`feat: Braking Efficiency & Trail-Braking Zone Analysis`): Added dedicated braking dynamics and trail-braking telemetry analytics. Slices corner telemetry around circuit apexes, calculating longitudinal Deceleration (G-force = $\Delta v / (\Delta t \cdot 9.81)$) with 3-point moving average smoothing. Automatically detects Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point (m to apex), Trail-Braking Zone Length, and Brake-to-Throttle Transition Time (ms). Renders a stacked 3-subplot Plotly figure (`build_braking_efficiency_fig` for Speed, Brake %, and Deceleration G) and interactive comparison section (`_render_braking_analysis_section`) with driver formatting and later-braking strategic advantage callouts. 6/6 unit tests pass in `tests/test_braking_analysis.py`.
@@ -1439,6 +1439,50 @@ The **Speed Trap & Intermediate Velocity Radar Breakdown** module provides grid-
 - **Classified Speed Trap Leaderboard Table**:
   - Renders a ranked table with `Pos`, `Driver`, `Team`, `Power Unit`, `Speed Trap (ST)`, `Intermediate 1 (I1)`, `Intermediate 2 (I2)`, `Finish Line (FL)`, `Max Speed`, and `DRS Boost Delta`.
   - Highlights selected primary and comparison drivers in team colours.
+
+
+## 31. Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture
+
+The **Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `app.py`) isolates true mechanical tyre degradation from the artificial lap time gains caused by fuel burn-off.
+
+### Mathematical Formulation
+As a Formula 1 car consumes fuel during a Grand Prix (~0.3 kg burned per lap), the vehicle's mass drops continuously, producing an acceleration effect of approximately $\alpha \approx 0.030\text{--}0.040\text{ s/lap}$. On durable compounds (e.g. Hard), this natural mass gain often masks tyre wear completely, resulting in flat or negative regression slopes on timing screens.
+
+To decouple this effect, each clean flyer lap is normalized to zero-fuel reference weight:
+$$t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$$
+
+Taking the first derivative with respect to lap number yields:
+$$\text{Slope}_{\text{true}} = \text{Slope}_{\text{raw}} + \alpha$$
+
+### Data Layer (`_build_fuel_decoupled_tyre_deg` — `src/data/loader.py`)
+- **Filtering**: Filters for valid flyer laps (`IsAccurate == True`), excluding in-laps, out-laps, and safety car/VSC periods (`TrackStatus` containing `"4|5|6|7"`).
+- **Dual Regression Modeling**:
+  - `Raw Linear OLS`: Computes observed timing-screen slope (`raw_slope`).
+  - `Fuel-Corrected Linear OLS`: Computes decoupled mechanical wear rate (`fuel_corrected_slope` / `true_deg_rate`).
+  - `Quadratic Polynomial Fit`: Fits $a x^2 + b x + c$ on decoupled pace to model thermal cliff degradation without fuel masking.
+  - `Cliff Lap Estimation`: Evaluates the tyre age at which pace degrades by $\ge 1.5\text{ s}$ above fresh-tyre baseline pace.
+
+### Visualisation Layer (`build_tyre_deg_fig` — `src/charts/plotly.py`)
+- Supports dynamic toggling between Raw Lap Times and Fuel-Corrected Pure Tyre Wear (`show_fuel_corrected`).
+- Renders fuel-corrected scatter points, linear trendlines, and quadratic thermal degradation curves.
+- Multi-dimensional hover tooltips display:
+  - True Pace (Fuel Decoupled)
+  - Raw Lap Time
+  - True Deg Rate ($\Delta$ s/lap)
+  - Raw Timing Deg Rate ($\Delta$ s/lap)
+  - Fuel Burn Offset ($-0.035\text{ s/lap}$)
+- Dynamically updates Y-axis title based on active mode (`"Fuel-Corrected Pace (s) [0-Fuel Ref]"` vs `"Lap Time (Seconds)"`).
+
+### UI Layer (`render_fuel_decoupled_deg_metrics`, `render_tyre_crossover_matrix` — `src/ui/components.py`)
+- **Metric Cards**:
+  - `🏎️ True Tyre Deg Rate`: Mean fuel-corrected pace loss per lap.
+  - `⏱️ Timing Screen (Raw) Deg`: Apparent pace slope.
+  - `⛽ Fuel Burn Effect`: Rate of pace gain from fuel mass reduction.
+  - `🎭 Fuel Masking Offset`: Amount of tyre degradation hidden by fuel mass burn.
+  - In head-to-head compare mode, displays comparative driver cards and net tyre wear advantage callouts.
+- **Enhanced Tables**:
+  - Degradation summary table displays True Deg Rate with Raw timing values in subtext.
+  - Crossover Prediction Matrix reflects true thermal cliff lap numbers and pit window recommendations.
 
 ---
 

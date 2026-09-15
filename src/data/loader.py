@@ -959,22 +959,50 @@ def _build_pit_stops(driver: str, sess_k: str, laps_df: pd.DataFrame) -> list[di
         return None
 
 
-def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | None:
-    """Build per-stint tyre degradation data with predictive cliff lap estimation.
+def _build_fuel_decoupled_tyre_deg(
+    driver: str,
+    laps_df: pd.DataFrame,
+    fuel_effect: float = 0.035,
+    total_laps: int | None = None
+) -> list[dict] | None:
+    """Build per-stint tyre degradation data decoupled from fuel burn-off mass gains.
 
-    In addition to the existing linear OLS slope, this function computes:
-    - ``quad_coeffs``: (a, b, c) of the best-fit quadratic (degree-2) polynomial.
-    - ``cliff_lap``: estimated TyreLife lap at which lap time exceeds base pace by 1.5 s.
-      Calculated by solving the quadratic model for pace = base_pace + 1.5 s.
-      Falls back to the linear extrapolation when the quadratic is unavailable.
-    - ``remaining_laps``: cliff_lap minus the last observed TyreLife in the stint
-      (how many more laps the tyre is predicted to survive before degrading critically).
-    - ``pit_window_low``/``pit_window_high``: ±3 lap safety window around cliff_lap.
+    As a Formula 1 car burns ~0.3 kg of fuel per lap, it naturally accelerates by
+    approximately 0.030–0.040 s/lap. This weight reduction masks the true rate of
+    mechanical tyre degradation, creating artificially flat or negative degradation slopes.
+
+    This function decouples fuel burn to compute True Mechanical Tyre Wear:
+    - Normalizes lap times to zero-fuel (qualifying weight):
+      ``LapTime_s_fuel_corr = LapTime_s_raw - fuel_effect * (TotalLaps - LapNumber)``
+    - Computes both raw timing-screen degradation slope (``raw_slope``) and pure
+      mechanical tyre wear slope (``fuel_corrected_slope`` / ``true_deg_rate``).
+    - Fits degree-2 quadratic polynomial curves on both raw and decoupled pace.
+    - Estimates true thermal cliff lap (+1.5 s pace drop relative to fresh tyre base pace).
+
+    Parameters
+    ----------
+    driver : str
+        Three-letter driver code or identifier.
+    laps_df : pd.DataFrame
+        Session laps DataFrame containing at minimum ``Driver``, ``LapNumber``,
+        ``TyreLife``, ``LapTime``, ``Stint``, ``Compound``, ``IsAccurate``, ``TrackStatus``.
+    fuel_effect : float, default 0.035
+        Pace penalty per lap of fuel (seconds per lap). Default is 0.035 s/lap.
+    total_laps : int | None, optional
+        Total session laps. If None, inferred from ``laps_df["LapNumber"].max()``.
+
+    Returns
+    -------
+    list[dict] | None
+        List of stint dictionaries containing raw and fuel-decoupled degradation
+        metrics, regression models, cliff lap predictions, and individual lap records.
     """
-    # Threshold for what constitutes a meaningful pace cliff (seconds)
     CLIFF_THRESHOLD_S = 1.5
 
     try:
+        if laps_df is None or laps_df.empty:
+            return None
+
         laps = laps_df[laps_df["Driver"] == driver].copy()
         if laps.empty:
             return None
@@ -989,7 +1017,32 @@ def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | Non
         if clean_laps.empty:
             return None
 
-        clean_laps["LapTime_s"] = clean_laps["LapTime"].dt.total_seconds()
+        if "LapNumber" not in clean_laps.columns or clean_laps["LapNumber"].dropna().empty:
+            clean_laps["LapNumber"] = np.arange(1, len(clean_laps) + 1)
+
+        clean_laps = clean_laps.dropna(subset=["LapNumber", "LapTime"]).copy()
+        if clean_laps.empty:
+            return None
+
+        clean_laps["LapTime_s_raw"] = clean_laps["LapTime"].dt.total_seconds()
+
+        # Determine total session laps
+        if total_laps is None:
+            if "LapNumber" in laps_df.columns and not laps_df["LapNumber"].dropna().empty:
+                total_laps = int(laps_df["LapNumber"].max())
+            else:
+                total_laps = int(clean_laps["LapNumber"].max())
+
+        # Compute fuel mass correction: lap time without remaining fuel weight
+        fuel_laps_remaining = (total_laps - clean_laps["LapNumber"]).clip(lower=0)
+        clean_laps["FuelCorrection_s"] = fuel_laps_remaining * fuel_effect
+        clean_laps["LapTime_s_fuel_corr"] = clean_laps["LapTime_s_raw"] - clean_laps["FuelCorrection_s"]
+
+        # Default LapTime_s is fuel-corrected when fuel_effect > 0, else raw
+        if fuel_effect > 0:
+            clean_laps["LapTime_s"] = clean_laps["LapTime_s_fuel_corr"]
+        else:
+            clean_laps["LapTime_s"] = clean_laps["LapTime_s_raw"]
 
         stints_data = []
         for (stint, compound), group in clean_laps.groupby(["Stint", "Compound"]):
@@ -999,72 +1052,120 @@ def _build_tyre_deg_data(driver: str, laps_df: pd.DataFrame) -> list[dict] | Non
                 continue
 
             x_vals = np.array(group["TyreLife"].values, dtype=float)
-            y_vals = np.array(group["LapTime_s"].values, dtype=float)
+            y_raw = np.array(group["LapTime_s_raw"].values, dtype=float)
+            y_corr = np.array(group["LapTime_s_fuel_corr"].values, dtype=float)
+            y_active = y_corr if fuel_effect > 0 else y_raw
 
-            # ── Linear regression (kept for chart and table compatibility) ───
-            slope, intercept = np.polyfit(x_vals, y_vals, 1)
-            base_pace = intercept  # pace at TyreLife = 0 (linear model)
+            # ── Linear regressions ──────────────────────────────────────────
+            raw_slope, raw_intercept = np.polyfit(x_vals, y_raw, 1)
+            corr_slope, corr_intercept = np.polyfit(x_vals, y_corr, 1)
 
-            # ── Quadratic regression (non-linear thermal degradation model) ──
+            active_slope = corr_slope if fuel_effect > 0 else raw_slope
+            active_base_pace = corr_intercept if fuel_effect > 0 else raw_intercept
+
+            # ── Quadratic regressions (non-linear thermal degradation) ──────
             quad_coeffs = None
             cliff_lap: int | None = None
-            remaining_laps: int | None = None
-            pit_window_low: int | None = None
-            pit_window_high: int | None = None
+            raw_quad_coeffs = None
+            raw_cliff_lap: int | None = None
 
+            # 1) Fuel-corrected (or active) quadratic model
             try:
                 if len(x_vals) >= 5:
-                    a, b, c = np.polyfit(x_vals, y_vals, 2)
+                    a, b, c = np.polyfit(x_vals, y_active, 2)
                     quad_coeffs = (float(a), float(b), float(c))
-                    # Base pace from quadratic at TyreLife = x_vals.min()
                     quad_base = np.polyval([a, b, c], x_vals.min())
                     cliff_target = quad_base + CLIFF_THRESHOLD_S
 
-                    # Solve a*x^2 + b*x + (c - cliff_target) = 0
                     discriminant = b**2 - 4 * a * (c - cliff_target)
                     if a > 1e-9 and discriminant >= 0:
-                        # Take the larger root (the tyre degrades beyond baseline as age increases)
                         x_cliff = (-b + np.sqrt(discriminant)) / (2 * a)
                         if x_cliff > x_vals.min():
                             cliff_lap = max(int(round(x_cliff)), int(x_vals.min()) + 1)
-                        else:
-                            cliff_lap = None
             except Exception:
                 quad_coeffs = None
                 cliff_lap = None
 
-            # ── Fallback: linear cliff extrapolation ─────────────────────────
-            if cliff_lap is None and slope > 1e-6:
-                # Linear: pace = slope * x + intercept => cliff when pace = base + 1.5
-                x_cliff_linear = (base_pace + CLIFF_THRESHOLD_S - intercept) / slope
-                if x_cliff_linear > x_vals.min():
-                    cliff_lap = max(int(round(x_cliff_linear)), int(x_vals.min()) + 1)
+            # Fallback: linear cliff extrapolation for active pace
+            if cliff_lap is None and active_slope > 1e-6:
+                x_cliff_linear = (active_base_pace + CLIFF_THRESHOLD_S - active_base_pace) / active_slope
+                if x_cliff_linear > 0:
+                    cliff_lap = max(int(round(x_vals.min() + x_cliff_linear)), int(x_vals.min()) + 1)
+
+            # 2) Raw uncorrected quadratic model (for baseline comparison)
+            try:
+                if len(x_vals) >= 5:
+                    ra, rb, rc = np.polyfit(x_vals, y_raw, 2)
+                    raw_quad_coeffs = (float(ra), float(rb), float(rc))
+                    r_quad_base = np.polyval([ra, rb, rc], x_vals.min())
+                    r_cliff_target = r_quad_base + CLIFF_THRESHOLD_S
+
+                    r_discriminant = rb**2 - 4 * ra * (rc - r_cliff_target)
+                    if ra > 1e-9 and r_discriminant >= 0:
+                        r_x_cliff = (-rb + np.sqrt(r_discriminant)) / (2 * ra)
+                        if r_x_cliff > x_vals.min():
+                            raw_cliff_lap = max(int(round(r_x_cliff)), int(x_vals.min()) + 1)
+            except Exception:
+                raw_quad_coeffs = None
+                raw_cliff_lap = None
+
+            if raw_cliff_lap is None and raw_slope > 1e-6:
+                r_x_cliff_linear = (raw_intercept + CLIFF_THRESHOLD_S - raw_intercept) / raw_slope
+                if r_x_cliff_linear > 0:
+                    raw_cliff_lap = max(int(round(x_vals.min() + r_x_cliff_linear)), int(x_vals.min()) + 1)
 
             # ── Remaining laps and pit window ────────────────────────────────
             last_tyre_life = int(x_vals.max())
-            if cliff_lap is not None:
-                remaining_laps = max(cliff_lap - last_tyre_life, 0)
-                pit_window_low = max(cliff_lap - 3, 1)
-                pit_window_high = cliff_lap + 3
+            remaining_laps = max(cliff_lap - last_tyre_life, 0) if cliff_lap is not None else None
+            pit_window_low = max(cliff_lap - 3, 1) if cliff_lap is not None else None
+            pit_window_high = cliff_lap + 3 if cliff_lap is not None else None
 
             stints_data.append({
                 "stint": int(stint),
                 "compound": str(compound),
-                "laps": group[["TyreLife", "LapTime_s"]].to_dict(orient="records"),
+                "laps": group[[
+                    "TyreLife", "LapTime_s", "LapTime_s_raw", "LapTime_s_fuel_corr", "FuelCorrection_s", "LapNumber"
+                ]].to_dict(orient="records"),
                 # Predictive crossover fields
-                "slope": float(slope),
-                "base_pace": float(base_pace),
+                "slope": float(active_slope),
+                "base_pace": float(active_base_pace),
+                "raw_slope": float(raw_slope),
+                "raw_base_pace": float(raw_intercept),
+                "fuel_corrected_slope": float(corr_slope),
+                "fuel_corrected_base_pace": float(corr_intercept),
+                "true_deg_rate": float(corr_slope),
+                "fuel_effect": float(fuel_effect),
                 "quad_coeffs": quad_coeffs,
+                "raw_quad_coeffs": raw_quad_coeffs,
                 "last_tyre_life": last_tyre_life,
                 "cliff_lap": cliff_lap,
+                "raw_cliff_lap": raw_cliff_lap,
                 "remaining_laps": remaining_laps,
                 "pit_window_low": pit_window_low,
                 "pit_window_high": pit_window_high,
                 "cliff_threshold_s": CLIFF_THRESHOLD_S,
+                "is_fuel_decoupled": bool(fuel_effect > 0),
             })
         return stints_data if stints_data else None
     except Exception:
         return None
+
+
+def _build_tyre_deg_data(
+    driver: str,
+    laps_df: pd.DataFrame,
+    fuel_effect: float = 0.0
+) -> list[dict] | None:
+    """Build per-stint tyre degradation data with predictive cliff lap estimation.
+
+    Maintains full backward compatibility for callers and automated test suites.
+    When ``fuel_effect > 0``, delegates to :func:`_build_fuel_decoupled_tyre_deg`.
+    """
+    return _build_fuel_decoupled_tyre_deg(
+        driver=driver,
+        laps_df=laps_df,
+        fuel_effect=fuel_effect
+    )
 
 
 def _build_consistency_analysis(sess_k: str, laps_df: pd.DataFrame, drivers: list[str] = None) -> dict | None:
