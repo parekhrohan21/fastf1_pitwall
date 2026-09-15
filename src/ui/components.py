@@ -1576,6 +1576,109 @@ def _render_multi_year_comparison_section(
         st.plotly_chart(fig, width="stretch")
 
 
+def render_fuel_decoupled_deg_metrics(
+    table_rows: list[dict],
+    fuel_effect: float = 0.035,
+    driver1: str = "",
+    driver2: str | None = None,
+    fmt_driver1=None,
+    fmt_driver2=None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+) -> None:
+    """Render high-level metric cards for fuel-decoupled tyre degradation."""
+    if not table_rows:
+        return
+
+    rows_d1 = [r for r in table_rows if r.get("driver") == driver1]
+    rows_d2 = [r for r in table_rows if r.get("driver") == driver2] if driver2 else []
+
+    def _calc_driver_summary(rows):
+        if not rows:
+            return None
+        true_degs = [r.get("true_deg_rate", r.get("deg_rate", 0.0)) for r in rows]
+        raw_degs = [r.get("raw_deg_rate", r.get("deg_rate", 0.0)) for r in rows]
+        mean_true = float(np.mean(true_degs)) if true_degs else 0.0
+        mean_raw = float(np.mean(raw_degs)) if raw_degs else 0.0
+        masking_offset = mean_true - mean_raw
+        return {
+            "mean_true": mean_true,
+            "mean_raw": mean_raw,
+            "masking_offset": masking_offset,
+            "stints_count": len(rows),
+        }
+
+    sum1 = _calc_driver_summary(rows_d1)
+    sum2 = _calc_driver_summary(rows_d2)
+
+    st.markdown("<div style='margin-top: 14px; margin-bottom: 8px;'>", unsafe_allow_html=True)
+    if driver2 and sum2:
+        col1, col2, col3, col4 = st.columns(4)
+        name1 = fmt_driver1(driver1) if fmt_driver1 else driver1
+        name2 = fmt_driver2(driver2) if fmt_driver2 else driver2
+
+        with col1:
+            st.metric(
+                label=f"🏎️ True Deg ({name1})",
+                value=f"{sum1['mean_true']:+.3f} s/lap" if sum1 else "N/A",
+                delta=f"Raw: {sum1['mean_raw']:+.3f} s/lap" if sum1 else None,
+                delta_color="inverse"
+            )
+        with col2:
+            st.metric(
+                label=f"🏎️ True Deg ({name2})",
+                value=f"{sum2['mean_true']:+.3f} s/lap" if sum2 else "N/A",
+                delta=f"Raw: {sum2['mean_raw']:+.3f} s/lap" if sum2 else None,
+                delta_color="inverse"
+            )
+        with col3:
+            st.metric(
+                label="⛽ Fuel Burn Effect",
+                value=f"-{fuel_effect:.3f} s/lap",
+                help="Lap time gained per lap due to fuel mass reduction"
+            )
+        with col4:
+            if sum1 and sum2:
+                delta_true = sum1["mean_true"] - sum2["mean_true"]
+                advantage_drv = name2 if delta_true > 0 else name1
+                st.metric(
+                    label="🏆 Tyre Wear Advantage",
+                    value=advantage_drv,
+                    delta=f"{abs(delta_true):.3f} s/lap lower wear",
+                    delta_color="normal"
+                )
+            else:
+                st.metric(label="🏆 Tyre Wear Advantage", value="N/A")
+    elif sum1:
+        col1, col2, col3, col4 = st.columns(4)
+        name1 = fmt_driver1(driver1) if fmt_driver1 else driver1
+        with col1:
+            st.metric(
+                label="🏎️ True Tyre Deg Rate",
+                value=f"{sum1['mean_true']:+.3f} s/lap",
+                help="Pace lost per lap purely to tyre degradation (fuel burn decoupled)"
+            )
+        with col2:
+            st.metric(
+                label="⏱️ Timing Screen (Raw) Deg",
+                value=f"{sum1['mean_raw']:+.3f} s/lap",
+                help="Apparent degradation slope including fuel burn-off gains"
+            )
+        with col3:
+            st.metric(
+                label="⛽ Fuel Burn Effect",
+                value=f"-{fuel_effect:.3f} s/lap",
+                help="Pace gained per lap from burning ~0.3 kg fuel"
+            )
+        with col4:
+            st.metric(
+                label="🎭 Fuel Masking Offset",
+                value=f"+{sum1['masking_offset']:+.3f} s/lap",
+                help="Amount of tyre degradation hidden by fuel mass loss"
+            )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def render_tyre_crossover_matrix(
     table_rows: list[dict],
     fmt_driver1,
@@ -1589,7 +1692,7 @@ def render_tyre_crossover_matrix(
 
     Displays a full-field breakdown per driver and per stint with:
     - Compound (with coloured dot)
-    - Degradation Rate (s/lap)
+    - Degradation Rate (s/lap, with True / Raw distinction if fuel decoupled)
     - Model type used (Quadratic / Linear)
     - Predicted Cliff Lap (TyreLife at +1.5 s pace drop)
     - Remaining Laps to cliff
@@ -1608,17 +1711,24 @@ def render_tyre_crossover_matrix(
         )
         return
 
+    is_decoupled = any(r.get("is_fuel_decoupled") for r in table_rows)
+    deg_col_title = "True Deg Rate (Raw)" if is_decoupled else "Deg Rate"
+
     st.markdown(
         "<div class='section-title'>🔮 Tyre Life & Crossover Prediction Matrix</div>",
         unsafe_allow_html=True,
     )
+    subtitle_fuel = (
+        "with fuel burn decoupled (True Mechanical Tyre Wear). "
+        if is_decoupled else ""
+    )
     st.markdown(
-        "<div style='font-size:13px; opacity:0.65; margin-bottom:14px;'>"
-        "Predicted lap at which tyre pace degrades by ≥ 1.5 s above stint base pace, "
-        "using quadratic thermal modelling (with linear fallback). "
-        "Remaining laps are calculated from last observed tyre age in the stint. "
-        "Pit window = cliff lap ± 3 laps."
-        "</div>",
+        f"<div style='font-size:13px; opacity:0.65; margin-bottom:14px;'>"
+        f"Predicted lap at which tyre pace degrades by ≥ 1.5 s above stint base pace {subtitle_fuel}"
+        f"using quadratic thermal modelling (with linear fallback). "
+        f"Remaining laps are calculated from last observed tyre age in the stint. "
+        f"Pit window = cliff lap ± 3 laps."
+        f"</div>",
         unsafe_allow_html=True,
     )
 
@@ -1635,22 +1745,22 @@ def render_tyre_crossover_matrix(
         return "🟢 Safe", "rgba(80,200,80,0.05)"
 
     header_html = (
-        "<div style='background:var(--secondary-background-color); "
-        "border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
-        "padding:16px 20px; margin-top:16px;'>"
-        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
-        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
-        "font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
-        "<th style='padding:5px 10px; text-align:left;'>Driver</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Stint</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Compound</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Deg Rate</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Model</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Cliff Lap (TyreLife)</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Remaining</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Pit Window</th>"
-        "<th style='padding:5px 10px; text-align:left;'>Status</th>"
-        "</tr></thead><tbody>"
+        f"<div style='background:var(--secondary-background-color); "
+        f"border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
+        f"padding:16px 20px; margin-top:16px;'>"
+        f"<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        f"<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
+        f"font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
+        f"<th style='padding:5px 10px; text-align:left;'>Driver</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Stint</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Compound</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>{deg_col_title}</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Model</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Cliff Lap (TyreLife)</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Remaining</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Pit Window</th>"
+        f"<th style='padding:5px 10px; text-align:left;'>Status</th>"
+        f"</tr></thead><tbody>"
     )
 
     body_html = ""
@@ -1678,13 +1788,19 @@ def render_tyre_crossover_matrix(
         pit_str = f"Lap {pit_low}–{pit_high}" if (pit_low is not None and pit_high is not None) else "—"
         rem_str = f"{remaining} laps" if remaining is not None else "—"
 
-        has_quad = row.get("quad_coeffs") if hasattr(row, "get") else None
-        # We don't store quad_coeffs directly in table_rows, but we infer from cliff quality
         model_badge = "Quadratic" if (remaining is not None and remaining >= 0) else "Linear"
 
         deg_rate = row.get("deg_rate", 0.0)
+        raw_deg = row.get("raw_deg_rate", deg_rate)
         deg_color = "#00e400" if deg_rate <= 0 else "#ff2200"
-        deg_str = f"{deg_rate:+.3f} s/lap"
+
+        if is_decoupled and row.get("is_fuel_decoupled"):
+            deg_str = (
+                f"<span style='font-weight:600; color:{deg_color};'>{deg_rate:+.3f}</span> "
+                f"<span style='font-size:11px; opacity:0.6;'>({raw_deg:+.3f})</span> s/lap"
+            )
+        else:
+            deg_str = f"<span style='font-weight:600; color:{deg_color};'>{deg_rate:+.3f} s/lap</span>"
 
         urgency_text, row_tint = _urgency(remaining)
         row_bg = row_tint if row_tint != "transparent" else (
@@ -1696,15 +1812,14 @@ def render_tyre_crossover_matrix(
             f"<td style='padding:7px 10px; font-weight:600; color:{drv_colour};'>{fmt_name}</td>"
             f"<td style='padding:7px 10px;'>Stint {row.get('stint', '—')}</td>"
             f"<td style='padding:7px 10px;'>{comp_dot}{comp.title()}</td>"
-            f"<td style='padding:7px 10px; font-weight:600; color:{deg_color};'>{deg_str}</td>"
+            f"<td style='padding:7px 10px;'>{deg_str}</td>"
             f"<td style='padding:7px 10px; font-size:11px; opacity:0.7;'>{model_badge}</td>"
             f"<td style='padding:7px 10px; font-weight:700;'>~{cliff_lap}</td>"
             f"<td style='padding:7px 10px;'>{rem_str}</td>"
             f"<td style='padding:7px 10px; font-size:12px;'>{pit_str}</td>"
             f"<td style='padding:7px 10px; font-weight:600;'>{urgency_text}</td>"
-            "</tr>"
+            f"</tr>"
         )
-
 
     st.markdown(
         header_html + body_html + "</tbody></table></div>",

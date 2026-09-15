@@ -17,7 +17,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Braking Efficiency & Trail-Braking Zone Analysis** ([Issue #148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)): High-precision braking telemetry around circuit turn apexes. Extracts longitudinal deceleration (G-force), initial braking distance (m before apex), peak deceleration (G), trail-braking release point, and brake-to-throttle transition time (ms), rendered across a stacked 3-subplot Plotly figure with comparative advantage callouts.
 - **High-Throughput Telemetry Data Exporter (CSV, Parquet, JSON)** ([Issue #139](https://github.com/parekhrohan21/fastf1_pitwall/issues/139)): A collapsible export panel beneath the telemetry charts with a dynamic format selector for **CSV**, **Apache Parquet (`.parquet`)**, and **structured JSON (`.json`)**. The exported file includes high-frequency channels (Distance, Speed, Throttle, Brake, RPM, Gear, DRS, X/Y/Z coordinates, Time, SessionTime), **Sector 1/2/3 times** (in seconds), and lap metadata (driver, lap number, lap time, compound).
 - **Interactive Telemetry Channel Toggle & Custom Trace Filtering** ([Issue #138](https://github.com/parekhrohan21/fastf1_pitwall/issues/138)): View combined or separate traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS, with an interactive multiselect toggle to filter and reorder channels on the fly with dynamic height scaling.
-- **Tyre Degradation Modeling & Predictive Crossover Matrix** ([Issue #81](https://github.com/parekhrohan21/fastf1_pitwall/issues/81), [Issue #137](https://github.com/parekhrohan21/fastf1_pitwall/issues/137)): A dedicated analysis section calculating OLS linear and quadratic regressions on valid flyer laps per stint. Plots a scatter chart of tyre age vs lap time with regression trendlines and dashed quadratic thermal curves. Automatically estimates a **Cliff Lap** (TyreLife lap at which pace degrades ≥ 1.5 s above baseline) and a **Pit Window** (cliff ± 3 laps), displayed in a full-field **Tyre Life & Crossover Prediction Matrix** table with urgency badges (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
+- **Tyre Degradation Modeling, Thermal Crossover & Fuel Burn Decoupler** ([Issue #81](https://github.com/parekhrohan21/fastf1_pitwall/issues/81), [Issue #137](https://github.com/parekhrohan21/fastf1_pitwall/issues/137), [Issue #151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)): A dedicated analysis section calculating OLS linear and quadratic regressions on valid flyer laps per stint. Features an interactive **Fuel Burn Decoupler** that removes artificial lap time gains from fuel mass reduction (~0.035 s/lap) to compute True Mechanical Tyre Wear and display true degradation rates, fuel masking offsets, and unmasked thermal cliff laps. Plots a scatter chart of tyre age vs lap time with regression trendlines and dashed quadratic thermal curves. Automatically estimates a **Cliff Lap** (TyreLife lap at which pace degrades ≥ 1.5 s above baseline) and a **Pit Window** (cliff ± 3 laps), displayed in a full-field **Tyre Life & Crossover Prediction Matrix** table with urgency badges (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
 - **Corner-by-Corner Analysis with Steering & DRS Telemetry** ([Issue #80](https://github.com/parekhrohan21/fastf1_pitwall/issues/80), [Issue #136](https://github.com/parekhrohan21/fastf1_pitwall/issues/136)): An advanced performance tab that fetches track layout coordinates via FastF1 to let you select a corner (e.g. Turn 1). Automatically calculates apex speed, braking points, max steering angle (°), and DRS activation status, plotting racing line overlays, speed profiles, steering wheel input curves, and DRS channel subplots in a 4-trace layout.
 - **Post-Race Debrief PDF Exporter** ([Issue #122](https://github.com/parekhrohan21/fastf1_pitwall/issues/122)): Capture the entire visual state of your analysis (Lap Time History, Tyre Stints, Gap to Leader, Position History) and export it as a clean, broadcast-style PDF report for easy offline sharing.
 - **Multi-Year Historical Lap Comparison** ([Issue #121](https://github.com/parekhrohan21/fastf1_pitwall/issues/121)): Enables multi-season telemetry comparisons for the same circuit across different technical regulation eras (e.g. 2024 ground-effect vs 2020 high-downforce era). Aligns distance-based telemetry to plot speed profile overlays (km/h) and continuous time delta curves (Δ seconds), displaying comparative metrics for Era Lap Time Delta, Top Speed, Minimum Apex Speed, and Full Throttle Ratio.
@@ -52,7 +52,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Connection Diagnostics & Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105)): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks.
 - **Design Origin Footer** ([Issue #72](https://github.com/parekhrohan21/fastf1_pitwall/issues/72), [Issue #75](https://github.com/parekhrohan21/fastf1_pitwall/issues/75)): Styled footer displaying `Made proudly in Great Britain 🇬🇧`.
 - **Modular Codebase Architecture** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`).
-- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **71 pytest unit and integration tests** across 13 dedicated test modules.
+- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **79 pytest unit and integration tests** across 14 dedicated test modules.
 - **High Performance**: FastF1 disk caching combined with Streamlit `@st.cache_data` keeps data processing instant after first load.
 
 ---
@@ -64,14 +64,15 @@ fastf1_pitwall/
 ├── app.py              # Main Streamlit entry point & orchestration
 ├── src/                # Modular source package
 │   ├── data/
-│   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass & telemetry exporters (CSV/Parquet/JSON)
+│   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass, fuel decoupler & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
-│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, braking, gears, speed traps)
+│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, braking, gears, speed traps, fuel decoupled deg)
 │   │   └── matplotlib.py # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
-│       └── components.py # UI layout components, metrics cards, map blocks & telemetry export panel
-├── tests/              # Pytest automated test suite (71 tests across 13 modules)
+│       └── components.py # UI layout components, metrics cards, map blocks, fuel decoupler cards & telemetry export panel
+├── tests/              # Pytest automated test suite (79 tests across 14 modules)
+│   ├── test_fuel_decoupled_tyre_deg.py # Pure mechanical tyre degradation & fuel burn decoupler
 │   ├── test_speed_trap.py             # Speed trap, intermediate velocity & radar metrics
 │   ├── test_gear_shifts.py            # Powertrain dynamics, shift detection & gear distributions
 │   ├── test_braking_analysis.py       # Braking dynamics, trail-braking & G-force metrics
@@ -125,7 +126,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (71 unit/integration tests across 13 modules). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (79 unit/integration tests across 14 modules). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -216,7 +217,7 @@ The app will install seamlessly onto your device with a custom 🏎 icon, openin
 7. **Fuel-Adjusted Pace Analysis & Qualifying Simulation** ([Issue #9](https://github.com/parekhrohan21/fastf1_pitwall/issues/9)) — Correct pace for burning fuel loads with the interactive sensitivity slider. Expand the **Simulated Qualifying Leaderboard** to see the field ranked on fuel-corrected median pace.
 8. **Tyre Stint Timeline & Pit Stop Summary Table** ([Issue #64](https://github.com/parekhrohan21/fastf1_pitwall/issues/64)) — Inspect Gantt-style horizontal stint bars and the detailed pit stop summary table showing stop lap, duration, and compound transitions.
 9. **Pit Strategy & Undercut / Overcut Simulator** ([Issue #117](https://github.com/parekhrohan21/fastf1_pitwall/issues/117)) — In compare mode, automatically detect adjacent pit cycles (within ±3 laps), view pre/post pit gaps, and analyze undercut/overcut success on the dedicated gap chart.
-10. **Tyre Degradation Modeling & Crossover Prediction Matrix** ([Issue #81](https://github.com/parekhrohan21/fastf1_pitwall/issues/81), [Issue #137](https://github.com/parekhrohan21/fastf1_pitwall/issues/137)) — Review linear and quadratic regression models, thermal cliff lap predictions (+1.5 s pace drop), remaining laps, and full-field urgency badges (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
+10. **Tyre Degradation Modeling, Crossover Matrix & Fuel Burn Decoupler** ([Issue #81](https://github.com/parekhrohan21/fastf1_pitwall/issues/81), [Issue #137](https://github.com/parekhrohan21/fastf1_pitwall/issues/137), [Issue #151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)) — Review linear and quadratic regression models, toggle fuel burn decoupling to isolate True Mechanical Tyre Wear from car weight loss, adjust fuel burn sensitivity slider, inspect true vs raw degradation rates and fuel masking offset cards, and track thermal cliff lap predictions (+1.5 s pace drop) in the full-field urgency matrix (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
 11. **Driver Consistency Index & Stint Pace Distribution** ([Issue #119](https://github.com/parekhrohan21/fastf1_pitwall/issues/119)) — Inspect driver lap time variance per stint, Consistency Score (0–100%), Clean Air Pace vs. Traffic Deficit (+s/lap), and interactive Plotly violin/boxplots.
 12. **Track Temperature & Weather Impact Correlation** ([Issue #120](https://github.com/parekhrohan21/fastf1_pitwall/issues/120)) — Explore the dual-axis chart overlaying Track Temperature (°C) on driver pace, with auto-detected Rain Crossover Windows and Pearson pace-heat sensitivity scores.
 13. **Braking Efficiency & Trail-Braking Zone Analysis** ([Issue #148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)) — Select any corner from the track selector to analyze entry braking dynamics. Inspect metric cards for Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point, and Brake-to-Throttle Transition Time (ms) alongside stacked Speed, Brake %, and Deceleration G-force profiles with later-braking advantage callouts.
@@ -296,7 +297,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **71 unit and integration tests** across 13 test modules should pass cleanly.
+All **79 unit and integration tests** across 14 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -352,7 +353,6 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 | **[#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)** | `Track Evolution & Grip Improvement Ramp Index` | Track & Weather Analytics | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
 | **[#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)** | `Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown` | Strategy & Pit Stops | Micro-sector decomposition of pit lane entry/exit delta, stationary stop duration, and net in-lap/out-lap pace deficit. |
 | **[#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)** | `Intra-Team Teammate Battle & Qualifying Delta Matrix` | Leaderboards & Analytics | Season-long teammate head-to-head qualifying delta matrix, median race pace comparison, and qualifying duel tally. |
-| **[#151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)** | `Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler` | Tyre Modeling & Strategy | Decoupling fuel mass burn-off (lap-by-lap weight reduction) from compound wear to isolate pure tyre degradation curves. |
 
 ---
 
@@ -360,6 +360,7 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)** | `Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler` | Tyre Modeling & Strategy | Decoupling fuel mass burn-off (lap-by-lap weight reduction) from compound wear to isolate pure tyre degradation curves, unmasked thermal cliff laps, and fuel masking offsets. |
 | **[#150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)** | `Speed Trap & Intermediate Velocity Radar Breakdown` | Telemetry / Radar | 4-axis polar velocity radar (`ST`, `I1`, `I2`, `FL`), constructor/engine benchmarks, classified Speed Trap Leaderboard, and DRS gain deltas. |
 | **[#149](https://github.com/parekhrohan21/fastf1_pitwall/issues/149)** | `Gear Shift Strategy & RPM Power Band Optimization` | Powertrain Dynamics | Dual-subplot engine RPM curve with shift markers, gear usage distribution (Gears 1–8), and tactical short-shift detection. |
 | **[#148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)** | `Braking Efficiency & Trail-Braking Zone Analysis` | Corner Dynamics | Longitudinal deceleration ($G$), braking distance, trail-braking release point, and 3-subplot braking dynamics profile. |
