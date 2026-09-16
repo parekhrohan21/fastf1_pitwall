@@ -201,14 +201,23 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_stints(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_tyre_deg_data(driver, laps_df)` | `driver, laps_df` |
+| `_build_fuel_decoupled_tyre_deg(driver, laps_df, fuel_effect, ...)` | `driver, laps_df, fuel_effect, compare, driver2` |
+| `_build_consistency_analysis(sess_k, laps_df, drivers)` | `sess_key, laps_df, drivers` |
+| `_build_weather_correlation_data(sess_k, laps_df, sess_obj, drivers)` | `sess_key, laps_df, sess_obj, drivers` |
+| `_build_multi_year_comparison(tel1, tel2, label1, label2, ...)` | `tel1, tel2, label1, label2, lap1_time_s, lap2_time_s` |
+| `_calculate_braking_metrics(df, apex_dist)` | `df, apex_dist` |
+| `_calculate_gear_shift_metrics(tel_df)` | `tel_df` |
+| `_calculate_speed_trap_metrics(sess_k, laps_df)` | `sess_key, laps_df` |
+| `_build_grid_heatmap_data(sess_k, laps_df, drivers, mode)` | `sess_key, laps_df, drivers, mode` |
+| `_build_race_control_messages(sess_k, sess_obj)` | `sess_key, sess_obj` |
+| `_build_export_csv(driver, tel_df, lap_obj)` | `driver, tel_df, lap_obj` |
+| `_build_export_parquet(driver, tel_df, lap_obj)` | `driver, tel_df, lap_obj` |
+| `_build_export_json(driver, tel_df, lap_obj)` | `driver, tel_df, lap_obj` |
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
-| `_build_consistency_analysis(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
-| `_build_weather_correlation_data(sess_k, laps_df, sess_obj)` | `sess_key, laps_df, sess_obj` |
-| `_build_multi_year_comparison(tel1, tel2, label1, label2, ...)` | `tel1, tel2, label1, label2, lap1_time_s, lap2_time_s` |
 
 `sess_key` is a string formatted as `"{year}_{gp}_{session_type}"` (e.g. `"2025_British Grand Prix_R"`).
 
@@ -528,7 +537,7 @@ _render_pit_stops()              ← Pit Stop Summary (HTML table)
         │
 build_undercut_chart()           ← Pit Strategy & Undercut Analysis (Plotly gap line chart + metrics)
         │
-build_tyre_deg_fig()             ← Tyre Degradation & Predictive Thermal Crossover Matrix
+build_tyre_deg_fig()             ← Tyre Degradation, Fuel Burn Decoupler & Predictive Thermal Crossover Matrix
         │
 _render_consistency_section()    ← Driver Consistency Index & Stint Pace Distribution
         │
@@ -588,7 +597,7 @@ Each chart section follows the same pattern:
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
 | Pit Strategy & Undercut | Plotly | — (inline logic) | `build_undercut_chart` | `_all_laps1`, `_all_laps2` |
-| Tyre Degradation + Crossover Matrix | Plotly + HTML | `_build_tyre_deg_data` | `build_tyre_deg_fig` + `render_tyre_crossover_matrix` | `laps_df` filtered by driver; linear & quadratic OLS + cliff lap prediction. |
+| Tyre Degradation, Fuel Burn Decoupler & Crossover Matrix | Plotly + HTML | `_build_tyre_deg_data`, `_build_fuel_decoupled_tyre_deg` | `build_tyre_deg_fig` + `render_tyre_crossover_matrix` + `render_fuel_decoupled_deg_metrics` | `laps_df` filtered by driver; linear & quadratic OLS + fuel burn decoupling (~0.035 s/lap) + unmasked cliff prediction. |
 | Driver Consistency | Plotly | `_build_consistency_analysis` | `build_stint_consistency_fig` | `laps_df` filtered by driver; std dev, clean air vs traffic, violin/boxplot stint distribution. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
 | Export Telemetry (CSV, Parquet, JSON) | CSV/Parquet/JSON | `_build_export_csv`, `_build_export_parquet`, `_build_export_json` | `render_telemetry_export_panel` | `tel_df` + `lap_obj` metadata & sector times |
@@ -882,9 +891,10 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (71 tests across 13 modules):
+The tests reside in the `tests/` directory (79 tests across 14 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_fuel_decoupled_tyre_deg.py`: Pure mechanical tyre wear modeling, race fuel burn decoupling ($t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$), True Degradation Rate ($\Delta\text{s/lap}$), fuel masking offsets, unmasked thermal cliff lap prediction, and compare mode overlays.
 - `tests/test_speed_trap.py`: Speed trap extraction (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`), DRS delta calculation, constructor and power unit velocity benchmarks, polar radar profile, and classified leaderboard generation.
 - `tests/test_gear_shifts.py`: Powertrain dynamics, shift detection (upshifts/downshifts), tactical short-shift and redline identification, distance-weighted gear distributions, and 2-subplot figure generation.
 - `tests/test_braking_analysis.py`: Braking dynamics, longitudinal deceleration $G$-force, initial braking point, peak decel, trail-braking release, and 3-subplot figure generation.
@@ -980,6 +990,14 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Braking Efficiency & Trail-Braking Zone Analysis**~~ | ✅ **Done** — Added dedicated braking dynamics and trail-braking analytics in `_calculate_braking_metrics`, `build_braking_efficiency_fig`, and `_render_braking_analysis_section`. |
 | ~~High~~ | ~~**Gear Shift Strategy & RPM Power Band Optimization**~~ | ✅ **Done** — Added powertrain telemetry analytics in `_calculate_gear_shift_metrics`, `build_gear_shift_fig`, and `_render_gear_analysis_section`. Detects tactical short-shifts, redline shifts, and gear distributions with Plotly dual-subplot visualizations. |
 | ~~High~~ | ~~**Speed Trap & Intermediate Velocity Radar Breakdown**~~ | ✅ **Done** — Added grid-wide speed trap and intermediate velocity analytics in `_calculate_speed_trap_metrics`, `build_speed_trap_radar_fig`, `build_speed_trap_bar_fig`, and `_render_speed_trap_section`. Evaluates ST, I1, I2, FL, DRS deltas, and constructor/PU hierarchies with polar radars and grouped bars. |
+| ~~High~~ | ~~**Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler**~~ | ✅ **Done** — Added pure mechanical tyre wear decoupling in `_build_fuel_decoupled_tyre_deg`, `build_tyre_deg_fig`, and `render_fuel_decoupled_deg_metrics`. Removes race fuel mass burn gains (~0.035 s/lap) to isolate true degradation rate, fuel masking offsets, and unmasked thermal cliff laps. |
+| High | **Clean Air vs Dirty Air Pace Impact & Overtaking Analysis** ([#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)) | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. |
+| Medium | **Full Grand Prix Weekend Multi-Session Progression Tracker** ([#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)) | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
+| Medium | **Corner Exit Traction & Throttle Pick-Up Aggression Analysis** ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
+| Medium | **Track Evolution & Grip Improvement Ramp Index** ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
+| High | **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | Micro-sector decomposition of pit lane entry/exit delta, stationary stop duration, and net in-lap/out-lap pace deficit. |
+| Medium | **Intra-Team Teammate Battle & Qualifying Delta Matrix** ([#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)) | Season-long teammate head-to-head qualifying delta matrix, median race pace comparison, and qualifying duel tally. |
+| Medium | **Repository Cleanup & Code Hygiene** ([#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)) | Streamline file tree, remove redundant code or AI slop, and keep the repository minimal and lean. |
 
 
 
@@ -993,7 +1011,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
 - **Issue #151** (`feat: Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler`): Added mechanical tyre wear decoupling by removing race fuel burn mass gains (~0.3 kg/lap ≈ 0.035 s/lap) from lap times. Implemented `_build_fuel_decoupled_tyre_deg` in `src/data/loader.py`, calculating $t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$ (normalized to zero-fuel qualifying weight). Fits both linear OLS regression and degree-2 quadratic polynomial curves on decoupled pace to calculate True Degradation Rate ($\Delta\text{s/lap}$) and unmasked thermal cliff laps. Updated `build_tyre_deg_fig` in `src/charts/plotly.py` with dynamic fuel decoupling support, dual pace hover tooltips (True Pace, Raw Lap Time, Fuel Offset), and decoupled table statistics. Added `render_fuel_decoupled_deg_metrics` to `src/ui/components.py` (True Deg Rate, Raw Deg Rate, Fuel Effect, Fuel Masking Offset) and enhanced `render_tyre_crossover_matrix` with true vs raw rate indicators. In `app.py`, added interactive fuel decoupling toggle and sensitivity slider (0.010–0.070 s/lap). Added comprehensive automated test suite (8 unit tests in `tests/test_fuel_decoupled_tyre_deg.py`; 79 total suite tests passing across 14 modules).
-- **Issue #150** (`feat: Speed Trap & Intermediate Velocity Radar Breakdown (ST, I1, I2, FL)`): Added grid-wide speed trap and intermediate micro-sector velocity analytics. Extracts maximum speeds at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line) from `sess.laps`. Detects DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$). Maps constructors to official Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) and aggregates top speeds. Renders a 4-axis polar radar chart (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), 5 top metric cards, and a classified Speed Trap Leaderboard table in `_render_speed_trap_section`. 7/7 unit tests pass in `tests/test_speed_trap.py` (71 total suite tests passing).
+- **Issue #150** (`feat: Speed Trap & Intermediate Velocity Radar Breakdown (ST, I1, I2, FL)`): Added grid-wide speed trap and intermediate micro-sector velocity analytics. Extracts maximum speeds at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line) from `sess.laps`. Detects DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$). Maps constructors to official Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) and aggregates top speeds. Renders a 4-axis polar radar chart (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), 5 top metric cards, and a classified Speed Trap Leaderboard table in `_render_speed_trap_section`. 7/7 unit tests pass in `tests/test_speed_trap.py` (71 total suite tests passing at time of release; now 79 tests across 14 modules).
 - **Issue #149** (`feat: Gear Shift Strategy & RPM Power Band Optimization`): Added powertrain dynamics and gear shift strategy telemetry analytics. Extracts engine RPM, gear selection (`nGear` / `Gear`), speed, and throttle application across lap distance to detect every individual upshift and downshift event. Detects tactical short-shifts (< 11,000 RPM under > 60% throttle) used for rear traction / tyre management and redline shifts (≥ 11,800 RPM), and computes distance-weighted gear usage distributions (% in gears 1 through 8). Renders a dual-subplot Plotly figure (`build_gear_shift_fig` for Engine RPM vs Track Distance with shift markers & horizontal gear distribution bar chart) and an interactive comparison section (`_render_gear_analysis_section`) with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM in operating band > 2000 RPM, Tactical Short-Shifts, and Mean Upshift RPM) and automated comparative driver advantage summaries. 6/6 unit tests pass in `tests/test_gear_shifts.py`.
 - **Issue #148** (`feat: Braking Efficiency & Trail-Braking Zone Analysis`): Added dedicated braking dynamics and trail-braking telemetry analytics. Slices corner telemetry around circuit apexes, calculating longitudinal Deceleration (G-force = $\Delta v / (\Delta t \cdot 9.81)$) with 3-point moving average smoothing. Automatically detects Initial Braking Distance (m before apex), Peak Deceleration (G), Trail-Brake Release Point (m to apex), Trail-Braking Zone Length, and Brake-to-Throttle Transition Time (ms). Renders a stacked 3-subplot Plotly figure (`build_braking_efficiency_fig` for Speed, Brake %, and Deceleration G) and interactive comparison section (`_render_braking_analysis_section`) with driver formatting and later-braking strategic advantage callouts. 6/6 unit tests pass in `tests/test_braking_analysis.py`.
 - **PR #158** / **Issue #139** (`feat: High-Throughput Telemetry Data Exporter (Parquet & JSON)`): Added multi-format export support under the Telemetry section for Apache Parquet (`.parquet`) and structured JSON (`.json`) alongside CSV. Refactored telemetry export panel into `render_telemetry_export_panel` in `src/ui/components.py`, implemented `_build_export_telemetry_df`, `_build_export_parquet`, and `_build_export_json` in `src/data/loader.py`, added `pyarrow>=14.0.0` to requirements, and added full test suite (9 unit tests in `tests/test_telemetry_export.py`).

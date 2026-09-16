@@ -65,11 +65,11 @@ The application logic is modularised into individual packages under `src/` to se
 | --- | --- |
 | `app.py` | Streamlit entry point. Initialises page configurations, loads UI sidebars, invokes data builders, and renders layout blocks. |
 | `src/data/loader.py` | Configures FastF1 cache directory, runs Cloudflare/CloudFront TLS request monkey-patching, hosts all `@st.cache_data` session fetching and statistical data-builders (`_build_consistency_analysis`, `_build_tyre_deg_data`, `_build_fuel_decoupled_tyre_deg`, `_build_grid_heatmap_data`, etc.), provides multi-format telemetry exporters (`_build_export_csv`, `_build_export_parquet`, `_build_export_json`), computes corner braking dynamics (`_calculate_braking_metrics`), calculates powertrain gear strategy metrics (`_calculate_gear_shift_metrics`), and calculates speed trap / micro-sector velocity metrics (`_calculate_speed_trap_metrics`). |
-| `src/ui/styles.py` | Housed with team/compound color constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
+| `src/ui/styles.py` | Housed with team/compound colour constants, PWA manifest injections, CSS classes, transition JS scripts, and dark/light stylesheet togglers. |
 | `src/ui/components.py` | Contains all Streamlit UI cards, weather grids, pit stop/ideal lap section details, final official classification tables, consistency section (`_render_consistency_section`), weather correlation section (`_render_weather_correlation_section`), multi-year comparison section (`_render_multi_year_comparison_section`), tyre crossover prediction matrix (`render_tyre_crossover_matrix`), fuel-decoupled degradation metrics (`render_fuel_decoupled_deg_metrics`), grid heatmap section (`_render_grid_heatmap_section`), PDF export section (`render_export_section`), multi-format telemetry export panel (`render_telemetry_export_panel`), braking dynamics section (`_render_braking_analysis_section`), gear shift strategy section (`_render_gear_analysis_section`), speed trap breakdown section (`_render_speed_trap_section`), layout maps block tabs, and footer. |
 | `src/charts/plotly.py` | Constructs and returns interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, tyre degradation (linear + quadratic thermal curves + cliff vlines + fuel burn decoupling), stint consistency violin/boxplots (`build_stint_consistency_fig`), weather correlation dual-axis (`build_weather_correlation_fig`), multi-year comparison speed delta (`build_multi_year_comparison_fig`), animated replays, 4-subplot corner analysis (`build_corner_fig`), 3-subplot braking efficiency overlays (`build_braking_efficiency_fig`), 2-subplot gear shift & RPM distributions (`build_gear_shift_fig`), 4-axis speed trap polar radars (`build_speed_trap_radar_fig`), and constructor/PU grouped bar benchmarks (`build_speed_trap_bar_fig`). |
 | `src/charts/matplotlib.py` | Creates static Matplotlib figures for 6-channel telemetry profiles and speed delta overlays. |
-| `tests/` | Pytest unit and integration tests (e.g. `test_fuel_decoupled_tyre_deg.py`, `test_speed_trap.py`, `test_gear_shifts.py`, `test_braking_analysis.py`, `test_telemetry_export.py`, `test_telemetry_channels.py`, `test_tyre_crossover.py`, `test_cf.py`). |
+| `tests/` | Pytest unit and integration tests (e.g. `test_fuel_decoupled_tyre_deg.py`, `test_speed_trap.py`, `test_gear_shifts.py`, `test_braking_analysis.py`, `test_telemetry_export.py`, `test_telemetry_channels.py`, `test_tyre_crossover.py`, `test_corner_analysis.py`). |
 
 ---
 
@@ -195,12 +195,14 @@ An advanced tab `"🔍  Corner Analysis"` is provided inside `render_maps_block`
 
 ### 16. Tyre Degradation Modeling and Pace Drop-off
 
-To model pace drop-off and tyre wear characteristics:
+To model pace drop-off, tyre wear characteristics, and true mechanical degradation:
 
 - The data builder function `_build_tyre_deg_data` filters for valid flyer laps using `IsAccurate == True` and filters out yellow flags/safety car/virtual safety car periods.
 - Linear regression (OLS) is performed using `np.polyfit` for stints with at least 4 valid laps to compute stint slope (degradation rate in seconds lost/gained per lap) and base pace.
-- Laps are plotted on a Plotly scatter chart, overlaying stint OLS regression trendlines. Points and lines are coloured in driver team constructor colours (circular points and solid lines for primary driver, square points and dashed lines for secondary driver).
-- Stint lengths and degradation rates are summarised in an HTML table, colour-coded to highlight positive or negative degradation trends.
+- Non-linear quadratic regression is fitted for stints with ≥ 5 laps to estimate thermal cliff laps (+1.5 s pace drop-off threshold) and pit windows (cliff ± 3 laps).
+- **Fuel Burn Decoupler** (`_build_fuel_decoupled_tyre_deg`): Race fuel burn-off (~0.3 kg/lap ≈ 0.035 s/lap) naturally offsets tyre degradation on timing screens. The decoupler normalises each lap to a zero-fuel reference weight: $t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$. This unmasks True Mechanical Tyre Wear ($\text{Slope}_{\text{true}} = \text{Slope}_{\text{raw}} + \alpha$), unmasked thermal cliff laps, and fuel masking offsets.
+- Laps are plotted on a Plotly scatter chart, overlaying stint OLS regression trendlines, quadratic thermal curves, and cliff vlines. Points and lines are coloured in driver team constructor colours (circular points and solid lines for primary driver, square points and dashed lines for secondary driver). Dual hover tooltips provide both True Pace and Raw Lap Time.
+- Stint lengths and degradation rates are summarised in an HTML table, colour-coded to highlight positive or negative degradation trends, accompanied by `render_fuel_decoupled_deg_metrics` cards and the full-field `render_tyre_crossover_matrix`.
 
 ### 17. Monolithic app.py Refactoring & Modular Structure
 
@@ -208,13 +210,13 @@ To resolve technical debt and maintainability issues:
 
 - The monolithic `app.py` has been split into a modular directory structure under the `src/` directory.
 - `src/data/loader.py` handles F1 data caching, proxy bypass patching, and raw telemetry wrangling.
-- `src/ui/styles.py` encapsulates stylesheet injections, custom CSS classes, and team/tyre color constants.
+- `src/ui/styles.py` encapsulates stylesheet injections, custom CSS classes, and team/tyre colour constants.
 - `src/ui/components.py` encapsulates user interface panels, final classification tables, weather widgets, live status banners, and map layout wrappers.
 - `src/charts/plotly.py` hosts interactive Plotly chart builders (strategy timelines, gap charts, race replays, corner analysis subplots).
 - `src/charts/matplotlib.py` hosts static Matplotlib telemetry and speed delta charts.
 - **Decision #18**: *Real-Time Live Timing Stream Integration (`fastf1.livetiming`)* — Added support for recording and parsing live SignalR WebSocket streams via background threads (`start_live_recorder`, `stop_live_recorder`, `get_live_recorder_status`) and `load_live_session`. Included broadcast-grade live banner indicators and auto-refresh controls while adhering strictly to British English spellings across all comments, documentation, and user interfaces.
 - **Decision #19**: *Dark Mode & Theme Injection Fix (`inject_styles`)* — Ensure `inject_styles()` is called early in `app.py` on every render cycle so theme state (`dark_mode`) and CSS variables take effect immediately across all landing, sidebar, and telemetry states.
-- **Decision #20**: *Multi-Driver Grid Analysis & Heatmaps (`_build_grid_heatmap_data`)* — Added multi-driver grid analytics matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using interactive Plotly heatmaps with dynamic height calculation and broadcast color scales.
+- **Decision #20**: *Multi-Driver Grid Analysis & Heatmaps (`_build_grid_heatmap_data`)* — Added multi-driver grid analytics matrix supporting `Sector Split Deltas`, `Lap-by-Lap Pace Heatmap`, and `Top Speed Matrix` across 3 to 20 drivers using interactive Plotly heatmaps with dynamic height calculation and broadcast colour scales.
 - **Decision #21**: *Continuous Time Delta per Meter Chart (`build_time_delta_chart`)* — Added a continuous time delta chart using `fastf1.utils.delta_time` below the speed delta chart in compare mode to visualise exact time gained/lost (in seconds) vs distance (meters).
 - **Decision #22**: *Pit Strategy & Undercut / Overcut Simulator (`build_undercut_chart`)* — Added automated strategic battle analysis pairing adjacent pit stops (±3 laps) between two drivers in compare mode, calculating pre/post pit gaps, and rendering a Plotly pit window gap chart with outcome metrics cards.
 - **Decision #23**: *Race Control Incident Timeline & Flag Overlays (`_build_race_control_messages`, `_add_flag_zones`)* — Parses `sess.race_control_messages` into a classified DataFrame (SC, VSC, Red, Yellow, Clear, Investigation). Overlays semi-transparent flag zone bands on both the Lap Time History and Gap to Leader Plotly charts via `add_vrect`. Adds a searchable, filterable **Race Control Feed** table section below the Gap chart.
