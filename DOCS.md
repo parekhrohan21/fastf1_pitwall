@@ -40,6 +40,7 @@
 29. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
 30. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
 31. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
+32. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
 
 ---
 
@@ -215,6 +216,7 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_export_json(driver, tel_df, lap_obj)` | `driver, tel_df, lap_obj` |
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
+| `_build_teammate_battle_data(sess_k, laps_df, sess_obj)` | `sess_key, laps_df, sess_obj` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
@@ -562,6 +564,8 @@ _render_speed_trap_section()     ← Speed Trap & Intermediate Velocity Radar Br
         │
 _render_ideal_lap_section()      ← Ideal Lap vs Actual Lap — best S1+S2+S3 per driver, delta cards + full table
         │
+_render_teammate_battle_section() ← Intra-Team Teammate Battle & Qualifying Delta Matrix (KPI cards, diverging bar chart, classified table)
+        │
 _render_grid_heatmap_section()   ← Multi-Driver Grid Analysis & Heatmaps (Sectors, Laps, Speed)
         │
 _render_gap_to_leader_section()  ← Gap to Leader (Plotly line chart)
@@ -605,6 +609,7 @@ Each chart section follows the same pattern:
 | Time Delta | Matplotlib | `build_time_delta_chart` | `src/charts/matplotlib.py` | `lap1`, `lap2` Laps |
 | Fastest Laps Leaderboard | HTML | `_build_leaderboard` | `_render_leaderboard` | `laps_df` grouped by driver |
 | Ideal Lap vs Actual Lap | HTML | `_build_ideal_lap` | `_render_ideal_lap_section` | `laps_df` sector times per driver |
+| Intra-Team Teammate Battle Matrix | Plotly + HTML | `_build_teammate_battle_data` | `build_teammate_matrix_fig` + `_render_teammate_battle_section` | `sess_obj.results` and `laps_df`; teammate pairing, qualifying $\Delta\text{s}$ and $\Delta\%$, S1/S2/S3 splits, clean-air race pace. |
 | Gap to Leader | Plotly | `_build_gap_data` | `_render_gap_to_leader_section` | `laps_df` cumulative time |
 | Race Control Feed | st.dataframe + vrect | `_build_race_control_messages` | inline | `sess.race_control_messages` |
 | Race Position | Plotly | `_build_position_data` | `_render_position_section` | `laps_df["Position"]` per driver |
@@ -891,9 +896,10 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (79 tests across 14 modules):
+The tests reside in the `tests/` directory (87 tests across 15 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_teammate_battle.py`: Automated intra-team teammate comparison engine, qualifying deltas ($\Delta\text{s}$ and $\Delta\%$), sector dominance resolution, clean-air race pace filtering, summary KPIs, single-driver edge cases, and diverging matrix figures.
 - `tests/test_fuel_decoupled_tyre_deg.py`: Pure mechanical tyre wear modeling, race fuel burn decoupling ($t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$), True Degradation Rate ($\Delta\text{s/lap}$), fuel masking offsets, unmasked thermal cliff lap prediction, and compare mode overlays.
 - `tests/test_speed_trap.py`: Speed trap extraction (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`), DRS delta calculation, constructor and power unit velocity benchmarks, polar radar profile, and classified leaderboard generation.
 - `tests/test_gear_shifts.py`: Powertrain dynamics, shift detection (upshifts/downshifts), tactical short-shift and redline identification, distance-weighted gear distributions, and 2-subplot figure generation.
@@ -996,7 +1002,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | Medium | **Corner Exit Traction & Throttle Pick-Up Aggression Analysis** ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
 | Medium | **Track Evolution & Grip Improvement Ramp Index** ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
 | High | **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | Micro-sector decomposition of pit lane entry/exit delta, stationary stop duration, and net in-lap/out-lap pace deficit. |
-| Medium | **Intra-Team Teammate Battle & Qualifying Delta Matrix** ([#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)) | Season-long teammate head-to-head qualifying delta matrix, median race pace comparison, and qualifying duel tally. |
+| ~~Medium~~ | ~~**Intra-Team Teammate Battle & Qualifying Delta Matrix**~~ ([#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)) | ✅ **Done** — Added automated teammate comparison engine across all constructors in `_build_teammate_battle_data`, horizontal diverging bar chart in `build_teammate_matrix_fig`, and top 4 KPI cards + classified matrix in `_render_teammate_battle_section`. |
 | Medium | **Repository Cleanup & Code Hygiene** ([#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)) | Streamline file tree, remove redundant code or AI slop, and keep the repository minimal and lean. |
 
 
@@ -1010,6 +1016,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #152** (`feat: Intra-Team Teammate Battle & Qualifying Delta Matrix`): Added automated intra-team teammate comparison engine across all 10 constructors for Qualifying and Race sessions. Implemented `_build_teammate_battle_data` in `src/data/loader.py`, extracting driver pairings from `sess.results`, qualifying best lap deltas ($\Delta\text{s}$ and $\Delta\%$), sector-by-sector personal best splits (S1/S2/S3), sector dominance tallies, and clean-air median race pace (filtering in/out laps, SC/VSC periods, and >107% outliers). Implemented `build_teammate_matrix_fig` in `src/charts/plotly.py`, rendering a horizontal diverging bar chart coloured by constructor livery with a zero parity baseline and custom hovercards. Added `_render_teammate_battle_section` to `src/ui/components.py` with 4 top KPI cards (Closest battle, Largest delta, Grid median gap, Sector dominance leader), an interactive mode toggle (`Qualifying` vs `Race Pace`), and an Intra-Team Head-to-Head Classified Matrix table with sector badges and constructor badge highlights. Integrated into `app.py` after the Ideal Lap section. Added 8 unit tests in `tests/test_teammate_battle.py` (87 total suite tests passing across 15 modules).
 - **Issue #151** (`feat: Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler`): Added mechanical tyre wear decoupling by removing race fuel burn mass gains (~0.3 kg/lap ≈ 0.035 s/lap) from lap times. Implemented `_build_fuel_decoupled_tyre_deg` in `src/data/loader.py`, calculating $t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$ (normalized to zero-fuel qualifying weight). Fits both linear OLS regression and degree-2 quadratic polynomial curves on decoupled pace to calculate True Degradation Rate ($\Delta\text{s/lap}$) and unmasked thermal cliff laps. Updated `build_tyre_deg_fig` in `src/charts/plotly.py` with dynamic fuel decoupling support, dual pace hover tooltips (True Pace, Raw Lap Time, Fuel Offset), and decoupled table statistics. Added `render_fuel_decoupled_deg_metrics` to `src/ui/components.py` (True Deg Rate, Raw Deg Rate, Fuel Effect, Fuel Masking Offset) and enhanced `render_tyre_crossover_matrix` with true vs raw rate indicators. In `app.py`, added interactive fuel decoupling toggle and sensitivity slider (0.010–0.070 s/lap). Added comprehensive automated test suite (8 unit tests in `tests/test_fuel_decoupled_tyre_deg.py`; 79 total suite tests passing across 14 modules).
 - **Issue #150** (`feat: Speed Trap & Intermediate Velocity Radar Breakdown (ST, I1, I2, FL)`): Added grid-wide speed trap and intermediate micro-sector velocity analytics. Extracts maximum speeds at `SpeedST` (Speed Trap), `SpeedI1` (Sector 1 Intermediate), `SpeedI2` (Sector 2 Intermediate), and `SpeedFL` (Finish Line) from `sess.laps`. Detects DRS-assisted vs non-DRS speed trap entries to compute DRS aerodynamic boost delta ($\Delta \text{km/h}$). Maps constructors to official Power Unit manufacturers (`Ferrari`, `Mercedes`, `Red Bull Powertrains`, `Renault`) and aggregates top speeds. Renders a 4-axis polar radar chart (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), 5 top metric cards, and a classified Speed Trap Leaderboard table in `_render_speed_trap_section`. 7/7 unit tests pass in `tests/test_speed_trap.py` (71 total suite tests passing at time of release; now 79 tests across 14 modules).
 - **Issue #149** (`feat: Gear Shift Strategy & RPM Power Band Optimization`): Added powertrain dynamics and gear shift strategy telemetry analytics. Extracts engine RPM, gear selection (`nGear` / `Gear`), speed, and throttle application across lap distance to detect every individual upshift and downshift event. Detects tactical short-shifts (< 11,000 RPM under > 60% throttle) used for rear traction / tyre management and redline shifts (≥ 11,800 RPM), and computes distance-weighted gear usage distributions (% in gears 1 through 8). Renders a dual-subplot Plotly figure (`build_gear_shift_fig` for Engine RPM vs Track Distance with shift markers & horizontal gear distribution bar chart) and an interactive comparison section (`_render_gear_analysis_section`) with 4 metric cards (Total Shifts with upshift/downshift breakdown, Average RPM in operating band > 2000 RPM, Tactical Short-Shifts, and Mean Upshift RPM) and automated comparative driver advantage summaries. 6/6 unit tests pass in `tests/test_gear_shifts.py`.
@@ -1504,6 +1511,83 @@ $$\text{Slope}_{\text{true}} = \text{Slope}_{\text{raw}} + \alpha$$
 
 ---
 
+## 32. Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture
+
+The **Intra-Team Teammate Battle & Qualifying Delta Matrix** module (`src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `app.py`) provides an automated head-to-head comparison engine across all Formula 1 constructors for Qualifying and Race sessions.
+
+### Mathematical Formulation & Analytics
+
+1. **Intra-Team Driver Pairing**:
+   - Drivers are grouped by constructor (`TeamName` or fallback mapping) from official session classification (`sess_obj.results`) or session laps (`laps_df`).
+   - If a constructor fields more than 2 drivers (e.g. reserve driver FP1 substitutions), drivers are ordered by total laps completed or classified finishing position to select the primary pair. Teams with only 1 driver are preserved with informative single-driver status.
+
+2. **Qualifying Delta**:
+   - For drivers $A$ and $B$ with best qualifying lap times $t_A$ and $t_B$ (where $t_A \le t_B$):
+     $$\Delta t = t_B - t_A \quad (\text{seconds})$$
+     $$\Delta\% = \left(\frac{t_B - t_A}{t_A}\right) \times 100 \quad (\%)$$
+   - The faster teammate ($A$) serves as the benchmark ($0.000\text{ s}$), and the teammate deficit is recorded as $+\Delta t$.
+
+3. **Sector Dominance Resolution**:
+   - Personal best micro-sector times ($S_{1, \text{min}}, S_{2, \text{min}}, S_{3, \text{min}}$) are computed for each driver.
+   - For each sector $i \in \{1, 2, 3\}$, driver $A$ wins the sector if $S_{i, A} < S_{i, B}$.
+   - The sector tally is formatted as $W_A \text{–} W_B$ (e.g. `3-0`, `2-1`), identifying single-lap sector mastery.
+
+4. **Clean-Air Race Pace Calculation**:
+   - In Race sessions, raw lap averages are distorted by pit stops, tyre degradation offsets, and traffic.
+   - The engine filters laps where:
+     - `IsAccurate == True`
+     - Neither `PitInTime` nor `PitOutTime` is present
+     - `TrackStatus` is clear (excluding safety car / VSC / red flag codes `"4|5|6|7"`)
+     - $t_{\text{lap}} \le 1.07 \times \text{Median}(t_{\text{laps, driver}})$ (filtering incidents or spins)
+   - Median clean-air lap pace is evaluated for both drivers, and the net pace delta is computed.
+
+5. **Edge Cases Handled**:
+   - Incomplete sessions or DNFs where a driver set no valid lap time (delta marked as `N/A`).
+   - Sessions where sector times are unavailable (sector split columns omitted gracefully).
+   - Sprint or practice sessions without standard Q1/Q2/Q3 cutoffs (uses fastest personal lap).
+
+### Data Layer (`_build_teammate_battle_data` — `src/data/loader.py`)
+
+- Decorated with `@st.cache_data(show_spinner=False, ttl=3600)`.
+- **Signature**: `_build_teammate_battle_data(sess_k: str, laps_df: pd.DataFrame, sess_obj=None) -> Dict[str, Any]`
+- Returns a structured dictionary containing:
+  - `pairings`: List of team matchup objects containing constructor name, team colour, driver identifiers, lap times, gap in seconds and percentage, sector personal bests, and race pace medians.
+  - `summary`: High-level KPI metrics dictionary:
+    - `closest_battle`: Constructor and delta for the narrowest gap on the grid.
+    - `largest_delta`: Constructor and delta for the biggest intra-team advantage.
+    - `grid_median_gap`: Median intra-team qualifying gap across all paired teams.
+    - `sector_dominance_leader`: Driver with the most comprehensive sector sweep.
+
+### Visualisation Layer (`build_teammate_matrix_fig` — `src/charts/plotly.py`)
+
+- Renders a grid-wide horizontal diverging bar chart via `build_teammate_matrix_fig(battle_data: Dict[str, Any], mode: str = "Qualifying")`.
+- **Diverging Axis**:
+  - Center line ($x = 0$) represents teammate parity.
+  - Bars diverge towards the driver holding the lap time or race pace advantage.
+  - Coloured using constructor livery colours from `TEAM_COLORS` (with dark/light theme adjustments).
+- **Interactive Tooltips**:
+  - Displays Driver 1 vs Driver 2 comparison, lap times, delta ($\Delta\text{s}$ and $\Delta\%$), and sector head-to-head score.
+- **Graceful Fallback**:
+  - Displays clean centered placeholder text if no valid teammate pairings exist for the session.
+
+### UI Layer (`_render_teammate_battle_section` — `src/ui/components.py`)
+
+- **Top KPI Cards**:
+  - `🎯 Closest Battle`: Team name, driver codes, and millisecond margin.
+  - `⚡ Largest Advantage`: Outperforming driver and gap.
+  - `📊 Grid Median Delta`: Average benchmark gap between teammates.
+  - `🏆 Sector Dominance`: Driver with clean sweeps across S1, S2, and S3.
+- **Interactive Mode Selector**:
+  - Radio buttons to toggle between `"Qualifying"` (single-lap delta) and `"Race Pace"` (clean-air median pace).
+- **Classified Head-to-Head Table**:
+  - Custom styled HTML table with constructor accent borders.
+  - Driver names formatted via `_fmt_driver(drv)`.
+  - Sector badges with colour-coded pills (`#22c55e` for sweeps, `#eab308` for tight splits).
+  - Delta callouts with colour highlights indicating advantage size.
+
+---
+
 *Last updated: September 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+
 
 

@@ -2527,3 +2527,368 @@ def _calculate_speed_trap_metrics(sess_k: str, laps_df: pd.DataFrame) -> dict:
         return fallback
 
 
+# ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_teammate_battle_data(
+    sess_k: str,
+    laps_df: pd.DataFrame | None,
+    _session_obj=None
+) -> dict | None:
+    """
+    Extract and compute intra-team teammate head-to-head comparison analytics.
+    Pairs drivers by constructor, calculating qualifying lap gaps (seconds & percentage),
+    sector split advantages (S1, S2, S3), clean-air median race pace deltas, and finishing positions.
+    """
+    fallback = {
+        "pairs": [],
+        "summary": {
+            "closest_battle": None,
+            "largest_delta": None,
+            "median_delta_s": 0.0,
+            "median_delta_pct": 0.0,
+            "most_dominant_driver": None,
+            "total_teams": 0,
+        },
+        "has_data": False,
+    }
+    if laps_df is None or laps_df.empty:
+        return fallback
+
+    try:
+        laps = laps_df.copy()
+        if "Driver" not in laps.columns:
+            return fallback
+
+        # 1. Resolve Driver <-> Team mappings and results metadata
+        results_df = None
+        if _session_obj is not None and hasattr(_session_obj, "results") and _session_obj.results is not None and not _session_obj.results.empty:
+            results_df = pd.DataFrame(_session_obj.results).copy()
+
+        # Build driver metadata lookup
+        driver_meta: dict[str, dict] = {}
+        if results_df is not None and not results_df.empty:
+            for _, r in results_df.iterrows():
+                abbr = str(r.get("Abbreviation", "")).strip()
+                num = str(r.get("DriverNumber", "")).strip()
+                full_name = str(r.get("FullName", "")).strip() or abbr or num
+                team = str(r.get("TeamName", "")).strip() or str(r.get("Team", "")).strip() or "Unknown"
+                pos = r.get("Position", np.nan)
+                grid = r.get("GridPosition", np.nan)
+                
+                # Check for Q1, Q2, Q3 times
+                q_best_s = None
+                for q_col in ["Q3", "Q2", "Q1"]:
+                    if q_col in r and pd.notna(r[q_col]):
+                        try:
+                            val = r[q_col]
+                            if hasattr(val, "total_seconds"):
+                                q_sec = val.total_seconds()
+                            else:
+                                q_sec = pd.to_timedelta(val).total_seconds()
+                            if q_sec and q_sec > 0:
+                                q_best_s = q_sec
+                                break
+                        except Exception:
+                            pass
+
+                entry = {
+                    "abbr": abbr,
+                    "number": num,
+                    "name": full_name,
+                    "team": team,
+                    "pos": int(pos) if pd.notna(pos) else None,
+                    "grid": int(grid) if pd.notna(grid) else None,
+                    "q_best_s": q_best_s,
+                }
+                if abbr:
+                    driver_meta[abbr] = entry
+                if num:
+                    driver_meta[num] = entry
+
+        # Group laps by Team and Driver
+        if "Team" not in laps.columns and results_df is not None:
+            # Map Team from results into laps
+            team_map = {}
+            for k, v in driver_meta.items():
+                if v.get("team"):
+                    team_map[k] = v["team"]
+            laps["Team"] = laps["Driver"].astype(str).map(team_map).fillna("Unknown")
+        elif "Team" not in laps.columns:
+            laps["Team"] = "Unknown"
+
+        # Unique teams (excluding Unknown / empty)
+        teams = [t for t in laps["Team"].dropna().unique() if t and t != "Unknown"]
+        if not teams and results_df is not None:
+            teams = [t for t in results_df["TeamName"].dropna().unique() if t and t != "Unknown"]
+
+        if not teams:
+            return fallback
+
+        # Helper to convert timedelta to float seconds
+        def _to_sec(td) -> float | None:
+            if td is None or pd.isna(td):
+                return None
+            try:
+                if hasattr(td, "total_seconds"):
+                    s = float(td.total_seconds())
+                else:
+                    s = float(pd.to_timedelta(td).total_seconds())
+                return s if s > 0 else None
+            except Exception:
+                return None
+
+        # Pre-calculate per-driver lap & sector stats
+        laps["LapTime_s"] = laps["LapTime"].apply(_to_sec)
+        laps["S1_s"] = laps["Sector1Time"].apply(_to_sec) if "Sector1Time" in laps.columns else None
+        laps["S2_s"] = laps["Sector2Time"].apply(_to_sec) if "Sector2Time" in laps.columns else None
+        laps["S3_s"] = laps["Sector3Time"].apply(_to_sec) if "Sector3Time" in laps.columns else None
+
+        driver_stats: dict[str, dict] = {}
+        for drv, grp in laps.groupby("Driver"):
+            drv_str = str(drv)
+            valid_laps = grp.dropna(subset=["LapTime_s"])
+            best_lap = float(valid_laps["LapTime_s"].min()) if not valid_laps.empty else None
+            best_s1 = float(grp["S1_s"].dropna().min()) if "S1_s" in grp and not grp["S1_s"].dropna().empty else None
+            best_s2 = float(grp["S2_s"].dropna().min()) if "S2_s" in grp and not grp["S2_s"].dropna().empty else None
+            best_s3 = float(grp["S3_s"].dropna().min()) if "S3_s" in grp and not grp["S3_s"].dropna().empty else None
+
+            # Clean flyer laps for race pace
+            clean_laps = grp.copy()
+            if "PitInTime" in clean_laps.columns:
+                clean_laps = clean_laps[clean_laps["PitInTime"].isna()]
+            if "PitOutTime" in clean_laps.columns:
+                clean_laps = clean_laps[clean_laps["PitOutTime"].isna()]
+            if "TrackStatus" in clean_laps.columns:
+                clean_laps = clean_laps[~clean_laps["TrackStatus"].astype(str).str.contains("4|5|6|7", regex=True)]
+
+            clean_laps = clean_laps.dropna(subset=["LapTime_s"])
+            if not clean_laps.empty:
+                med_t = clean_laps["LapTime_s"].median()
+                clean_laps = clean_laps[clean_laps["LapTime_s"] <= med_t * 1.25]
+
+            med_race_pace = float(clean_laps["LapTime_s"].median()) if not clean_laps.empty else None
+
+            driver_stats[drv_str] = {
+                "best_lap_s": best_lap,
+                "best_s1": best_s1,
+                "best_s2": best_s2,
+                "best_s3": best_s3,
+                "median_race_pace": med_race_pace,
+                "clean_laps_count": len(clean_laps),
+                "total_laps": len(grp),
+            }
+
+        pairs = []
+        valid_deltas_s = []
+        valid_deltas_pct = []
+
+        for team in sorted(teams):
+            team_laps = laps[laps["Team"] == team]
+            team_drvs = team_laps["Driver"].astype(str).unique().tolist()
+
+            # Also check results for drivers from this team
+            if results_df is not None and not results_df.empty:
+                t_col = "TeamName" if "TeamName" in results_df.columns else "Team"
+                r_drvs = results_df[results_df[t_col] == team]
+                for _, r_row in r_drvs.iterrows():
+                    cand = str(r_row.get("Abbreviation", "")).strip() or str(r_row.get("DriverNumber", "")).strip()
+                    if cand and cand not in team_drvs:
+                        team_drvs.append(cand)
+
+            if len(team_drvs) < 2:
+                continue
+
+            # If more than 2 drivers, select top 2 by classification or laps count
+            if len(team_drvs) > 2:
+                def _drv_rank(d: str) -> tuple[int, int]:
+                    meta = driver_meta.get(d, {})
+                    pos = meta.get("pos") if meta.get("pos") is not None else 99
+                    st = driver_stats.get(d, {})
+                    l_count = st.get("total_laps", 0)
+                    return (pos, -l_count)
+
+                team_drvs = sorted(team_drvs, key=_drv_rank)[:2]
+
+            d_a, d_b = team_drvs[0], team_drvs[1]
+            st_a = driver_stats.get(d_a, {})
+            st_b = driver_stats.get(d_b, {})
+            meta_a = driver_meta.get(d_a, {})
+            meta_b = driver_meta.get(d_b, {})
+
+            # Determine best qualifying lap (favor Q results if available, else best flyer)
+            q_a = meta_a.get("q_best_s") or st_a.get("best_lap_s")
+            q_b = meta_b.get("q_best_s") or st_b.get("best_lap_s")
+
+            # Determine who is driver 1 (the faster/higher-ranked driver)
+            # Default to d_a as driver 1 unless d_b is demonstrably faster
+            invert = False
+            if q_a is not None and q_b is not None:
+                if q_b < q_a:
+                    invert = True
+            elif meta_a.get("pos") is not None and meta_b.get("pos") is not None:
+                if meta_b["pos"] < meta_a["pos"]:
+                    invert = True
+            elif st_a.get("best_lap_s") is not None and st_b.get("best_lap_s") is not None:
+                if st_b["best_lap_s"] < st_a["best_lap_s"]:
+                    invert = True
+
+            if invert:
+                d1, d2 = d_b, d_a
+                st1, st2 = st_b, st_a
+                meta1, meta2 = meta_b, meta_a
+                q1, q2 = q_b, q_a
+            else:
+                d1, d2 = d_a, d_b
+                st1, st2 = st_a, st_b
+                meta1, meta2 = meta_a, meta_b
+                q1, q2 = q_a, q_b
+
+            # Compute deltas
+            qual_delta_s = None
+            qual_delta_pct = None
+            if q1 is not None and q2 is not None:
+                qual_delta_s = round(float(q2 - q1), 3)
+                if q1 > 0:
+                    qual_delta_pct = round(float((qual_delta_s / q1) * 100.0), 2)
+                valid_deltas_s.append(abs(qual_delta_s))
+                if qual_delta_pct is not None:
+                    valid_deltas_pct.append(abs(qual_delta_pct))
+
+            # Sector comparison
+            s1_1, s1_2 = st1.get("best_s1"), st2.get("best_s1")
+            s2_1, s2_2 = st1.get("best_s2"), st2.get("best_s2")
+            s3_1, s3_2 = st1.get("best_s3"), st2.get("best_s3")
+
+            def _comp_s(val1, val2) -> tuple[str, float | None]:
+                if val1 is None or val2 is None:
+                    return ("TIE", None)
+                diff = round(val2 - val1, 3)
+                if diff > 0.001:
+                    return (d1, diff)
+                elif diff < -0.001:
+                    return (d2, abs(diff))
+                return ("TIE", 0.0)
+
+            s1_adv, s1_delta = _comp_s(s1_1, s1_2)
+            s2_adv, s2_delta = _comp_s(s2_1, s2_2)
+            s3_adv, s3_delta = _comp_s(s3_1, s3_2)
+
+            # Dominance tally
+            d1_sector_wins = sum(1 for adv in [s1_adv, s2_adv, s3_adv] if adv == d1)
+            d2_sector_wins = sum(1 for adv in [s1_adv, s2_adv, s3_adv] if adv == d2)
+
+            # Race pace delta
+            p1 = st1.get("median_race_pace")
+            p2 = st2.get("median_race_pace")
+            race_pace_delta_s = None
+            if p1 is not None and p2 is not None:
+                race_pace_delta_s = round(float(p2 - p1), 3)
+
+            # Pos delta
+            pos1 = meta1.get("pos")
+            pos2 = meta2.get("pos")
+            pos_delta = (pos2 - pos1) if (pos1 is not None and pos2 is not None) else None
+
+            # Team colour
+            t_colour = get_constructor_colour(team) or "#00E5FF"
+
+            def _fmt_lap(s: float | None) -> str:
+                if s is None or pd.isna(s):
+                    return "—"
+                m = int(s // 60)
+                sec = s % 60
+                return f"{m}:{sec:06.3f}" if m > 0 else f"{sec:.3f}s"
+
+            pairs.append({
+                "team": team,
+                "team_colour": t_colour,
+                "driver1": {
+                    "code": d1,
+                    "name": meta1.get("name", d1),
+                    "pos": pos1,
+                    "grid": meta1.get("grid"),
+                    "best_lap_s": q1,
+                    "best_lap_str": _fmt_lap(q1),
+                    "s1": s1_1,
+                    "s2": s2_1,
+                    "s3": s3_1,
+                    "median_race_pace": p1,
+                    "median_race_pace_str": _fmt_lap(p1),
+                    "clean_laps_count": st1.get("clean_laps_count", 0),
+                },
+                "driver2": {
+                    "code": d2,
+                    "name": meta2.get("name", d2),
+                    "pos": pos2,
+                    "grid": meta2.get("grid"),
+                    "best_lap_s": q2,
+                    "best_lap_str": _fmt_lap(q2),
+                    "s1": s1_2,
+                    "s2": s2_2,
+                    "s3": s3_3 if (s3_3 := st2.get("best_s3")) is not None else None,
+                    "median_race_pace": p2,
+                    "median_race_pace_str": _fmt_lap(p2),
+                    "clean_laps_count": st2.get("clean_laps_count", 0),
+                },
+                "faster_driver": d1,
+                "trailing_driver": d2,
+                "qual_delta_s": qual_delta_s,
+                "qual_delta_pct": qual_delta_pct,
+                "s1_advantage": s1_adv,
+                "s1_delta": s1_delta,
+                "s2_advantage": s2_adv,
+                "s2_delta": s2_delta,
+                "s3_advantage": s3_adv,
+                "s3_delta": s3_delta,
+                "d1_sector_wins": d1_sector_wins,
+                "d2_sector_wins": d2_sector_wins,
+                "sector_dominance": f"{d1} ({d1_sector_wins}–{d2_sector_wins})",
+                "race_pace_delta_s": race_pace_delta_s,
+                "pos_delta": pos_delta,
+                "has_race_data": bool(p1 is not None and p2 is not None),
+                "has_qual_data": bool(qual_delta_s is not None),
+            })
+
+        if not pairs:
+            return fallback
+
+        # Sort pairs by constructor ranking or delta
+        pairs.sort(key=lambda p: (
+            p["driver1"]["pos"] if p["driver1"]["pos"] is not None else 99,
+            p["qual_delta_s"] if p["qual_delta_s"] is not None else 99
+        ))
+
+        # Grid summary calculations
+        closest_battle = None
+        largest_delta = None
+
+        pairs_with_qual = [p for p in pairs if p["qual_delta_s"] is not None]
+        if pairs_with_qual:
+            closest_battle = min(pairs_with_qual, key=lambda p: abs(p["qual_delta_s"]))
+            largest_delta = max(pairs_with_qual, key=lambda p: abs(p["qual_delta_s"]))
+
+        # Most dominant driver (most sector wins & largest delta)
+        most_dominant = None
+        if pairs_with_qual:
+            most_dominant = max(pairs_with_qual, key=lambda p: (p["d1_sector_wins"], p["qual_delta_s"] or 0))
+
+        median_delta_s = round(float(np.median(valid_deltas_s)), 3) if valid_deltas_s else 0.0
+        median_delta_pct = round(float(np.median(valid_deltas_pct)), 2) if valid_deltas_pct else 0.0
+
+        return {
+            "pairs": pairs,
+            "summary": {
+                "closest_battle": closest_battle,
+                "largest_delta": largest_delta,
+                "median_delta_s": median_delta_s,
+                "median_delta_pct": median_delta_pct,
+                "most_dominant_driver": most_dominant,
+                "total_teams": len(pairs),
+            },
+            "has_data": True,
+        }
+    except Exception:
+        return fallback
+
+

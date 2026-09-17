@@ -13,14 +13,14 @@ from src.data.loader import (
     _build_weather_correlation_data, _build_multi_year_comparison,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_gear_shift_metrics,
-    _calculate_speed_trap_metrics
+    _calculate_speed_trap_metrics, _build_teammate_battle_data
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig,
-    build_speed_trap_radar_fig, build_speed_trap_bar_fig
+    build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -2232,5 +2232,245 @@ def _render_speed_trap_section(
     </div>
     """
     st.markdown(table_html, unsafe_allow_html=True)
+
+
+# ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
+
+def _render_teammate_battle_section(
+    sess_k: str,
+    laps_df: pd.DataFrame | None,
+    _sess_obj=None,
+    highlight_driver1: str | None = None,
+    highlight_driver2: str | None = None,
+    colour1: str = "#00E5FF",
+    colour2: str = "#FF8000",
+    compare: bool = False,
+    fmt_func=None
+):
+    """Render the Teammate Head-to-Head Battle & Qualifying Delta Matrix section."""
+    if laps_df is None or laps_df.empty:
+        st.warning("No lap data available for Teammate Battle breakdown.")
+        return
+
+    battle_data = _build_teammate_battle_data(sess_k, laps_df, _sess_obj)
+    if not battle_data or not battle_data.get("has_data") or not battle_data.get("pairs"):
+        st.info("ℹ️ Teammate battle data is not available for this session.")
+        return
+
+    pairs = battle_data["pairs"]
+    summary = battle_data.get("summary", {})
+
+    # Top KPI Cards (4 Columns)
+    st.markdown("##### Intra-Team Grid Benchmarks & Battle Summary")
+    c1, c2, c3, c4 = st.columns(4)
+
+    # 1. Closest Battle
+    cb = summary.get("closest_battle")
+    if cb:
+        cb_team = cb.get("team", "—")
+        cb_d1 = cb.get("faster_driver", "")
+        cb_d2 = cb.get("trailing_driver", "")
+        cb_val = cb.get("qual_delta_s", 0.0)
+        cb_pct = cb.get("qual_delta_pct", 0.0)
+        c1.markdown(f"""
+        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🎯 Closest Teammate Gap</div>
+          <div style='font-size:18px; font-weight:700; color:#51cf66; margin:2px 0;'>+{cb_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({cb_pct:.2f}%)</span></div>
+          <div style='font-size:12px; color:#ddd; font-weight:600;'>{cb_team}</div>
+          <div style='font-size:11px; color:#aaa;'>{cb_d1} vs {cb_d2}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        c1.markdown("<div style='font-size:12px; color:#aaa;'>Closest Gap: —</div>", unsafe_allow_html=True)
+
+    # 2. Largest Delta
+    ld = summary.get("largest_delta")
+    if ld:
+        ld_team = ld.get("team", "—")
+        ld_d1 = ld.get("faster_driver", "")
+        ld_d2 = ld.get("trailing_driver", "")
+        ld_val = ld.get("qual_delta_s", 0.0)
+        ld_pct = ld.get("qual_delta_pct", 0.0)
+        c2.markdown(f"""
+        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🚀 Largest Teammate Gap</div>
+          <div style='font-size:18px; font-weight:700; color:#ff6b6b; margin:2px 0;'>+{ld_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({ld_pct:.2f}%)</span></div>
+          <div style='font-size:12px; color:#ddd; font-weight:600;'>{ld_team}</div>
+          <div style='font-size:11px; color:#aaa;'>{ld_d1} over {ld_d2}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        c2.markdown("<div style='font-size:12px; color:#aaa;'>Largest Gap: —</div>", unsafe_allow_html=True)
+
+    # 3. Grid Median Delta
+    med_s = summary.get("median_delta_s", 0.0)
+    med_pct = summary.get("median_delta_pct", 0.0)
+    tot_teams = summary.get("total_teams", len(pairs))
+    c3.markdown(f"""
+    <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+      <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⏱️ Grid Median Gap</div>
+      <div style='font-size:18px; font-weight:700; color:#00E5FF; margin:2px 0;'>{med_s:.3f}s <span style='font-size:12px; opacity:0.8;'>({med_pct:.2f}%)</span></div>
+      <div style='font-size:12px; color:#ddd;'>Across {tot_teams} Constructors</div>
+      <div style='font-size:11px; color:#aaa;'>Average Intra-Team Spread</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 4. Sector Dominance Leader
+    md = summary.get("most_dominant_driver")
+    if md:
+        md_team = md.get("team", "")
+        md_d1 = md.get("faster_driver", "")
+        md_wins = md.get("d1_sector_wins", 0)
+        c4.markdown(f"""
+        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⚡ Sector Dominance Leader</div>
+          <div style='font-size:18px; font-weight:700; color:#ffd700; margin:2px 0;'>{md_d1} <span style='font-size:13px;'>({md_wins}/3 Sectors)</span></div>
+          <div style='font-size:12px; color:#ddd; font-weight:600;'>{md_team}</div>
+          <div style='font-size:11px; color:#aaa;'>Full Sector Superiority</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        c4.markdown("<div style='font-size:12px; color:#aaa;'>Dominance Leader: —</div>", unsafe_allow_html=True)
+
+    st.write("")
+
+    # Mode Toggle
+    has_race = any(p.get("has_race_data") for p in pairs)
+    has_qual = any(p.get("has_qual_data") for p in pairs)
+
+    mode_options = []
+    if has_qual:
+        mode_options.append("Qualifying Lap Delta")
+    if has_race:
+        mode_options.append("Race Pace Delta")
+    if not mode_options:
+        mode_options = ["Qualifying Lap Delta"]
+
+    col_toggle, col_spacer = st.columns([2, 4])
+    with col_toggle:
+        mode_sel = st.radio(
+            "Comparison Mode:",
+            mode_options,
+            horizontal=True,
+            key=f"teammate_battle_mode_{sess_k}"
+        )
+
+    # Diverging Bar Chart
+    chart_mode = "Race Pace" if "Race" in mode_sel else "Qualifying"
+    fig = build_teammate_matrix_fig(battle_data, mode=chart_mode)
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+    # Intra-Team Head-to-Head Classified Matrix Table
+    st.markdown("##### Intra-Team Head-to-Head Classified Matrix")
+
+    hl_drivers = [d for d in [highlight_driver1, highlight_driver2] if d]
+    rows_html = ""
+
+    for p in pairs:
+        team = p.get("team", "Unknown")
+        t_col = p.get("team_colour", "#00E5FF")
+        d1 = p.get("driver1", {})
+        d2 = p.get("driver2", {})
+
+        c1_code = d1.get("code", "")
+        c2_code = d2.get("code", "")
+        c1_name = d1.get("name", c1_code)
+        c2_name = d2.get("name", c2_code)
+
+        is_hl = (c1_code in hl_drivers or c2_code in hl_drivers)
+        hl_border = f"border-left: 4px solid {t_col};" if is_hl else "border-left: 4px solid transparent;"
+        bg_col = f"background:rgba({hex_to_rgb(t_col)}, 0.12);" if is_hl else ""
+
+        # Format times and deltas
+        q_gap_s = p.get("qual_delta_s")
+        q_gap_pct = p.get("qual_delta_pct")
+
+        if q_gap_s is not None:
+            gap_str = f"+{q_gap_s:.3f}s"
+            pct_str = f"+{q_gap_pct:.2f}%" if q_gap_pct is not None else "—"
+        else:
+            gap_str = "—"
+            pct_str = "—"
+
+        # Sector indicators
+        def _sector_badge(sector_num: int) -> str:
+            adv = p.get(f"s{sector_num}_advantage")
+            delta = p.get(f"s{sector_num}_delta")
+            if adv == c1_code:
+                return f"<span style='background:rgba(81,207,102,0.18); color:#51cf66; padding:2px 6px; border-radius:4px; font-weight:600;'>{c1_code} (-{delta:.3f}s)</span>"
+            elif adv == c2_code:
+                return f"<span style='background:rgba(255,107,107,0.18); color:#ff6b6b; padding:2px 6px; border-radius:4px; font-weight:600;'>{c2_code} (-{delta:.3f}s)</span>"
+            return "<span style='opacity:0.5;'>TIE</span>"
+
+        s1_html = _sector_badge(1)
+        s2_html = _sector_badge(2)
+        s3_html = _sector_badge(3)
+
+        # Race pace & Pos
+        race_pace_s = p.get("race_pace_delta_s")
+        if race_pace_s is not None:
+            if race_pace_s >= 0:
+                race_str = f"<span style='color:#51cf66;'>{c1_code} (-{race_pace_s:.3f} s/lap)</span>"
+            else:
+                race_str = f"<span style='color:#ff6b6b;'>{c2_code} (-{abs(race_pace_s):.3f} s/lap)</span>"
+        else:
+            race_str = "<span style='opacity:0.4;'>—</span>"
+
+        pos1_str = f"P{d1.get('pos')}" if d1.get("pos") is not None else "—"
+        pos2_str = f"P{d2.get('pos')}" if d2.get("pos") is not None else "—"
+
+        rows_html += f"""
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {hl_border}'>
+          <td style='padding:9px 12px; font-weight:600; color:{t_col};'>
+            <span style='display:inline-block; width:10px; height:10px; border-radius:2px; background:{t_col}; margin-right:6px;'></span>
+            {team}
+          </td>
+          <td style='padding:9px 12px;'>
+            <b>{c1_code}</b> <span style='opacity:0.6; font-size:11px;'>({d1.get('best_lap_str', '—')})</span>
+          </td>
+          <td style='padding:9px 12px;'>
+            <b>{c2_code}</b> <span style='opacity:0.6; font-size:11px;'>({d2.get('best_lap_str', '—')})</span>
+          </td>
+          <td style='padding:9px 12px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>
+            {gap_str}
+          </td>
+          <td style='padding:9px 12px; text-align:center; font-family:monospace; color:#aaa;'>
+            {pct_str}
+          </td>
+          <td style='padding:9px 12px; font-size:11px;'>
+            {s1_html} {s2_html} {s3_html}
+          </td>
+          <td style='padding:9px 12px; font-size:12px; text-align:center;'>
+            {pos1_str} vs {pos2_str}
+          </td>
+          <td style='padding:9px 12px; font-size:12px;'>
+            {race_str}
+          </td>
+        </tr>
+        """
+
+    tbl_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:9px 12px; text-align:left;'>Constructor</th>
+          <th style='padding:9px 12px; text-align:left;'>Teammate 1 (Advantage)</th>
+          <th style='padding:9px 12px; text-align:left;'>Teammate 2</th>
+          <th style='padding:9px 12px; text-align:center;'>Delta (s)</th>
+          <th style='padding:9px 12px; text-align:center;'>Delta (%)</th>
+          <th style='padding:9px 12px; text-align:left;'>Sector Advantage (S1 / S2 / S3)</th>
+          <th style='padding:9px 12px; text-align:center;'>Finish Pos</th>
+          <th style='padding:9px 12px; text-align:left;'>Race Pace Edge</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(tbl_html, unsafe_allow_html=True)
+
 
 

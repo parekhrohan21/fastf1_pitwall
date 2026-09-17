@@ -2083,3 +2083,150 @@ def build_speed_trap_bar_fig(
     return fig
 
 
+# ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
+
+def build_teammate_matrix_fig(
+    teammate_data: dict,
+    mode: str = "Qualifying"
+) -> go.Figure | None:
+    """
+    Construct a horizontal diverging bar chart of intra-team teammate deltas across constructors.
+    Supports mode='Qualifying' (single-lap gap) and mode='Race Pace' (median clean-air pace delta).
+    """
+    if not teammate_data or not teammate_data.get("has_data"):
+        return None
+
+    pairs = teammate_data.get("pairs", [])
+    if not pairs:
+        return None
+
+    teams = []
+    deltas = []
+    colours = []
+    text_labels = []
+    customdata = []
+
+    for p in pairs:
+        t_name = p.get("team", "Unknown")
+        t_col = p.get("team_colour", "#00E5FF")
+        d1 = p.get("driver1", {})
+        d2 = p.get("driver2", {})
+
+        if mode == "Race Pace":
+            val = p.get("race_pace_delta_s")
+            if val is None:
+                continue
+            faster_drv = d1.get("code") if val >= 0 else d2.get("code")
+            trailing_drv = d2.get("code") if val >= 0 else d1.get("code")
+            val_abs = abs(val)
+            pct_str = "—"
+            bar_text = f"{faster_drv} (-{val_abs:.3f} s/lap)"
+        else:
+            val = p.get("qual_delta_s")
+            if val is None:
+                continue
+            faster_drv = p.get("faster_driver", d1.get("code", "D1"))
+            trailing_drv = p.get("trailing_driver", d2.get("code", "D2"))
+            val_abs = abs(val)
+            pct = p.get("qual_delta_pct")
+            pct_str = f"{pct:.2f}" if pct is not None else "0.0"
+            bar_text = f"{faster_drv} (-{val_abs:.3f}s | -{pct_str}%)"
+
+        teams.append(t_name)
+        deltas.append(val_abs)
+        colours.append(t_col)
+        text_labels.append(bar_text)
+
+        customdata.append([
+            faster_drv,
+            trailing_drv,
+            pct_str,
+            f"{p.get('s1_advantage')} (+{p.get('s1_delta', 0.0):.3f}s)",
+            f"{p.get('s2_advantage')} (+{p.get('s2_delta', 0.0):.3f}s)",
+            f"{p.get('s3_advantage')} (+{p.get('s3_delta', 0.0):.3f}s)",
+            p.get("sector_dominance", "—"),
+            d1.get("median_race_pace_str", "—"),
+            d2.get("median_race_pace_str", "—"),
+            d1.get("pos", "—"),
+            d2.get("pos", "—"),
+            d1.get("best_lap_str", "—"),
+            d2.get("best_lap_str", "—"),
+        ])
+
+    if not teams:
+        return None
+
+    # Reverse list so top constructor appears at top of Y axis
+    teams.reverse()
+    deltas.reverse()
+    colours.reverse()
+    text_labels.reverse()
+    customdata.reverse()
+
+    fig = go.Figure()
+
+    if mode == "Race Pace":
+        htemplate = (
+            "<b>%{y}</b><br>"
+            "Faster Race Pace: <b>%{customdata[0]}</b> (%{customdata[7]})<br>"
+            "Trailing Pace: %{customdata[1]} (%{customdata[8]})<br>"
+            "Pace Advantage: <b>-%{x:.3f} s/lap</b><br>"
+            "Race Positions: P%{customdata[9]} vs P%{customdata[10]}<extra></extra>"
+        )
+        x_title = "Median Race Pace Advantage (s/lap)"
+    else:
+        htemplate = (
+            "<b>%{y}</b><br>"
+            "Faster Teammate: <b>%{customdata[0]}</b> (%{customdata[11]})<br>"
+            "Trailing Teammate: %{customdata[1]} (%{customdata[12]})<br>"
+            "Qualifying Gap: <b>-%{x:.3f}s</b> (-%{customdata[2]}%)<br>"
+            "Sector Dominance: %{customdata[6]}<br>"
+            "S1: %{customdata[3]} | S2: %{customdata[4]} | S3: %{customdata[5]}<extra></extra>"
+        )
+        x_title = "Qualifying Lap Time Advantage (Seconds)"
+
+    fig.add_trace(go.Bar(
+        y=teams,
+        x=deltas,
+        orientation="h",
+        marker=dict(
+            color=colours,
+            line=dict(color="rgba(255,255,255,0.2)", width=1),
+        ),
+        text=text_labels,
+        textposition="outside",
+        textfont=dict(size=11, color="#ffffff"),
+        cliponaxis=False,
+        customdata=customdata,
+        hovertemplate=htemplate,
+    ))
+
+    max_delta = max(deltas) if deltas else 1.0
+    x_max = max_delta * 1.35 if max_delta > 0 else 1.0
+
+    chart_height = max(360, len(teams) * 40 + 60)
+
+    fig.update_layout(
+        height=chart_height,
+        margin=dict(l=140, r=90, t=30, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title_text=x_title,
+            range=[0, x_max],
+            gridcolor="rgba(128,128,128,0.2)",
+            zeroline=True,
+            zerolinecolor="rgba(128,128,128,0.5)",
+            zerolinewidth=1.5,
+        ),
+        yaxis=dict(
+            tickfont=dict(size=12, color="#ffffff"),
+            gridcolor="rgba(128,128,128,0.1)",
+        ),
+        showlegend=False,
+    )
+
+    return fig
+
+
+
