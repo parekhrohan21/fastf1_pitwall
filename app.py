@@ -27,7 +27,8 @@ from src.data.loader import (
     _build_leaderboard, _build_ideal_lap, _build_gap_data, _build_position_data,
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
     get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request,
-    _build_race_control_messages, _build_export_csv, _build_export_parquet, _build_export_json
+    _build_race_control_messages, _build_export_csv, _build_export_parquet, _build_export_json,
+    _build_teammate_battle_data
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
@@ -39,7 +40,7 @@ from src.ui.components import (
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_gear_analysis_section,
-    _render_speed_trap_section
+    _render_speed_trap_section, _render_teammate_battle_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -2010,6 +2011,32 @@ else:
     _ideal_df = _build_ideal_lap(sess_key, _all_laps1)
     _render_ideal_lap_section(_ideal_df, [driver1] + ([driver2] if compare and driver2 else []),
                               [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
+
+# ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
+st.markdown("<div class='section-title'>Intra-Team Teammate Battle & Qualifying Delta Matrix</div>", unsafe_allow_html=True)
+if sess2 is not None:
+    tab_tb1, tab_tb2 = st.tabs([f"Session 1 Teammate Battles ({year1})", f"Session 2 Teammate Battles ({year2})"])
+    with tab_tb1:
+        _render_teammate_battle_section(
+            sess_key, _all_laps1, _sess_obj=sess,
+            highlight_driver1=driver1, highlight_driver2=driver2 if compare else None,
+            colour1=colour1, colour2=colour2 if compare else None,
+            compare=compare, fmt_func=_fmt_driver1
+        )
+    with tab_tb2:
+        _render_teammate_battle_section(
+            sess_key2, _all_laps2, _sess_obj=sess2,
+            highlight_driver1=driver2, highlight_driver2=None,
+            colour1=colour2, colour2=None,
+            compare=False, fmt_func=_fmt_driver2
+        )
+else:
+    _render_teammate_battle_section(
+        sess_key, _all_laps1, _sess_obj=sess,
+        highlight_driver1=driver1, highlight_driver2=driver2 if compare else None,
+        colour1=colour1, colour2=colour2 if compare else None,
+        compare=compare, fmt_func=_fmt_driver1
+    )
 
 
 
