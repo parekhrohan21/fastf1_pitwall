@@ -2,7 +2,7 @@
 
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry from any Formula 1 session since 2018.
 
-Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, braking dynamics, gear shift strategies, speed trap velocity radars, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
+Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6 telemetry channels** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, intra-team teammate battles, braking dynamics, gear shift strategies, speed trap velocity radars, fastest laps leaderboard, track maps, full race replays, and detailed lap/weather summaries.
 
 ---
 
@@ -31,8 +31,6 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Real-Time Live Timing Mode** ([Issue #84](https://github.com/parekhrohan21/fastf1_pitwall/issues/84)): Stream live timing and telemetry via FastF1 SignalR WebSocket client with disk packet recording and auto-refresh intervals during active F1 race weekends.
 - **AWS-Style Mini-Sector Speed Map** ([Issue #78](https://github.com/parekhrohan21/fastf1_pitwall/issues/78)): In Compare Mode, the track map is dynamically divided into dozens of 200m mini-sectors based on distance telemetry, coloured according to the driver who carried the highest average speed through that exact section.
 - **Driver Input Track Map**: A dedicated map mode visualising driver foot pedal telemetry (Green for 100% Throttle, Red for Braking, Yellow for Coasting). Supports side-by-side comparison in Compare Mode.
-- **Head-to-Head Comparison Mode**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart and a **Continuous Time Delta (Δ)** chart showing exactly where time is gained/lost per meter along the track.
-- **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays and graceful gray-outline fallback if telemetry is incomplete.
 - **Animated Race Replay**: Watch a full animated replay of the session plotting all drivers on the track with a scrubbable timeline.
 - **Rich Dashboard Context**: Includes custom tyre visualisations (compound, age, freshness) and a detailed weather strip (air/track temp, humidity, rainfall, track status).
 - **Driver Headshot in Banner**: The driver summary banner automatically fetches and renders the official F1 headshot photo (from FastF1's `HeadshotUrl` field) as a circular portrait with a team-coloured ring border. Falls back silently if the image is unavailable.
@@ -128,7 +126,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (79 unit/integration tests across 14 modules). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (87 unit/integration tests across 15 modules). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -300,7 +298,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **79 unit and integration tests** across 14 test modules should pass cleanly.
+All **87 unit and integration tests** across 15 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -362,11 +360,12 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
-| **[#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)** | `Intra-Team Teammate Battle & Qualifying Delta Matrix` | Leaderboards & Analytics | Grid-wide teammate comparison across all 10 constructors with diverging qualifying & race pace delta bars, sector dominance (S1/S2/S3), and classified matrix table. |
-| **[#151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)** | `Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler` | Tyre Modeling & Strategy | Decoupling fuel mass burn-off (lap-by-lap weight reduction) from compound wear to isolate pure tyre degradation curves, unmasked thermal cliff laps, and fuel masking offsets. |
-| **[#150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)** | `Speed Trap & Intermediate Velocity Radar Breakdown` | Telemetry / Radar | 4-axis polar velocity radar (`ST`, `I1`, `I2`, `FL`), constructor/engine benchmarks, classified Speed Trap Leaderboard, and DRS gain deltas. |
-| **[#149](https://github.com/parekhrohan21/fastf1_pitwall/issues/149)** | `Gear Shift Strategy & RPM Power Band Optimization` | Powertrain Dynamics | Dual-subplot engine RPM curve with shift markers, gear usage distribution (Gears 1–8), and tactical short-shift detection. |
-| **[#148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)** | `Braking Efficiency & Trail-Braking Zone Analysis` | Corner Dynamics | Longitudinal deceleration ($G$), braking distance, trail-braking release point, and 3-subplot braking dynamics profile. |
+| **[#169](https://github.com/parekhrohan21/fastf1_pitwall/pull/169)** / **[#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)** | `Intra-Team Teammate Battle & Qualifying Delta Matrix` | Leaderboards & Analytics | Grid-wide teammate comparison across all 10 constructors with diverging qualifying & race pace delta bars, sector dominance (S1/S2/S3), and classified matrix table. |
+| **[#168](https://github.com/parekhrohan21/fastf1_pitwall/pull/168)** | `Synchronize README, AGENT.md, and DOCS.md documentation` | Documentation | Comprehensive documentation and agentic guidelines audit synchronizing test counts, roadmap items, and architecture decision records. |
+| **[#167](https://github.com/parekhrohan21/fastf1_pitwall/pull/167)** / **[#151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)** | `Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler` | Tyre Modeling & Strategy | Decoupling fuel mass burn-off (lap-by-lap weight reduction) from compound wear to isolate pure tyre degradation curves, unmasked thermal cliff laps, and fuel masking offsets. |
+| **[#166](https://github.com/parekhrohan21/fastf1_pitwall/pull/166)** / **[#150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)** | `Speed Trap & Intermediate Velocity Radar Breakdown` | Telemetry / Radar | 4-axis polar velocity radar (`ST`, `I1`, `I2`, `FL`), constructor/engine benchmarks, classified Speed Trap Leaderboard, and DRS gain deltas. |
+| **[#163](https://github.com/parekhrohan21/fastf1_pitwall/pull/163)** / **[#149](https://github.com/parekhrohan21/fastf1_pitwall/issues/149)** | `Gear Shift Strategy & RPM Power Band Optimization` | Powertrain Dynamics | Dual-subplot engine RPM curve with shift markers, gear usage distribution (Gears 1–8), and tactical short-shift detection. |
+| **[#162](https://github.com/parekhrohan21/fastf1_pitwall/pull/162)** / **[#148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)** | `Braking Efficiency & Trail-Braking Zone Analysis` | Corner Dynamics | Longitudinal deceleration ($G$), braking distance, trail-braking release point, and 3-subplot braking dynamics profile. |
 | **[#145](https://github.com/parekhrohan21/fastf1_pitwall/issues/145)** | `Fix NameError: _drv_labels1 is not defined on session load` | Bugfix & Reliability | Initialized driver dropdown label variables safely to prevent crashes during initial session loading. |
 | **[#139](https://github.com/parekhrohan21/fastf1_pitwall/issues/139)** | `High-Throughput Telemetry Data Exporter (Parquet & JSON)` | Data Architecture | High-speed telemetry export supporting Apache Parquet (`.parquet`), structured JSON (`.json`), and CSV. |
 | **[#138](https://github.com/parekhrohan21/fastf1_pitwall/issues/138)** | `Interactive Telemetry Channel Toggle & Custom Trace Filtering` | Telemetry Waveforms | Dynamic channel selector (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) with proportional chart height scaling. |
