@@ -20,7 +20,8 @@ from src.charts.plotly import (
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig,
-    build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig
+    build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
+    build_pit_loss_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -2471,6 +2472,290 @@ def _render_teammate_battle_section(
     </div>
     """
     st.markdown(tbl_html, unsafe_allow_html=True)
+
+
+def _render_pit_loss_section(
+    transit_data: dict,
+    driver1: str | None = None,
+    driver2: str | None = None,
+    compare: bool = False,
+    colour1: str = "#E8002D",
+    colour2: str = "#FF8700",
+    label1: str = "Driver 1",
+    label2: str = "Driver 2",
+) -> None:
+    """
+    Render deep-dive breakdown of pit lane time losses, in-lap push deltas,
+    and out-lap cold tyre warm-up performance.
+    """
+    st.markdown("<div class='section-title'>Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px; letter-spacing:0.3px;'>"
+        "Quantifies time lost during pit stops by isolating pit lane speed-limiter transit duration (t_pit_lane = PitOutTime - PitInTime), "
+        "in-lap push/entry delta against clean-air baseline pace (Δt_in = t_in - t_baseline), and out-lap cold tyre warm-up performance "
+        "(Δt_out = t_out - t_baseline), including sector-by-sector (S1, S2, S3) warm-up deltas."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if not transit_data or not transit_data.get("has_data") or not transit_data.get("all_stops"):
+        st.info("Pit lane transit and in-lap/out-lap timing data is not available for this session.")
+        return
+
+    summary = transit_data.get("summary", {})
+    all_stops = transit_data.get("all_stops", [])
+    driver_stops = transit_data.get("driver_stops", {})
+
+    # ── Summary KPI Cards ─────────────────────────────────────────────────────────
+    f_stop = summary.get("fastest_pit_lane")
+    b_in = summary.get("best_in_lap")
+    b_out = summary.get("best_out_lap")
+    med_loss = summary.get("grid_median_pit_loss")
+    med_lane = summary.get("grid_median_pit_lane")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        if f_stop:
+            t_val = f"{f_stop['time_s']:.2f}s"
+            t_drv = f"{f_stop['driver']} (Lap {f_stop['lap']})"
+            t_col = f_stop.get("team_color") or "#06B6D4"
+        else:
+            t_val, t_drv, t_col = "—", "N/A", "#888888"
+        st.markdown(
+            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Fastest Pit Lane Transit</div>
+              <div style='font-size:20px; font-weight:700; color:{t_col}; margin:2px 0;'>{t_val}</div>
+              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{t_drv}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    with c2:
+        if b_in:
+            in_val = f"+{b_in['delta_s']:.2f}s"
+            in_drv = f"{b_in['driver']} (Lap {b_in['lap']})"
+            in_col = b_in.get("team_color") or "#F59E0B"
+        else:
+            in_val, in_drv, in_col = "—", "N/A", "#888888"
+        st.markdown(
+            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best In-Lap Push Delta</div>
+              <div style='font-size:20px; font-weight:700; color:{in_col}; margin:2px 0;'>{in_val}</div>
+              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{in_drv}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    with c3:
+        if b_out:
+            out_val = f"+{b_out['delta_s']:.2f}s"
+            out_drv = f"{b_out['driver']} (Lap {b_out['lap']})"
+            out_col = b_out.get("team_color") or "#8B5CF6"
+        else:
+            out_val, out_drv, out_col = "—", "N/A", "#888888"
+        st.markdown(
+            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best Out-Lap Warm-up</div>
+              <div style='font-size:20px; font-weight:700; color:{out_col}; margin:2px 0;'>{out_val}</div>
+              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{out_drv}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    with c4:
+        loss_val = f"{med_loss:.2f}s" if med_loss is not None else "—"
+        lane_sub = f"Transit: {med_lane:.2f}s" if med_lane is not None else f"{summary.get('total_stops', len(all_stops))} stops analysed"
+        st.markdown(
+            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
+              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Grid Median Pit Loss</div>
+              <div style='font-size:20px; font-weight:700; color:#51cf66; margin:2px 0;'>{loss_val}</div>
+              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{lane_sub}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    # ── Display Controls ──────────────────────────────────────────────────────────
+    has_focus_driver = bool(driver1 and driver_stops.get(driver1)) or bool(driver2 and driver_stops.get(driver2))
+    if compare and driver2:
+        mode_options = ["Selected Drivers Head-to-Head", "Full Grid Overview"]
+    elif driver1 and driver_stops.get(driver1):
+        mode_options = ["Selected Driver Deep-Dive", "Full Grid Overview"]
+    else:
+        mode_options = ["Full Grid Overview"]
+
+    if len(mode_options) > 1:
+        view_mode = st.radio(
+            "Pit Loss View Mode",
+            mode_options,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="pit_loss_view_mode_selector"
+        )
+    else:
+        view_mode = mode_options[0]
+
+    is_compare_view = (view_mode != "Full Grid Overview") and has_focus_driver
+
+    # ── Plotly Breakdown Figure ──────────────────────────────────────────────────
+    fig = build_pit_loss_fig(
+        transit_data,
+        driver1=driver1,
+        driver2=driver2 if compare else None,
+        compare=is_compare_view
+    )
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+    # Helper for compound badge
+    def _comp_badge_html(cmp_code: str) -> str:
+        col = COMPOUND_COLOURS.get(str(cmp_code).upper(), "#888888")
+        letter = str(cmp_code)[:1].upper() if cmp_code else "?"
+        return f"<span style='display:inline-block; padding:1px 5px; border-radius:3px; font-size:11px; font-weight:700; background:{col}22; color:{col}; border:1px solid {col}55;'>{letter}</span>"
+
+    # ── Head-to-Head Sector Warm-up Cards ─────────────────────────────────────────
+    if is_compare_view:
+        sel_drivers = [d for d in [driver1, driver2 if compare else None] if d and driver_stops.get(d)]
+        if sel_drivers:
+            cols = st.columns(len(sel_drivers))
+            for col, drv in zip(cols, sel_drivers):
+                with col:
+                    d_stops = driver_stops.get(drv, [])
+                    accent = colour1 if drv == driver1 else colour2
+                    d_label = label1 if drv == driver1 else label2
+                    team_name = d_stops[0].get("team", "") if d_stops else ""
+
+                    stops_detail_html = ""
+                    for s in d_stops:
+                        s_num = s.get("stop_num", 1)
+                        in_l = s.get("in_lap", 0)
+                        old_c = s.get("old_compound", "?")
+                        new_c = s.get("new_compound", "?")
+                        old_badge = _comp_badge_html(old_c)
+                        new_badge = _comp_badge_html(new_c)
+
+                        t_transit = f"{s['pit_lane_time_s']:.2f}s" if s.get("pit_lane_time_s") is not None else "—"
+                        t_in_d = f"+{s['in_lap_delta_s']:.2f}s" if s.get("in_lap_delta_s") is not None else "—"
+                        t_out_d = f"+{s['out_lap_delta_s']:.2f}s" if s.get("out_lap_delta_s") is not None else "—"
+                        t_net = f"{s['net_pit_loss_s']:.2f}s" if s.get("net_pit_loss_s") is not None else "—"
+
+                        # Sector badges
+                        def _s_badge(name, val):
+                            if val is None:
+                                return f"<span style='opacity:0.4;'>{name}: —</span>"
+                            col_s = "#51cf66" if val <= 0 else "#f59e0b"
+                            bg_s = "rgba(81,207,102,0.18)" if val <= 0 else "rgba(245,158,11,0.15)"
+                            return f"<span style='background:{bg_s}; color:{col_s}; padding:2px 6px; border-radius:4px; font-weight:600; font-size:11px;'>{name}: {val:+.2f}s</span>"
+
+                        s1_b = _s_badge("S1", s.get("out_lap_s1_delta_s"))
+                        s2_b = _s_badge("S2", s.get("out_lap_s2_delta_s"))
+                        s3_b = _s_badge("S3", s.get("out_lap_s3_delta_s"))
+
+                        stops_detail_html += f"""
+                        <div style='background:rgba(255,255,255,0.02); border:1px solid rgba(128,128,128,0.12); border-radius:6px; padding:8px 10px; margin-top:8px;'>
+                          <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>
+                            <span style='font-weight:600; font-size:12px;'>Stop {s_num} (Lap {in_l})</span>
+                            <span>{old_badge} → {new_badge}</span>
+                          </div>
+                          <div style='font-size:12px; opacity:0.85; margin-bottom:4px;'>
+                            Pit Lane Transit: <b>{t_transit}</b> | Net Loss: <b>{t_net}</b>
+                          </div>
+                          <div style='font-size:11px; opacity:0.75; margin-bottom:6px;'>
+                            In-Lap Push: <b>{t_in_d}</b> | Out-Lap Warm-up: <b>{t_out_d}</b>
+                          </div>
+                          <div style='display:flex; gap:6px;'>
+                            {s1_b} {s2_b} {s3_b}
+                          </div>
+                        </div>
+                        """
+
+                    st.markdown(
+                        f"""<div style='background:rgba(255,255,255,0.03); border-left:4px solid {accent}; border-radius:8px; padding:12px 14px; margin-bottom:14px;'>
+                          <div style='font-size:15px; font-weight:700; color:{accent};'>{d_label} ({drv})</div>
+                          <div style='font-size:11px; opacity:0.6; margin-bottom:4px;'>{team_name} • {len(d_stops)} Pit Stop(s)</div>
+                          {stops_detail_html}
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+
+    # ── Full-Grid Pit Stop Efficiency Leaderboard Table ───────────────────────────
+    st.markdown("<div style='font-size:13px; font-weight:600; margin:16px 0 8px;'>Full-Field Pit Stop Efficiency Leaderboard</div>", unsafe_allow_html=True)
+
+    table_rows_html = ""
+    for s in all_stops:
+        drv = s.get("driver", "UNK")
+        team = s.get("team", "")
+        t_col = s.get("team_color") or "#888888"
+        s_num = s.get("stop_num", 1)
+        in_lap = s.get("in_lap", 0)
+
+        # Highlight if driver1 or driver2
+        is_d1 = (drv == driver1)
+        is_d2 = (compare and drv == driver2)
+        accent = colour1 if is_d1 else (colour2 if is_d2 else "transparent")
+        bg_col = f"background:{accent}15;" if (is_d1 or is_d2) else ""
+        border_col = f"border-left:3px solid {accent};" if (is_d1 or is_d2) else "border-left:3px solid transparent;"
+
+        old_c_badge = _comp_badge_html(s.get("old_compound", "?"))
+        new_c_badge = _comp_badge_html(s.get("new_compound", "?"))
+
+        in_delta_str = f"+{s['in_lap_delta_s']:.2f}s" if s.get("in_lap_delta_s") is not None else "—"
+        transit_str = f"{s['pit_lane_time_s']:.2f}s" if s.get("pit_lane_time_s") is not None else "—"
+        out_delta_str = f"+{s['out_lap_delta_s']:.2f}s" if s.get("out_lap_delta_s") is not None else "—"
+        net_loss_str = f"<b>{s['net_pit_loss_s']:.2f}s</b>" if s.get("net_pit_loss_s") is not None else "—"
+
+        def _cell_sec_badge(sec_val):
+            if sec_val is None:
+                return "<span style='opacity:0.35;'>—</span>"
+            scol = "#51cf66" if sec_val <= 0 else "#f59e0b"
+            return f"<span style='color:{scol}; font-weight:600;'>{sec_val:+.2f}s</span>"
+
+        s1_c = _cell_sec_badge(s.get("out_lap_s1_delta_s"))
+        s2_c = _cell_sec_badge(s.get("out_lap_s2_delta_s"))
+        s3_c = _cell_sec_badge(s.get("out_lap_s3_delta_s"))
+
+        table_rows_html += f"""
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {border_col}'>
+          <td style='padding:8px 10px; font-weight:600;'>{drv}</td>
+          <td style='padding:8px 10px; color:{t_col}; font-size:12px;'>
+            <span style='display:inline-block; width:8px; height:8px; border-radius:2px; background:{t_col}; margin-right:4px;'></span>
+            {team}
+          </td>
+          <td style='padding:8px 10px; text-align:center;'>S{s_num} (L{in_lap})</td>
+          <td style='padding:8px 10px; text-align:center;'>{old_c_badge} → {new_c_badge}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#f59e0b;'>{in_delta_str}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#06b6d4; font-weight:600;'>{transit_str}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#8b5cf6;'>{out_delta_str}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; font-size:11px;'>{s1_c} / {s2_c} / {s3_c}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#ffffff;'>{net_loss_str}</td>
+        </tr>
+        """
+
+    table_html = f"""
+    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>
+    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+      <thead>
+        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
+                   letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:8px 10px; text-align:left;'>Driver</th>
+          <th style='padding:8px 10px; text-align:left;'>Constructor</th>
+          <th style='padding:8px 10px; text-align:center;'>Stop (Lap)</th>
+          <th style='padding:8px 10px; text-align:center;'>Tyres</th>
+          <th style='padding:8px 10px; text-align:center;'>In-Lap Push Δ</th>
+          <th style='padding:8px 10px; text-align:center;'>Pit Lane Transit</th>
+          <th style='padding:8px 10px; text-align:center;'>Out-Lap Warm-up Δ</th>
+          <th style='padding:8px 10px; text-align:center;'>Sector Deltas (S1 / S2 / S3)</th>
+          <th style='padding:8px 10px; text-align:center;'>Net Pit Loss</th>
+        </tr>
+      </thead>
+      <tbody>{table_rows_html}</tbody>
+    </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
 
 
 

@@ -41,6 +41,7 @@
 30. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
 31. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
 32. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
+33. [Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture](#33-pit-lane-transit-loss--in-lap--out-lap-performance-breakdown-architecture)
 
 ---
 
@@ -217,6 +218,7 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_leaderboard(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_teammate_battle_data(sess_k, laps_df, sess_obj)` | `sess_key, laps_df, sess_obj` |
+| `_build_pit_transit_data(sess_k, laps_df, sess_obj, driver)` | `sess_key, laps_df, sess_obj, driver` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
@@ -539,6 +541,8 @@ _render_pit_stops()              ← Pit Stop Summary (HTML table)
         │
 build_undercut_chart()           ← Pit Strategy & Undercut Analysis (Plotly gap line chart + metrics)
         │
+_render_pit_loss_section()       ← Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown (Stacked bar, sector warm-up, efficiency leaderboard)
+        │
 build_tyre_deg_fig()             ← Tyre Degradation, Fuel Burn Decoupler & Predictive Thermal Crossover Matrix
         │
 _render_consistency_section()    ← Driver Consistency Index & Stint Pace Distribution
@@ -601,6 +605,7 @@ Each chart section follows the same pattern:
 | Tyre Stint Timeline | Plotly | `_build_stints` | `_stint_fig` | `laps_df` filtered by driver |
 | Pit Stop Summary | HTML | `_build_pit_stops` | `_render_pit_table` | `laps_df` filtered by driver (relying on `PitInTime` and `PitOutTime`) |
 | Pit Strategy & Undercut | Plotly | — (inline logic) | `build_undercut_chart` | `_all_laps1`, `_all_laps2` |
+| Pit Lane Transit Loss Breakdown | Plotly + HTML | `_build_pit_transit_data` | `build_pit_loss_fig` + `_render_pit_loss_section` | `sess.laps` (isolating transit $t_{\text{pit\_lane}}$, in-lap push $\Delta t_{\text{in}}$, out-lap warm-up $\Delta t_{\text{out}}$, and sector deltas $S_1/S_2/S_3$). |
 | Tyre Degradation, Fuel Burn Decoupler & Crossover Matrix | Plotly + HTML | `_build_tyre_deg_data`, `_build_fuel_decoupled_tyre_deg` | `build_tyre_deg_fig` + `render_tyre_crossover_matrix` + `render_fuel_decoupled_deg_metrics` | `laps_df` filtered by driver; linear & quadratic OLS + fuel burn decoupling (~0.035 s/lap) + unmasked cliff prediction. |
 | Driver Consistency | Plotly | `_build_consistency_analysis` | `build_stint_consistency_fig` | `laps_df` filtered by driver; std dev, clean air vs traffic, violin/boxplot stint distribution. |
 | 6-Channel Telemetry | Matplotlib | `get_telemetry_cached` | `build_chart` | `lap.get_car_data()` |
@@ -896,9 +901,10 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (87 tests across 15 modules):
+The tests reside in the `tests/` directory (95 tests across 16 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_pit_transit_loss.py`: Pit lane speed-limiter transit duration ($t_{\text{pit\_lane}}$), in-lap push delta vs clean-air baseline ($\Delta t_{\text{in}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}}$), net total pit loss, sector-by-sector ($S_1, S_2, S_3$) warm-up deltas, multi-stop sequencing, edge cases, and stacked horizontal bar figures.
 - `tests/test_teammate_battle.py`: Automated intra-team teammate comparison engine, qualifying deltas ($\Delta\text{s}$ and $\Delta\%$), sector dominance resolution, clean-air race pace filtering, summary KPIs, single-driver edge cases, and diverging matrix figures.
 - `tests/test_fuel_decoupled_tyre_deg.py`: Pure mechanical tyre wear modeling, race fuel burn decoupling ($t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$), True Degradation Rate ($\Delta\text{s/lap}$), fuel masking offsets, unmasked thermal cliff lap prediction, and compare mode overlays.
 - `tests/test_speed_trap.py`: Speed trap extraction (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`), DRS delta calculation, constructor and power unit velocity benchmarks, polar radar profile, and classified leaderboard generation.
@@ -1001,7 +1007,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | Medium | **Full Grand Prix Weekend Multi-Session Progression Tracker** ([#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)) | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
 | Medium | **Corner Exit Traction & Throttle Pick-Up Aggression Analysis** ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
 | Medium | **Track Evolution & Grip Improvement Ramp Index** ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
-| High | **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | Micro-sector decomposition of pit lane entry/exit delta, stationary stop duration, and net in-lap/out-lap pace deficit. |
+| ~~High~~ | ~~**Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown**~~ ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | ✅ **Done** — Deep-dive breakdown of pit lane transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta, out-lap cold tyre warm-up delta, sector splits, stacked horizontal bar chart (`build_pit_loss_fig`), and efficiency leaderboard table (`_render_pit_loss_section`). |
 | ~~Medium~~ | ~~**Intra-Team Teammate Battle & Qualifying Delta Matrix**~~ ([#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)) | ✅ **Done** — Added automated teammate comparison engine across all constructors in `_build_teammate_battle_data`, horizontal diverging bar chart in `build_teammate_matrix_fig`, and top 4 KPI cards + classified matrix in `_render_teammate_battle_section`. |
 | Medium | **Repository Cleanup & Code Hygiene** ([#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)) | Streamline file tree, remove redundant code or AI slop, and keep the repository minimal and lean. |
 
@@ -1016,6 +1022,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #171** / **Issue #153** (`feat: Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown`): Implemented deep-dive analysis of pit lane time losses across all drivers and pit stops in `_build_pit_transit_data` (`src/data/loader.py`). Isolates pit lane speed-limiter transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push / entry delta vs clean-air baseline flyer pace ($\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$), and out-lap cold tyre warm-up performance ($\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$), plus net total pit loss ($\Delta t_{\text{total\_pit}} = (t_{\text{in}} + t_{\text{out}}) - 2 \cdot t_{\text{baseline}}$) and sector-by-sector ($S_1, S_2, S_3$) warm-up deltas. Implemented `build_pit_loss_fig` in `src/charts/plotly.py`, rendering an interactive horizontal stacked bar chart with phase colouring (Amber for In-Lap Push, Cyan for Pit Lane Transit, Purple for Out-Lap Warm-up) and rich custom hover tooltips. Implemented `_render_pit_loss_section` in `src/ui/components.py` with 4 top KPI cards (*Fastest Pit Lane Transit*, *Best In-Lap Push Delta*, *Best Out-Lap Warm-up*, *Grid Median Pit Loss*), Head-to-Head sector warm-up breakdown cards, and a full-field classified efficiency leaderboard table with constructor badge highlights. Integrated into `app.py` directly following the Pit Strategy & Undercut Analysis section. Added 8 unit tests in `tests/test_pit_transit_loss.py` (95 total suite tests passing across 16 modules).
 - **PR #169** / **Issue #152** (`feat: Intra-Team Teammate Battle & Qualifying Delta Matrix`): Added automated intra-team teammate comparison engine across all 10 constructors for Qualifying and Race sessions. Implemented `_build_teammate_battle_data` in `src/data/loader.py`, extracting driver pairings from `sess.results`, qualifying best lap deltas ($\Delta\text{s}$ and $\Delta\%$), sector-by-sector personal best splits (S1/S2/S3), sector dominance tallies, and clean-air median race pace (filtering in/out laps, SC/VSC periods, and >107% outliers). Implemented `build_teammate_matrix_fig` in `src/charts/plotly.py`, rendering a horizontal diverging bar chart coloured by constructor livery with a zero parity baseline and custom hovercards. Added `_render_teammate_battle_section` to `src/ui/components.py` with 4 top KPI cards (Closest battle, Largest delta, Grid median gap, Sector dominance leader), an interactive mode toggle (`Qualifying` vs `Race Pace`), and an Intra-Team Head-to-Head Classified Matrix table with sector badges and constructor badge highlights. Integrated into `app.py` after the Ideal Lap section. Added 8 unit tests in `tests/test_teammate_battle.py` (87 total suite tests passing across 15 modules).
 - **PR #168** (`docs: synchronize README, AGENT.md, and DOCS.md documentation`): Comprehensive documentation and agentic guidelines audit synchronizing test suite counts (87 tests across 15 modules), active roadmap alignments, and Architecture Decision #37.
 - **PR #167** / **Issue #151** (`feat: Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler`): Added mechanical tyre wear decoupling by removing race fuel burn mass gains (~0.3 kg/lap ≈ 0.035 s/lap) from lap times. Implemented `_build_fuel_decoupled_tyre_deg` in `src/data/loader.py`, calculating $t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$ (normalized to zero-fuel qualifying weight). Fits both linear OLS regression and degree-2 quadratic polynomial curves on decoupled pace to calculate True Degradation Rate ($\Delta\text{s/lap}$) and unmasked thermal cliff laps. Updated `build_tyre_deg_fig` in `src/charts/plotly.py` with dynamic fuel decoupling support, dual pace hover tooltips (True Pace, Raw Lap Time, Fuel Offset), and decoupled table statistics. Added `render_fuel_decoupled_deg_metrics` to `src/ui/components.py` (True Deg Rate, Raw Deg Rate, Fuel Effect, Fuel Masking Offset) and enhanced `render_tyre_crossover_matrix` with true vs raw rate indicators. In `app.py`, added interactive fuel decoupling toggle and sensitivity slider (0.010–0.070 s/lap). Added comprehensive automated test suite (8 unit tests in `tests/test_fuel_decoupled_tyre_deg.py`; 79 total suite tests passing across 14 modules at time of release; now 87 tests across 15 modules).
@@ -1585,6 +1592,70 @@ The **Intra-Team Teammate Battle & Qualifying Delta Matrix** module (`src/data/l
   - Driver names formatted via `_fmt_driver(drv)`.
   - Sector badges with colour-coded pills (`#22c55e` for sweeps, `#eab308` for tight splits).
   - Delta callouts with colour highlights indicating advantage size.
+
+---
+
+## 33. Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture
+
+### Motivation & Background
+
+A Formula 1 pit stop penalty is not limited to the 2.0–3.5s stationary tyre swap. The total pit loss encompasses:
+1. **In-Lap Push / Entry Time**: The driver braking from racing speeds down to the 60 or 80 km/h pit speed-limiter line, where aggressive braking and pit commitment can gain tenths of a second.
+2. **Pit Lane Speed-Limiter Transit Duration**: The time spent traversing the pit lane under the speed-limiter:
+   $$t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$$
+   Typically 18–35 seconds depending on circuit pit straight topology and limiter limits.
+3. **Out-Lap Cold Tyre Warm-up Performance**: The driver accelerating from the pit exit line and fighting reduced initial mechanical grip on brand-new cold rubber:
+   $$\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$$
+   with sector-by-sector warm-up deltas ($\Delta S_1, \Delta S_2, \Delta S_3$).
+4. **Net Total Pit Loss**: The combined lap time penalty against clean-air baseline flyer pace:
+   $$\Delta t_{\text{total\_pit}} = (t_{\text{in}} + t_{\text{out}}) - 2 \cdot t_{\text{baseline}}$$
+
+### Data Layer (`_build_pit_transit_data` — `src/data/loader.py`)
+
+- **Cache Decorator**: `@st.cache_data(show_spinner=False, ttl=3600)`
+- **Signature**: `_build_pit_transit_data(sess_k: str, laps_df: pd.DataFrame, sess_obj=None, driver: str | None = None) -> dict`
+- **Algorithm**:
+  1. **Clean-Air Baseline Extraction**: Filters driver laps for `PitInTime.isna()`, `PitOutTime.isna()`, `IsAccurate == True`, and `TrackStatus == "1"`. Calculates representative clean-air lap pace ($t_{\text{baseline}}$) and sector baselines ($S_{1,\text{base}}, S_{2,\text{base}}, S_{3,\text{base}}$) using median lap times filtered to $\le 107\%$ of median.
+  2. **Pit Sequence Detection**: Iterates driver laps in chronological order, detecting in-lap ($L$) marked by `PitInTime` and out-lap ($L+1$) marked by `PitOutTime`. Accurately handles out-lap skipping to prevent duplicate stops.
+  3. **Metric Calculation**:
+     - $t_{\text{pit\_lane}} = (\text{PitOutTime}_{L+1} - \text{PitInTime}_L).\text{total\_seconds()}$
+     - $\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$
+     - $\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$
+     - $\Delta t_{\text{total\_pit}} = \Delta t_{\text{in}} + \Delta t_{\text{out}}$
+     - $\Delta S_i = S_{i, \text{out}} - S_{i, \text{base}}$ for $i \in \{1, 2, 3\}$
+     - Tyre compound transition (`old_compound` $\to$ `new_compound`).
+  4. **KPI Aggregation**:
+     - `fastest_pit_lane`: Driver with the lowest $t_{\text{pit\_lane}}$.
+     - `best_in_lap`: Driver with the lowest in-lap delta $\Delta t_{\text{in}}$.
+     - `best_out_lap`: Driver with the lowest out-lap delta $\Delta t_{\text{out}}$.
+     - `lowest_net_pit_loss`: Driver with lowest net total pit loss.
+     - `grid_median_pit_loss` & `grid_median_pit_lane`.
+
+### Visualisation Layer (`build_pit_loss_fig` — `src/charts/plotly.py`)
+
+- **Signature**: `build_pit_loss_fig(transit_data: dict, driver1: str | None = None, driver2: str | None = None, compare: bool = False) -> go.Figure | None`
+- **Stacked Horizontal Bar**:
+  - Horizontal bar layout (`barmode="stack"`) sorted by net pit loss efficiency.
+  - **Trace 1 (Amber `#F59E0B`)**: In-Lap Push Delta ($\Delta t_{\text{in}}$).
+  - **Trace 2 (Cyan `#06B6D4`)**: Pit Lane Speed-Limiter Transit ($t_{\text{pit\_lane}}$).
+  - **Trace 3 (Purple `#8B5CF6`)**: Out-Lap Cold Tyre Warm-up Delta ($\Delta t_{\text{out}}$).
+  - Custom hover tooltips detailing tyre compound transitions, stationary stop duration, in/out lap numbers, sector deltas, and net total loss.
+  - Supports both Driver Comparison Head-to-Head mode and Full Grid Overview mode.
+
+### UI Layer (`_render_pit_loss_section` — `src/ui/components.py`)
+
+- **4 Summary KPI Metric Cards**:
+  - `Fastest Pit Lane Transit`: Driver, lap, time ($t_{\text{pit\_lane}}$), and team livery colour.
+  - `Best In-Lap Push Delta`: Driver, lap, push delta ($\Delta t_{\text{in}}$).
+  - `Best Out-Lap Warm-up`: Driver, lap, warm-up delta ($\Delta t_{\text{out}}$).
+  - `Grid Median Pit Loss`: Median net pit loss duration and median transit time.
+- **View Mode Switcher**:
+  - Radio toggle between Selected Driver(s) Deep-Dive / Head-to-Head and Full Grid Overview.
+- **Head-to-Head Sector Warm-up Cards**:
+  - Driver summary card with team border accent and stop count.
+  - Per-stop details: Lap, compound transition badge, transit time, in-lap push, and $S_1, S_2, S_3$ cold tyre warm-up badges.
+- **Full-Field Pit Stop Efficiency Leaderboard**:
+  - Ranked HTML table showing Driver, Constructor with team badge, Stop/Lap, Tyre Transition, In-Lap Push $\Delta$, Pit Lane Transit, Out-Lap Warm-up $\Delta$, Sector Splits, and Net Pit Loss. Selected drivers are highlighted with team accent borders.
 
 ---
 

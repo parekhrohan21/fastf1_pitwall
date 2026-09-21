@@ -2229,4 +2229,183 @@ def build_teammate_matrix_fig(
     return fig
 
 
+def build_pit_loss_fig(
+    transit_data: dict,
+    driver1: str | None = None,
+    driver2: str | None = None,
+    compare: bool = False,
+) -> go.Figure | None:
+    """
+    Construct an interactive stacked horizontal bar chart visualising the breakdown
+    of pit loss into:
+      1. In-Lap Push Delta (Amber)
+      2. Pit Lane Transit Duration (Cyan)
+      3. Out-Lap Cold Tyre Warm-up Delta (Purple)
+    Supports driver comparison or full-grid pit stop analysis.
+    """
+    if not transit_data or not transit_data.get("has_data"):
+        return None
+
+    all_stops = transit_data.get("all_stops", [])
+    if not all_stops:
+        return None
+
+    if compare and (driver1 or driver2):
+        active_drivers = {d for d in [driver1, driver2] if d}
+        stops = [s for s in all_stops if s.get("driver") in active_drivers]
+        if not stops:
+            stops = all_stops
+    else:
+        stops = all_stops
+
+    if not stops:
+        return None
+
+    # Sort stops so the most efficient / lowest net pit loss is at the top
+    sorted_stops = sorted(
+        stops,
+        key=lambda s: (
+            s["net_pit_loss_s"] if s.get("net_pit_loss_s") is not None else 999.0,
+            s["pit_lane_time_s"] if s.get("pit_lane_time_s") is not None else 999.0,
+        )
+    )
+
+    labels = []
+    in_deltas = []
+    transit_times = []
+    out_deltas = []
+    custom_in = []
+    custom_transit = []
+    custom_out = []
+
+    for s in sorted_stops:
+        drv = s.get("driver", "UNK")
+        stop_num = s.get("stop_num", 1)
+        in_lap = s.get("in_lap", 0)
+        out_lap = s.get("out_lap", in_lap + 1)
+        lbl = f"{drv} S{stop_num} (L{in_lap})"
+        labels.append(lbl)
+
+        in_delta = max(0.0, s["in_lap_delta_s"]) if s.get("in_lap_delta_s") is not None else 0.0
+        transit = max(0.0, s["pit_lane_time_s"]) if s.get("pit_lane_time_s") is not None else (s.get("pit_duration_s") or 0.0)
+        out_delta = max(0.0, s["out_lap_delta_s"]) if s.get("out_lap_delta_s") is not None else 0.0
+
+        in_deltas.append(in_delta)
+        transit_times.append(transit)
+        out_deltas.append(out_delta)
+
+        in_time_str = f"{s['in_lap_time_s']:.2f}s" if s.get("in_lap_time_s") is not None else "N/A"
+        base_time_str = f"{s['baseline_lap_s']:.2f}s" if s.get("baseline_lap_s") is not None else "N/A"
+        old_cmp = s.get("old_compound", "?")
+        new_cmp = s.get("new_compound", "?")
+        pit_dur_str = f"{s['pit_duration_s']:.2f}s" if s.get("pit_duration_s") is not None else "N/A"
+        out_time_str = f"{s['out_lap_time_s']:.2f}s" if s.get("out_lap_time_s") is not None else "N/A"
+        s1_str = f"{s['out_lap_s1_delta_s']:+.2f}s" if s.get("out_lap_s1_delta_s") is not None else "N/A"
+        s2_str = f"{s['out_lap_s2_delta_s']:+.2f}s" if s.get("out_lap_s2_delta_s") is not None else "N/A"
+        s3_str = f"{s['out_lap_s3_delta_s']:+.2f}s" if s.get("out_lap_s3_delta_s") is not None else "N/A"
+        net_loss_str = f"{s['net_pit_loss_s']:.2f}s" if s.get("net_pit_loss_s") is not None else "N/A"
+
+        custom_in.append([in_time_str, base_time_str, old_cmp, new_cmp])
+        custom_transit.append([pit_dur_str, f"L{in_lap}", f"L{out_lap}"])
+        custom_out.append([out_time_str, base_time_str, s1_str, s2_str, s3_str, net_loss_str])
+
+    fig = go.Figure()
+
+    # 1. In-Lap Push Delta (Amber)
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=in_deltas,
+        name="In-Lap Push Delta",
+        orientation="h",
+        marker=dict(
+            color="#F59E0B",
+            line=dict(color="rgba(255,255,255,0.15)", width=1),
+        ),
+        customdata=custom_in,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Phase: In-Lap Push / Entry Delta<br>"
+            "In-Lap Time: %{customdata[0]}<br>"
+            "Baseline Pace: %{customdata[1]}<br>"
+            "In-Lap Push Delta: <b>+%{x:.2f}s</b><br>"
+            "Compound Change: %{customdata[2]} → %{customdata[3]}<extra></extra>"
+        ),
+    ))
+
+    # 2. Pit Lane Transit Duration (Cyan)
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=transit_times,
+        name="Pit Lane Transit",
+        orientation="h",
+        marker=dict(
+            color="#06B6D4",
+            line=dict(color="rgba(255,255,255,0.15)", width=1),
+        ),
+        customdata=custom_transit,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Phase: Pit Lane Transit Duration<br>"
+            "Transit Time (In→Out): <b>%{x:.2f}s</b><br>"
+            "Stationary Stop Duration: %{customdata[0]}<br>"
+            "Laps: %{customdata[1]} → %{customdata[2]}<extra></extra>"
+        ),
+    ))
+
+    # 3. Out-Lap Cold Tyre Warm-up Delta (Purple)
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=out_deltas,
+        name="Out-Lap Warm-up Delta",
+        orientation="h",
+        marker=dict(
+            color="#8B5CF6",
+            line=dict(color="rgba(255,255,255,0.15)", width=1),
+        ),
+        customdata=custom_out,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Phase: Out-Lap Cold Tyre Warm-up Delta<br>"
+            "Out-Lap Time: %{customdata[0]}<br>"
+            "Baseline Pace: %{customdata[1]}<br>"
+            "Warm-up Delta: <b>+%{x:.2f}s</b><br>"
+            "Sector Deltas: S1 %{customdata[2]} | S2 %{customdata[3]} | S3 %{customdata[4]}<br>"
+            "Net Total Pit Loss: <b>%{customdata[5]}</b><extra></extra>"
+        ),
+    ))
+
+    chart_height = max(380, len(labels) * 38 + 90)
+
+    fig.update_layout(
+        barmode="stack",
+        height=chart_height,
+        margin=dict(l=140, r=40, t=50, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title_text="Cumulative Pit Loss Duration (Seconds)",
+            gridcolor="rgba(128,128,128,0.2)",
+            zeroline=True,
+            zerolinecolor="rgba(128,128,128,0.5)",
+        ),
+        yaxis=dict(
+            autorange="reversed",
+            tickfont=dict(size=12, color="#ffffff"),
+            gridcolor="rgba(128,128,128,0.1)",
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color="#ffffff", size=11),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+    )
+
+    return fig
+
+
+
 

@@ -2892,3 +2892,345 @@ def _build_teammate_battle_data(
         return fallback
 
 
+# ── Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown ────────────
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_pit_transit_data(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    sess_obj=None,
+    driver: str | None = None
+) -> dict:
+    """Decompose pit lane time loss into in-lap, pit lane transit, and out-lap warm-up.
+
+    Evaluates the complete pit cycle:
+    - Clean-air racing pace baseline: Median of valid flying laps (no pit in/out,
+      accurate laps, green flag status, <= 107% median pace).
+    - In-lap delta: Delta between in-lap time and racing baseline (entry deceleration & pit approach).
+    - Pit lane transit duration: Timestamp difference between PitOutTime and PitInTime.
+    - Out-lap delta: Delta between out-lap time and racing baseline (pit exit acceleration & cold tyre warm-up).
+    - Net Total Pit Loss: Total time surrendered relative to 2 racing laps:
+      ``TotalPitDelta = (t_in + t_out) - 2 * t_baseline``.
+    - Sector warm-up breakdown: S1, S2, S3 deltas on the out-lap vs clean sector baselines.
+
+    Parameters
+    ----------
+    sess_k : str
+        Session cache key (e.g. "2024_British Grand Prix_R").
+    laps_df : pd.DataFrame
+        Session laps DataFrame.
+    sess_obj : fastf1.core.Session, optional
+        Official session object containing results and team metadata.
+    driver : str, optional
+        Specific driver filter, or None for grid-wide evaluation.
+
+    Returns
+    -------
+    dict
+        Structured dictionary containing all pit stops, driver stops map,
+        summary KPIs, and status flags.
+    """
+    fallback = {
+        "all_stops": [],
+        "driver_stops": {},
+        "summary": {
+            "fastest_pit_lane": None,
+            "best_in_lap": None,
+            "best_out_lap": None,
+            "lowest_net_pit_loss": None,
+            "grid_median_pit_loss": None,
+            "grid_median_pit_lane": None,
+            "total_stops": 0,
+        },
+        "has_data": False,
+    }
+
+    if laps_df is None or laps_df.empty:
+        return fallback
+
+    def _to_sec(val) -> float | None:
+        if val is None or pd.isna(val):
+            return None
+        if hasattr(val, "total_seconds"):
+            try:
+                return round(float(val.total_seconds()), 3)
+            except Exception:
+                pass
+        try:
+            f = float(val)
+            return round(f, 3) if not np.isnan(f) else None
+        except Exception:
+            return None
+
+    try:
+        df = laps_df.copy()
+
+        # Build driver and constructor metadata lookup
+        driver_meta = {}
+        if sess_obj is not None and hasattr(sess_obj, "results") and sess_obj.results is not None:
+            for _, r in sess_obj.results.iterrows():
+                d_code = str(r.get("Abbreviation") or r.get("DriverNumber") or r.get("BroadcastName", ""))
+                t_name = str(r.get("TeamName") or "Unknown")
+                driver_meta[d_code] = {
+                    "team": t_name,
+                    "team_colour": TEAM_COLOURS.get(t_name, "#ffffff"),
+                    "full_name": str(r.get("FullName") or d_code),
+                    "pos": int(r["Position"]) if pd.notna(r.get("Position")) else None,
+                }
+
+        unique_drivers = df["Driver"].dropna().unique()
+
+        # Phase 1: Compute baseline racing pace and sector baselines per driver
+        driver_baselines = {}
+        grid_lap_times = []
+
+        for d in unique_drivers:
+            d_laps = df[df["Driver"] == d].copy()
+            clean = d_laps[d_laps["PitInTime"].isna() & d_laps["PitOutTime"].isna()].copy()
+            if "IsAccurate" in clean.columns:
+                acc = clean[clean["IsAccurate"] == True]
+                if not acc.empty:
+                    clean = acc
+            if "TrackStatus" in clean.columns:
+                clear = clean[clean["TrackStatus"].astype(str).str.contains("^[1]$", regex=True, na=True)]
+                if not clear.empty:
+                    clean = clear
+
+            lap_secs = [_to_sec(t) for t in clean["LapTime"] if _to_sec(t) is not None]
+            if len(lap_secs) >= 3:
+                med_val = float(np.median(lap_secs))
+                lap_secs = [t for t in lap_secs if t <= 1.07 * med_val]
+
+            base_lap = round(float(np.median(lap_secs)), 3) if lap_secs else None
+            if base_lap is not None:
+                grid_lap_times.append(base_lap)
+
+            # Sector baselines
+            s1_secs = [_to_sec(t) for t in clean.get("Sector1Time", []) if _to_sec(t) is not None]
+            s2_secs = [_to_sec(t) for t in clean.get("Sector2Time", []) if _to_sec(t) is not None]
+            s3_secs = [_to_sec(t) for t in clean.get("Sector3Time", []) if _to_sec(t) is not None]
+
+            driver_baselines[d] = {
+                "base_lap_s": base_lap,
+                "base_s1": round(float(np.median(s1_secs)), 3) if s1_secs else None,
+                "base_s2": round(float(np.median(s2_secs)), 3) if s2_secs else None,
+                "base_s3": round(float(np.median(s3_secs)), 3) if s3_secs else None,
+            }
+
+        grid_median_lap = round(float(np.median(grid_lap_times)), 3) if grid_lap_times else None
+
+        # Phase 2: Detect pit stop sequences and evaluate losses
+        all_stops = []
+        driver_stops = {}
+
+        for d in unique_drivers:
+            d_laps = df[df["Driver"] == d].sort_values("LapNumber").reset_index(drop=True)
+            meta = driver_meta.get(d, {})
+            team_name = meta.get("team") or str(d_laps["Team"].iloc[0] if "Team" in d_laps.columns else "Unknown")
+            team_col = meta.get("team_colour") or TEAM_COLOURS.get(team_name, "#ffffff")
+            full_name = meta.get("full_name") or d
+
+            base_info = driver_baselines.get(d, {})
+            d_base_lap = base_info.get("base_lap_s") or grid_median_lap
+            d_base_s1 = base_info.get("base_s1")
+            d_base_s2 = base_info.get("base_s2")
+            d_base_s3 = base_info.get("base_s3")
+
+            d_stops = []
+            stop_idx = 0
+            handled_out_idx = -1
+
+            for i in range(len(d_laps)):
+                if i <= handled_out_idx:
+                    continue
+
+                row_in = d_laps.iloc[i]
+                has_pit_in = pd.notna(row_in.get("PitInTime"))
+                has_pit_out = pd.notna(row_in.get("PitOutTime"))
+
+                if has_pit_in:
+                    stop_idx += 1
+                    in_lap_num = int(row_in["LapNumber"])
+                    in_lap_time_s = _to_sec(row_in.get("LapTime"))
+
+                    # Identify out-lap (next lap)
+                    row_out = d_laps.iloc[i + 1] if i + 1 < len(d_laps) else None
+                    if row_out is not None:
+                        handled_out_idx = i + 1
+                    out_lap_num = int(row_out["LapNumber"]) if row_out is not None else in_lap_num + 1
+                    out_lap_time_s = _to_sec(row_out.get("LapTime")) if row_out is not None else None
+                elif has_pit_out and i > 0:
+                    # Fallback when PitInTime is missing but PitOutTime is present on out-lap
+                    stop_idx += 1
+                    row_out = row_in
+                    row_in = d_laps.iloc[i - 1]
+                    in_lap_num = int(row_in["LapNumber"])
+                    in_lap_time_s = _to_sec(row_in.get("LapTime"))
+                    out_lap_num = int(row_out["LapNumber"])
+                    out_lap_time_s = _to_sec(row_out.get("LapTime"))
+                else:
+                    continue
+
+                # Pit lane transit duration
+                pit_lane_time_s = None
+                if row_out is not None and pd.notna(row_out.get("PitOutTime")) and pd.notna(row_in.get("PitInTime")):
+                    try:
+                        dur = (row_out["PitOutTime"] - row_in["PitInTime"]).total_seconds()
+                        if 3.0 <= dur <= 300.0:
+                            pit_lane_time_s = round(float(dur), 3)
+                    except Exception:
+                        pass
+                elif pd.notna(row_in.get("PitOutTime")) and pd.notna(row_in.get("PitInTime")):
+                    try:
+                        dur = (row_in["PitOutTime"] - row_in["PitInTime"]).total_seconds()
+                        if 3.0 <= dur <= 300.0:
+                            pit_lane_time_s = round(float(dur), 3)
+                    except Exception:
+                        pass
+
+                # Compound transitions
+                old_cmp = str(row_in.get("Compound", "?")).upper()
+                new_cmp = str(row_out.get("Compound", "?")).upper() if row_out is not None else "?"
+
+                # In-lap delta (time lost entering pit)
+                in_lap_delta_s = None
+                if in_lap_time_s is not None and d_base_lap is not None:
+                    in_lap_delta_s = round(float(in_lap_time_s - d_base_lap), 3)
+
+                # Out-lap delta (time lost exiting and warming cold tyres)
+                out_lap_delta_s = None
+                if out_lap_time_s is not None and d_base_lap is not None:
+                    out_lap_delta_s = round(float(out_lap_time_s - d_base_lap), 3)
+
+                # Net total pit loss: (t_in + t_out) - 2 * t_baseline
+                net_pit_loss_s = None
+                if in_lap_delta_s is not None and out_lap_delta_s is not None:
+                    net_pit_loss_s = round(float(in_lap_delta_s + out_lap_delta_s), 3)
+                elif pit_lane_time_s is not None:
+                    # Fallback estimate: pit lane transit + estimated entry/exit delta
+                    net_pit_loss_s = round(float(pit_lane_time_s + (in_lap_delta_s or 3.0)), 3)
+
+                # Out-lap cold tyre sector breakdown
+                out_s1 = _to_sec(row_out.get("Sector1Time")) if row_out is not None else None
+                out_s2 = _to_sec(row_out.get("Sector2Time")) if row_out is not None else None
+                out_s3 = _to_sec(row_out.get("Sector3Time")) if row_out is not None else None
+
+                s1_warmup_s = round(float(out_s1 - d_base_s1), 3) if (out_s1 is not None and d_base_s1 is not None) else None
+                s2_warmup_s = round(float(out_s2 - d_base_s2), 3) if (out_s2 is not None and d_base_s2 is not None) else None
+                s3_warmup_s = round(float(out_s3 - d_base_s3), 3) if (out_s3 is not None and d_base_s3 is not None) else None
+
+                stop_record = {
+                    "driver": d,
+                    "full_name": full_name,
+                    "team": team_name,
+                    "team_colour": team_col,
+                    "team_color": team_col,
+                    "stop_num": stop_idx,
+                    "in_lap": in_lap_num,
+                    "out_lap": out_lap_num,
+                    "in_lap_time_s": in_lap_time_s,
+                    "out_lap_time_s": out_lap_time_s,
+                    "base_lap_s": d_base_lap,
+                    "baseline_lap_s": d_base_lap,
+                    "pit_lane_time_s": pit_lane_time_s,
+                    "in_lap_delta_s": in_lap_delta_s,
+                    "out_lap_delta_s": out_lap_delta_s,
+                    "net_pit_loss_s": net_pit_loss_s,
+                    "s1_warmup_s": s1_warmup_s,
+                    "s2_warmup_s": s2_warmup_s,
+                    "s3_warmup_s": s3_warmup_s,
+                    "out_lap_s1_delta_s": s1_warmup_s,
+                    "out_lap_s2_delta_s": s2_warmup_s,
+                    "out_lap_s3_delta_s": s3_warmup_s,
+                    "old_compound": old_cmp,
+                    "new_compound": new_cmp,
+                }
+
+                d_stops.append(stop_record)
+                all_stops.append(stop_record)
+
+            if d_stops:
+                driver_stops[d] = d_stops
+
+        if not all_stops:
+            return fallback
+
+        # Phase 3: Compute Summary KPIs
+        stops_with_pit_lane = [s for s in all_stops if s["pit_lane_time_s"] is not None]
+        stops_with_in_lap = [s for s in all_stops if s["in_lap_delta_s"] is not None and s["in_lap_delta_s"] > 0]
+        stops_with_out_lap = [s for s in all_stops if s["out_lap_delta_s"] is not None and s["out_lap_delta_s"] > 0]
+        stops_with_net_loss = [s for s in all_stops if s["net_pit_loss_s"] is not None and s["net_pit_loss_s"] > 0]
+
+        fastest_pit_lane = min(stops_with_pit_lane, key=lambda s: s["pit_lane_time_s"]) if stops_with_pit_lane else None
+        best_in_lap = min(stops_with_in_lap, key=lambda s: s["in_lap_delta_s"]) if stops_with_in_lap else None
+        best_out_lap = min(stops_with_out_lap, key=lambda s: s["out_lap_delta_s"]) if stops_with_out_lap else None
+        lowest_net_pit_loss = min(stops_with_net_loss, key=lambda s: s["net_pit_loss_s"]) if stops_with_net_loss else None
+
+        grid_median_pit_loss = round(float(np.median([s["net_pit_loss_s"] for s in stops_with_net_loss])), 3) if stops_with_net_loss else None
+        grid_median_pit_lane = round(float(np.median([s["pit_lane_time_s"] for s in stops_with_pit_lane])), 3) if stops_with_pit_lane else None
+
+        summary_fastest = {
+            "driver": fastest_pit_lane["driver"],
+            "lap": fastest_pit_lane["in_lap"],
+            "time_s": fastest_pit_lane["pit_lane_time_s"],
+            "pit_lane_time_s": fastest_pit_lane["pit_lane_time_s"],
+            "team": fastest_pit_lane["team"],
+            "team_color": fastest_pit_lane.get("team_colour"),
+            "team_colour": fastest_pit_lane.get("team_colour"),
+        } if fastest_pit_lane else None
+
+        summary_best_in = {
+            "driver": best_in_lap["driver"],
+            "lap": best_in_lap["in_lap"],
+            "delta_s": best_in_lap["in_lap_delta_s"],
+            "in_lap_delta_s": best_in_lap["in_lap_delta_s"],
+            "team": best_in_lap["team"],
+            "team_color": best_in_lap.get("team_colour"),
+            "team_colour": best_in_lap.get("team_colour"),
+        } if best_in_lap else None
+
+        summary_best_out = {
+            "driver": best_out_lap["driver"],
+            "lap": best_out_lap["out_lap"],
+            "delta_s": best_out_lap["out_lap_delta_s"],
+            "out_lap_delta_s": best_out_lap["out_lap_delta_s"],
+            "team": best_out_lap["team"],
+            "team_color": best_out_lap.get("team_colour"),
+            "team_colour": best_out_lap.get("team_colour"),
+        } if best_out_lap else None
+
+        summary_lowest_loss = {
+            "driver": lowest_net_pit_loss["driver"],
+            "lap": lowest_net_pit_loss["in_lap"],
+            "loss_s": lowest_net_pit_loss["net_pit_loss_s"],
+            "net_pit_loss_s": lowest_net_pit_loss["net_pit_loss_s"],
+            "team": lowest_net_pit_loss["team"],
+            "team_color": lowest_net_pit_loss.get("team_colour"),
+            "team_colour": lowest_net_pit_loss.get("team_colour"),
+        } if lowest_net_pit_loss else None
+
+        # Sort all stops by net pit loss (or pit lane duration if net loss missing)
+        all_stops.sort(key=lambda s: (
+            s["net_pit_loss_s"] if s["net_pit_loss_s"] is not None else 999.0,
+            s["pit_lane_time_s"] if s["pit_lane_time_s"] is not None else 999.0
+        ))
+
+        return {
+            "all_stops": all_stops,
+            "driver_stops": driver_stops,
+            "summary": {
+                "fastest_pit_lane": summary_fastest,
+                "best_in_lap": summary_best_in,
+                "best_out_lap": summary_best_out,
+                "lowest_net_pit_loss": summary_lowest_loss,
+                "grid_median_pit_loss": grid_median_pit_loss,
+                "grid_median_pit_lane": grid_median_pit_lane,
+                "total_stops": len(all_stops),
+            },
+            "has_data": True,
+        }
+    except Exception:
+        return fallback
+
+
+
