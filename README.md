@@ -12,6 +12,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **6-Channel Telemetry & Interactive Filtering**: View combined or separate traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS, with an interactive multiselect toggle to filter and reorder channels on the fly.
 - **Head-to-Head Comparison**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart and a **Continuous Time Delta (Δ)** chart showing exactly where time is gained/lost per meter along the track.
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays. Gracefully falls back to a clean gray track outline with warning banners if telemetry data (like speed or driver pedal inputs) is incomplete or partially unavailable, ensuring the dashboard never crashes.
+- **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([Issue #153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)): Deep-dive telemetry breakdown of pit lane time losses isolating pit lane speed-limiter transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta against clean-air baseline flyer pace ($\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$), net pit loss, and sector-by-sector warm-up deltas ($S_1, S_2, S_3$). Visualised via an interactive stacked horizontal bar chart (`build_pit_loss_fig`), 4 summary KPI cards (*Fastest Pit Lane Transit*, *Best In-Lap Push Delta*, *Best Out-Lap Warm-up*, *Grid Median Pit Loss*), Head-to-Head sector warm-up cards, and a full-field classified efficiency leaderboard table.
 - **Intra-Team Teammate Battle & Qualifying Delta Matrix** ([Issue #152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)): Automated teammate head-to-head comparison analytics across all constructors for Qualifying and Race sessions. Renders a grid-wide horizontal diverging bar chart of teammate gaps, sector split advantages (S1, S2, S3), clean-air median race pace deltas, and an interactive classified matrix with top KPI cards for closest battle, largest delta, and grid median gap.
 - **Speed Trap & Intermediate Velocity Radar Breakdown** ([Issue #150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)): Grid-wide speed trap and intermediate velocity analytics using official timing sensors (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`). Extracts maximum velocities, calculates DRS aerodynamic efficiency deltas, and aggregates top speeds by constructor and Power Unit manufacturer (Ferrari, Mercedes, Red Bull Powertrains, Renault). Renders an interactive 4-axis polar radar profile (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), and a classified Speed Trap Leaderboard table with top-speed advantage metric cards.
 - **Gear Shift Strategy & RPM Power Band Optimization** ([Issue #149](https://github.com/parekhrohan21/fastf1_pitwall/issues/149)): Extracts engine RPM, gear selection, throttle application, and track distance to detect every upshift and downshift. Identifies tactical short-shifts (< 11,000 RPM under > 60% throttle) and redline shift events (≥ 11,800 RPM). Renders a dual-subplot Plotly figure with an RPM operating curve, interactive shift event markers, and horizontal percentage gear usage breakdown (Gears 1 through 8), accompanied by comparative shift count and RPM metrics cards.
@@ -51,7 +52,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Connection Diagnostics & Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105)): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks.
 - **Design Origin Footer** ([Issue #72](https://github.com/parekhrohan21/fastf1_pitwall/issues/72), [Issue #75](https://github.com/parekhrohan21/fastf1_pitwall/issues/75)): Styled footer displaying `Made proudly in Great Britain 🇬🇧`.
 - **Modular Codebase Architecture** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`).
-- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **87 pytest unit and integration tests** across 15 dedicated test modules.
+- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **95 pytest unit and integration tests** across 16 dedicated test modules.
 - **High Performance**: FastF1 disk caching combined with Streamlit `@st.cache_data` keeps data processing instant after first load.
 
 ---
@@ -63,14 +64,15 @@ fastf1_pitwall/
 ├── app.py              # Main Streamlit entry point & orchestration
 ├── src/                # Modular source package
 │   ├── data/
-│   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass, fuel decoupler, teammate battle & telemetry exporters (CSV/Parquet/JSON)
+│   │   └── loader.py   # FastF1 data loaders, caching, proxy bypass, fuel decoupler, teammate battle, pit transit loss & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
-│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, braking, gears, speed traps, teammate matrix, fuel decoupled deg)
+│   │   ├── plotly.py   # Interactive Plotly chart builders (History, stints, maps, replays, corners, braking, gears, speed traps, teammate matrix, pit loss stacked bars, fuel decoupled deg)
 │   │   └── matplotlib.py # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
-│       └── components.py # UI layout components, metrics cards, map blocks, teammate battle matrix & telemetry export panel
-├── tests/              # Pytest automated test suite (87 tests across 15 modules)
+│       └── components.py # UI layout components, metrics cards, map blocks, teammate battle matrix, pit loss breakdown & telemetry export panel
+├── tests/              # Pytest automated test suite (95 tests across 16 modules)
+│   ├── test_pit_transit_loss.py       # Pit lane transit duration, in-lap/out-lap deltas & sector warm-up
 │   ├── test_teammate_battle.py        # Teammate head-to-head battle, qualifying & race pace deltas
 │   ├── test_fuel_decoupled_tyre_deg.py # Pure mechanical tyre degradation & fuel burn decoupler
 │   ├── test_speed_trap.py             # Speed trap, intermediate velocity & radar metrics
@@ -298,7 +300,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **87 unit and integration tests** across 15 test modules should pass cleanly.
+All **95 unit and integration tests** across 16 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -352,7 +354,6 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 | **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `Full Grand Prix Weekend Multi-Session Progression Tracker` | Grid Analytics | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
 | **[#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)** | `Corner Exit Traction & Throttle Pick-Up Aggression Analysis` | Powertrain & Telemetry | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
 | **[#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)** | `Track Evolution & Grip Improvement Ramp Index` | Track & Weather Analytics | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
-| **[#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)** | `Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown` | Strategy & Pit Stops | Micro-sector decomposition of pit lane entry/exit delta, stationary stop duration, and net in-lap/out-lap pace deficit. |
 
 ---
 
@@ -360,6 +361,7 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#173](https://github.com/parekhrohan21/fastf1_pitwall/pull/173)** / **[#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)** | `Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown` | Strategy & Pit Stops | Micro-sector decomposition of pit lane transit duration ($t_{\text{pit\_lane}}$), in-lap push delta ($\Delta t_{\text{in}}$), out-lap cold tyre warm-up ($\Delta t_{\text{out}}$), net pit loss, and full-field efficiency leaderboard. |
 | **[#169](https://github.com/parekhrohan21/fastf1_pitwall/pull/169)** / **[#152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)** | `Intra-Team Teammate Battle & Qualifying Delta Matrix` | Leaderboards & Analytics | Grid-wide teammate comparison across all 10 constructors with diverging qualifying & race pace delta bars, sector dominance (S1/S2/S3), and classified matrix table. |
 | **[#168](https://github.com/parekhrohan21/fastf1_pitwall/pull/168)** | `Synchronize README, AGENT.md, and DOCS.md documentation` | Documentation | Comprehensive documentation and agentic guidelines audit synchronizing test counts, roadmap items, and architecture decision records. |
 | **[#167](https://github.com/parekhrohan21/fastf1_pitwall/pull/167)** / **[#151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)** | `Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler` | Tyre Modeling & Strategy | Decoupling fuel mass burn-off (lap-by-lap weight reduction) from compound wear to isolate pure tyre degradation curves, unmasked thermal cliff laps, and fuel masking offsets. |

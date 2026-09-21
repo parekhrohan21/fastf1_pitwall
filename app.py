@@ -28,7 +28,7 @@ from src.data.loader import (
     _get_telemetry_for_map, _get_round, start_live_recorder, stop_live_recorder,
     get_live_recorder_status, load_live_session, _PATCH_STATUS, test_curl_cffi_request,
     _build_race_control_messages, _build_export_csv, _build_export_parquet, _build_export_json,
-    _build_teammate_battle_data
+    _build_teammate_battle_data, _build_pit_transit_data
 )
 from src.ui.components import (
     _render_constructor_standings, _render_final_classification, _render_footer,
@@ -40,7 +40,8 @@ from src.ui.components import (
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_gear_analysis_section,
-    _render_speed_trap_section, _render_teammate_battle_section
+    _render_speed_trap_section, _render_teammate_battle_section,
+    _render_pit_loss_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1428,6 +1429,25 @@ if compare and driver2 and _pit_d1 and _pit_d2:
             
         except Exception as e:
             st.warning("Could not calculate undercut gap due to missing telemetry on the battle laps.")
+
+
+# ── Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown ───────────
+try:
+    _transit_laps = sess.laps if hasattr(sess, "laps") and sess.laps is not None else _all_laps1
+    _transit_data = _build_pit_transit_data(sess_key, _transit_laps, sess_obj=sess, driver=driver1)
+    if _transit_data and _transit_data.get("has_data") and _transit_data.get("all_stops"):
+        _render_pit_loss_section(
+            _transit_data,
+            driver1=driver1,
+            driver2=driver2 if compare else None,
+            compare=compare,
+            colour1=colour1,
+            colour2=colour2,
+            label1=label1,
+            label2=label2,
+        )
+except Exception:
+    pass
 
 
 # ── Tyre Degradation Analysis ──────────────────────────────────────────────────
