@@ -349,6 +349,8 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Scope & Planned Capability |
 |:---:|---|---|---|
+| **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `add DECISIONS.md to document Architectural choices and AI implementation decisions` | Architecture & Governance | Standardised Architecture Decision Records (ADRs) cataloguing key algorithmic choices, mathematical rationale, engineering trade-offs, and rejected alternatives. |
+| **[#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)** | `Automated Session Brag Video Generation via Latent Space Telemetry Embeddings` | Telemetry & Generative Video | Dimensionality reduction (PCA / manifold embedding) projecting 9D telemetry into fluid camera tracking reels, HUD telemetry overlays, and exportable MP4 brag videos. |
 | **[#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)** | `repository cleanup, remove redundant code and AI slop, and streamline file tree` | Maintenance / Refactor | Comprehensive repository audit to eliminate dead code, AI-generated scratch files, unused assets, and keep the repository lean and minimal. |
 | **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Telemetry & Strategy | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. |
 | **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `Full Grand Prix Weekend Multi-Session Progression Tracker` | Grid Analytics | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
