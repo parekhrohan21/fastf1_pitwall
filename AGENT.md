@@ -52,6 +52,7 @@ fastf1_pitwall/
 ├── README.md           ← user-facing documentation (keep in sync)
 ├── AGENT.md            ← this file
 ├── DOCS.md             ← technical developer documentation
+├── DECISIONS.md        ← architecture decision records & AI choices (planned, Issue #172)
 └── cache/              ← FastF1 disk cache (gitignored, never commit)
 ```
 
@@ -612,6 +613,7 @@ Before merging any PR or pushing a significant change directly to `main`, you **
 - [ ] `DOCS.md` chart inventory updated if a new chart was added
 - [ ] `AGENT.md` architecture map line ranges updated if sections shifted
 - [ ] `DOCS.md` roadmap item marked ✅ Done if it was implemented
+- [ ] `DECISIONS.md` updated with new ADR entry if architectural choices or algorithmic trade-offs were made (Issue #172)
 
 **Syntax & Testing**
 
