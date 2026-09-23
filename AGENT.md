@@ -105,7 +105,7 @@ All data-builder functions are cached with `@st.cache_data(ttl=3600)`. The cache
 
 ### 5. Single canonical compound colour dict
 
-`COMPOUND_COLOURS` at line ~1157 is the **only** definition of compound colours in the entire codebase.
+`COMPOUND_COLOURS` in `src/ui/styles.py` (line 57) is the **only** definition of compound colours in the entire codebase.
 It carries three keys per compound: `fill` (hex background), `text` (label contrast colour), `letter` (badge abbreviation).
 `_CMP_PALETTE` and all other inline dicts (`cmp_dot`, `cmp_colours_map`) have been removed.
 When adding new chart types, always derive colours with:
