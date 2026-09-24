@@ -18,6 +18,19 @@ COPY . .
 # FastF1 disk cache directory (mounted as volume for persistence)
 RUN mkdir -p /app/cache
 
+# Docker build/run instructions:
+#   1) Build the image:
+#      docker build -t fastf1_pitwall .
+#
+#   2) Run the container:
+#      docker run --rm -p 8501:8501 \
+#        -v "$PWD/cache:/app/cache" \
+#        --name fastf1-pitwall \
+#        fastf1_pitwall
+#
+#   3) Open the app in a browser:
+#      http://localhost:8501
+
 EXPOSE 8501
 
 CMD ["streamlit", "run", "app.py", \
