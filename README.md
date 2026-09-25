@@ -172,21 +172,30 @@ Open **http://localhost:8501** in your browser.
 
 ## 🐳 Running with Docker
 
-### Step 1 — Build the image
+### Quick start
+
+Build the image from the project root:
 
 ```bash
-docker build -t pitwall .
+docker build -t fastf1_pitwall .
 ```
 
-### Step 2 — Run the container with cache mount
-
-FastF1 caches downloaded telemetry (~50-100MB per session) to disk. You should mount a local folder so you don't re-download data every time the container restarts:
+Run the container and mount the local cache directory so FastF1 data persists between restarts:
 
 ```bash
-docker run -p 8501:8501 -v $(pwd)/cache:/app/cache pitwall
+docker run --rm -p 8501:8501 \
+  -v "$PWD/cache:/app/cache" \
+  --name fastf1-pitwall \
+  fastf1_pitwall
 ```
 
-Open **http://localhost:8501**.
+Then open **http://localhost:8501** in your browser.
+
+### Notes
+
+- The app listens on port `8501`.
+- The cache directory is mounted to `/app/cache` to avoid re-downloading the same race data.
+- This container is meant for local development or simple deployment; it uses the same Streamlit entrypoint defined in the Dockerfile.
 
 ---
 

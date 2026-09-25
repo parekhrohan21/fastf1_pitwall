@@ -9,39 +9,59 @@
 
 ## Table of Contents
 
-1. [Project Philosophy](#1-project-philosophy)
-2. [Technology Stack](#2-technology-stack)
-3. [Application Lifecycle](#3-application-lifecycle)
-4. [Data Layer — FastF1](#4-data-layer--fastf1)
-5. [Caching Strategy](#5-caching-strategy)
-6. [State Management](#6-state-management)
-7. [Helper Function Reference](#7-helper-function-reference)
-8. [CSS Architecture](#8-css-architecture)
-9. [Rendering Pipeline](#9-rendering-pipeline)
-10. [Chart Inventory](#10-chart-inventory)
-11. [Theme System](#11-theme-system)
-12. [Driver Name Mapping](#12-driver-name-mapping)
-13. [Extending the Dashboard — How to Add a New Feature](#13-extending-the-dashboard--how-to-add-a-new-feature)
-14. [Common Pitfalls & Gotchas](#14-common-pitfalls--gotchas)
-15. [Performance Notes](#15-performance-notes)
-16. [Testing](#16-testing)
-17. [Future Roadmap](#17-future-roadmap)
-18. [Solved Issues & Changelog](#18-solved-issues--changelog)
-19. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
-20. [Post-Race Debrief Exporter (PDF)](#20-post-race-debrief-exporter-pdf)
-21. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
-22. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
-23. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
-24. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
-25. [Predictive Tyre Degradation & Thermal Crossover Matrix Architecture](#25-predictive-tyre-degradation--thermal-crossover-matrix-architecture)
-26. [Interactive Telemetry Channel Toggle & Custom Trace Filtering Architecture](#26-interactive-telemetry-channel-toggle--custom-trace-filtering-architecture)
-27. [High-Throughput Multi-Format Telemetry Exporter Architecture](#27-high-throughput-multi-format-telemetry-exporter-architecture)
-28. [Braking Efficiency & Trail-Braking Zone Analysis Architecture](#28-braking-efficiency--trail-braking-zone-analysis-architecture)
-29. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
-30. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
-31. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
-32. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
-33. [Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture](#33-pit-lane-transit-loss--in-lap--out-lap-performance-breakdown-architecture)
+1. [Quick Docker Commands](#quick-docker-commands)
+2. [Project Philosophy](#1-project-philosophy)
+3. [Technology Stack](#2-technology-stack)
+4. [Application Lifecycle](#3-application-lifecycle)
+5. [Data Layer — FastF1](#4-data-layer--fastf1)
+6. [Caching Strategy](#5-caching-strategy)
+7. [State Management](#6-state-management)
+8. [Helper Function Reference](#7-helper-function-reference)
+9. [CSS Architecture](#8-css-architecture)
+10. [Rendering Pipeline](#9-rendering-pipeline)
+11. [Chart Inventory](#10-chart-inventory)
+12. [Theme System](#11-theme-system)
+13. [Driver Name Mapping](#12-driver-name-mapping)
+14. [Extending the Dashboard — How to Add a New Feature](#13-extending-the-dashboard--how-to-add-a-new-feature)
+15. [Common Pitfalls & Gotchas](#14-common-pitfalls--gotchas)
+16. [Performance Notes](#15-performance-notes)
+17. [Testing](#16-testing)
+18. [Future Roadmap](#17-future-roadmap)
+19. [Solved Issues & Changelog](#18-solved-issues--changelog)
+20. [Multi-Driver Grid Analysis & Heatmaps Architecture](#19-multi-driver-grid-analysis--heatmaps-architecture)
+21. [Post-Race Debrief Exporter (PDF)](#20-post-race-debrief-exporter-pdf)
+22. [Driver Consistency Index & Stint Pace Distribution Architecture](#21-driver-consistency-index--stint-pace-distribution-architecture)
+23. [Track Temperature & Weather Impact Correlation Architecture](#22-track-temperature--weather-impact-correlation-architecture)
+24. [Multi-Year Historical Lap Comparison Architecture](#23-multi-year-historical-lap-comparison-architecture)
+25. [Corner Analysis — Steering & DRS Telemetry Subplots Architecture](#24-corner-analysis--steering--drs-telemetry-subplots-architecture)
+26. [Predictive Tyre Degradation & Thermal Crossover Matrix Architecture](#25-predictive-tyre-degradation--thermal-crossover-matrix-architecture)
+27. [Interactive Telemetry Channel Toggle & Custom Trace Filtering Architecture](#26-interactive-telemetry-channel-toggle--custom-trace-filtering-architecture)
+28. [High-Throughput Multi-Format Telemetry Exporter Architecture](#27-high-throughput-multi-format-telemetry-exporter-architecture)
+29. [Braking Efficiency & Trail-Braking Zone Analysis Architecture](#28-braking-efficiency--trail-braking-zone-analysis-architecture)
+30. [Gear Shift Strategy & RPM Power Band Optimization Architecture](#29-gear-shift-strategy--rpm-power-band-optimization-architecture)
+31. [Speed Trap & Intermediate Velocity Radar Breakdown Architecture](#30-speed-trap--intermediate-velocity-radar-breakdown-architecture)
+32. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
+33. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
+34. [Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture](#33-pit-lane-transit-loss--in-lap--out-lap-performance-breakdown-architecture)
+
+---
+
+## Quick Docker Commands
+
+From the project root:
+
+```bash
+docker build -t fastf1_pitwall .
+```
+
+```bash
+docker run --rm -p 8501:8501 \
+  -v "$PWD/cache:/app/cache" \
+  --name fastf1-pitwall \
+  fastf1_pitwall
+```
+
+The application runs on port `8501` and uses `/app/cache` for FastF1 session caching. This is the standard local Docker workflow for the dashboard.
 
 ---
 
