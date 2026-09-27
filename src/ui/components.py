@@ -883,17 +883,17 @@ def _render_ideal_lap_section(ideal_df, highlight_drivers: list, highlight_colou
     st.markdown(_ideal_tbl, unsafe_allow_html=True)
 
 
-def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_drivers, highlight_colours, fmt_func=None):
+def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_drivers, highlight_colours, fmt_func=None, rc_messages=None):
     gtl_data, ts_data = _build_gap_data(sess_k, laps_df, session_obj)
     if gtl_data is None:
         st.info("Gap to Leader data is not available for this session.")
-        return
+        return None
 
     # Check highlight drivers are actually in the dataset
     highlight = [d for d in highlight_drivers if d in gtl_data]
     colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
-    gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps)
+    gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps, rc_messages=rc_messages)
     st.plotly_chart(gtl_fig, width="stretch", config={"displayModeBar": False})
 
     # Show quick stats below the chart
@@ -911,6 +911,7 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
             f"</div>",
             unsafe_allow_html=True,
         )
+    return gtl_fig
 
 
 def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colours, fmt_func=None):
@@ -918,7 +919,7 @@ def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colou
     if pos_data is None or not pos_data:
         st.info("Race position data is not available for this session type "
                 "(only Race and Sprint sessions carry lap-by-lap position data).")
-        return
+        return None
 
     highlight = {}
     for drv, col in zip(highlight_drivers, highlight_colours):
@@ -1001,21 +1002,25 @@ def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colou
     )
 
     st.plotly_chart(pos_fig, width="stretch", config={"displayModeBar": False})
+    return pos_fig
 
 
 
-def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour, other_colour, compare, l1, l2, fmt_func=None):
+def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, key_suffix: str = "single",
+                      other_driver: str | None = None, other_colour: str | None = None, other_lap=None,
+                      fmt_func=None, **kwargs):
+    compare = bool(other_driver and other_lap is not None)
     map_tab1, map_tab2, map_tab3, map_tab4 = st.tabs([
-        "🗺️  Timing Dominance Map",
-        "🛞  Driver Inputs Map",
+        "🎨  Track Map",
+        "🕹️  Driver Inputs",
         "🎬  Race Replay",
         "🔍  Corner Analysis"
     ])
     
     with map_tab1:
-        if session_obj is not None:
-            l_obj = l1
-            l_obj2 = l2 if compare else None
+        if session_obj is not None and lap is not None:
+            l_obj = lap
+            l_obj2 = other_lap if compare else None
             fig, warning_msg = _speed_map_fig(l_obj, driver, colour, sess_k, l_obj2, other_driver, other_colour)
             if warning_msg:
                 st.warning(warning_msg)
@@ -1025,21 +1030,21 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
             st.info("Load a session to view track dominance map.")
             
     with map_tab2:
-        if session_obj is not None:
-            if compare:
+        if session_obj is not None and lap is not None:
+            if compare and other_lap is not None:
                 col_inp1, col_inp2 = st.columns(2)
                 with col_inp1:
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {colour}; margin-bottom: 8px;'>{fmt_func(driver) if fmt_func else driver}</div>", unsafe_allow_html=True)
-                    fig1, w1 = _input_map_fig(l1, driver, colour, sess_k)
+                    fig1, w1 = _input_map_fig(lap, driver, colour, sess_k)
                     if w1: st.warning(w1)
                     if fig1: st.plotly_chart(fig1, width="stretch", config={"displayModeBar": False})
                 with col_inp2:
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {other_colour}; margin-bottom: 8px;'>{fmt_func(other_driver) if fmt_func else other_driver}</div>", unsafe_allow_html=True)
-                    fig2, w2 = _input_map_fig(l2, other_driver, other_colour, sess_k)
+                    fig2, w2 = _input_map_fig(other_lap, other_driver, other_colour, sess_k)
                     if w2: st.warning(w2)
                     if fig2: st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
             else:
-                fig1, w1 = _input_map_fig(l1, driver, colour, sess_k)
+                fig1, w1 = _input_map_fig(lap, driver, colour, sess_k)
                 if w1: st.warning(w1)
                 if fig1: st.plotly_chart(fig1, width="stretch", config={"displayModeBar": False})
         else:
@@ -1047,7 +1052,7 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
             
     with map_tab3:
         if session_obj is not None:
-            replay_key = f"replay_fig_{sess_k}"
+            replay_key = f"replay_fig_{sess_k}_{key_suffix}"
             if replay_key not in st.session_state:
                 with st.spinner("Building replay animation..."):
                     fig_rep, err = build_replay_fig(session_obj)
@@ -1056,37 +1061,37 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
                     else:
                         st.session_state[replay_key] = fig_rep
             
-            if replay_key in st.session_state:
+            if replay_key in st.session_state and st.session_state[replay_key] is not None:
                 st.plotly_chart(st.session_state[replay_key], width="stretch")
         else:
             st.info("Load a session to view animated replay.")
             
     with map_tab4:
-        if session_obj is not None:
+        st.markdown("<h4 style='margin-top:0;'>Corner-by-Corner Performance Analysis</h4>", unsafe_allow_html=True)
+        if lap is not None and session_obj is not None:
             try:
                 circuit_info = session_obj.get_circuit_info()
             except Exception:
                 st.warning("Circuit geometry info is not available for this track.")
                 return
 
-            corners = circuit_info.corners
-            if corners.empty:
-                st.warning("No corner data available in circuit info.")
+            if circuit_info is None or not hasattr(circuit_info, "corners") or circuit_info.corners is None or circuit_info.corners.empty:
+                st.warning("Track layout or corner data is not available for this session.")
                 return
 
-            # Corner selectbox
+            corners = circuit_info.corners
             corners_clean = corners.copy()
             corners_clean["Number"] = corners_clean["Number"].astype(str)
             corner_labels = [f"Turn {row['Number']}{row['Letter'] or ''}" for _, row in corners_clean.iterrows()]
-            selected_corner_label = st.selectbox("Select Corner", corner_labels, key="corner_selector")
+            selected_corner_label = st.selectbox("Select Corner", corner_labels, key=f"corner_selector_{key_suffix}")
             
             idx = corner_labels.index(selected_corner_label)
             selected_corner = corners_clean.iloc[idx]
             apex_dist = selected_corner["Distance"]
 
             try:
-                tel1_all = _get_telemetry_for_map(l1, driver, sess_k)
-                tel2_all = _get_telemetry_for_map(l2, other_driver, sess_k) if compare else None
+                tel1_all = _get_telemetry_for_map(lap, driver, sess_k)
+                tel2_all = _get_telemetry_for_map(other_lap, other_driver, sess_k) if compare else None
             except Exception:
                 st.warning("Could not load telemetry for corner analysis.")
                 return
@@ -1118,7 +1123,8 @@ def render_maps_block(session, session_obj, sess_k, driver, other_driver, colour
                         st.write(f"Max Steering Angle: **{stats2['max_steering']:.1f}°**")
                     st.write(f"DRS Activated: **{'Yes' if stats2.get('drs_active') else 'No'}**")
 
-            st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
+            if fig_corner:
+                st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
         else:
             st.info("Load a session to view corner analysis.")
 
