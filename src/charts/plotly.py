@@ -308,8 +308,8 @@ def _stint_fig(drivers_stints: list) -> go.Figure:
     return fig
 
 
-def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_laps, rc_messages=None):
-    """Build and return a Plotly figure of gap to leader with optional flag zone overlays."""
+def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_laps):
+    """Build and return a Plotly figure of gap to leader."""
     fig = go.Figure()
 
     # Grey background traces for all other drivers
@@ -375,16 +375,6 @@ def _gap_chart_fig(gap_to_leader, highlight_drivers, highlight_colours, session_
         hovermode="x unified",
         height=420,
     )
-
-    # Overlay flag zones if available
-    if rc_messages is not None:
-        try:
-            all_laps = [ln for gap in gap_to_leader.values() for ln in gap.index]
-            max_lap = int(max(all_laps)) if all_laps else 70
-        except Exception:
-            max_lap = 70
-        _add_flag_zones(fig, rc_messages, max_lap)
-
     return fig
 
 

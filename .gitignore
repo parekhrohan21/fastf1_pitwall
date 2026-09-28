@@ -1,33 +1,6 @@
-# FastF1 disk cache & local data caches
 cache/
-**/cache/
-src/**/cache/
-
-# Python bytecode & cache
 __pycache__/
-**/__pycache__/
-*.py[cod]
-*$py.class
-
-# Pytest and coverage caches
-.pytest_cache/
-**/.pytest_cache/
-.coverage
-htmlcov/
-
-# Virtual environments
+*.pyc
+.DS_Store
 .venv/
 venv/
-env/
-ENV/
-
-# System and editor files
-.DS_Store
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Temporary scripts & scratch files
-scratch*.py
-test_cf.py

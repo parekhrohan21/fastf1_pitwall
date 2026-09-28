@@ -88,8 +88,18 @@ fastf1_pitwall/
 │   ├── test_grid_heatmap.py           # Multi-driver heatmap matrix data wrangling
 │   ├── test_live_timing.py            # SignalR live timing stream recorder
 │   └── test_data_wrangling.py         # Lap filtering & session statistics
+├── .github/
+│   └── workflows/
+│       └── test.yml    # GitHub Actions CI — runs the pytest suite on every push & PR to main
+├── .devcontainer/
+│   └── devcontainer.json # GitHub Codespaces / VS Code Dev Container definition (Python 3.11)
+├── cache/              # FastF1 disk cache (gitignored — never commit)
+├── icon-192.png        # PWA homescreen icon (192×192)
+├── icon-512.png        # PWA homescreen icon (512×512)
 ├── requirements.txt    # Pinned Python dependencies (FastF1, Streamlit, PyArrow, etc.)
 ├── Dockerfile          # Containerisation setup
+├── .dockerignore       # Excludes cache, bytecode & tests from the Docker build context
+├── .gitignore          # Excludes cache, bytecode, virtualenvs & scratch files
 ├── README.md           # User documentation & feature guide
 ├── AGENT.md            # AI developer agent guidelines & architecture decisions
 └── DOCS.md             # Technical developer manual & pipeline architecture
@@ -196,6 +206,37 @@ Then open **http://localhost:8501** in your browser.
 - The app listens on port `8501`.
 - The cache directory is mounted to `/app/cache` to avoid re-downloading the same race data.
 - This container is meant for local development or simple deployment; it uses the same Streamlit entrypoint defined in the Dockerfile.
+
+---
+
+## ☁️ Running in GitHub Codespaces (Dev Container)
+
+The repository ships a Dev Container definition at
+[`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json), so the dashboard can be run
+entirely in the browser with no local Python installation.
+
+### Quick start
+
+1. On the GitHub repository page, click **Code → Codespaces → Create codespace on main**.
+2. Wait for the container to build. The `updateContentCommand` automatically installs everything in
+   `requirements.txt` (plus Streamlit) and prints `✅ Packages installed and Requirements met`.
+3. Streamlit starts on its own via the `postAttachCommand`, and port **8501** is forwarded and opened
+   in a preview pane automatically.
+
+### What the container provides
+
+| Setting | Value |
+|---|---|
+| **Base image** | `mcr.microsoft.com/devcontainers/python:1-3.11-bookworm` (Python 3.11) |
+| **Auto-installed** | `requirements.txt`, plus any system packages listed in an optional `packages.txt` |
+| **Startup command** | `streamlit run app.py --server.enableCORS false --server.enableXsrfProtection false` |
+| **Forwarded port** | `8501`, labelled *Application*, auto-opened as a preview |
+| **VS Code extensions** | `ms-python.python`, `ms-python.vscode-pylance` |
+| **Files opened on start** | `README.md`, `app.py` |
+
+> [!NOTE]
+> CORS and XSRF protection are disabled **only** so that Streamlit renders inside the Codespaces
+> preview iframe. Do not reuse those flags for a public deployment.
 
 ---
 
@@ -350,6 +391,50 @@ git fetch -p
 
 ---
 
+## 🔄 Continuous Integration
+
+Every push and pull request targeting `main` is validated automatically by GitHub Actions via
+[`.github/workflows/test.yml`](.github/workflows/test.yml). A pull request should not be merged
+while this workflow is red.
+
+### Pipeline
+
+| Stage | Action | Detail |
+|---|---|---|
+| **1 · Trigger** | `push` / `pull_request` | Only on the `main` branch |
+| **2 · Runner** | `ubuntu-latest` | Fresh container per run |
+| **3 · Checkout** | `actions/checkout@v4` | Clones the repository |
+| **4 · Python** | `actions/setup-python@v5` | Python **3.11**, with `pip` dependency caching enabled |
+| **5 · Install** | `pip install -r requirements.txt` | Installs the pinned dependency matrix |
+| **6 · Test** | `pytest tests/` | Runs all **95 unit and integration tests** across 16 modules |
+
+### Reproducing the CI run locally
+
+Run the same two commands the workflow runs before pushing:
+
+```bash
+pip install -r requirements.txt
+pytest tests/
+```
+
+Then add the compile check from the `AGENT.md` code review checklist, which catches syntax errors in
+modules the test suite does not import:
+
+```bash
+python3 -m py_compile app.py src/data/loader.py src/ui/styles.py \
+                      src/ui/components.py src/charts/matplotlib.py src/charts/plotly.py
+```
+
+### Checking a run from the terminal
+
+```bash
+gh run list --workflow=test.yml --limit 5   # recent runs and their status
+gh run watch                                # follow the in-progress run live
+gh run view --log-failed                    # print the logs of a failed run
+```
+
+---
+
 ## 📜 Solved Issues & Changelog
 
 All development on FastF1 Pitwall is tracked transparently via GitHub Issues and Pull Requests following a rigorous branch-and-PR workflow. Below is the complete chronological index of active roadmap issues and resolved issues cross-referenced by issue number.
@@ -371,7 +456,8 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
-| **[#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)** | `repository cleanup, remove redundant code and AI slop, and streamline file tree` | Maintenance / Refactor | Purged 26 redundant function definitions from `app.py` (-2,021 lines), untracked compiled bytecode and scratch files, strengthened `.gitignore` & `.dockerignore` for optimal build caching. |
+| **[#176](https://github.com/parekhrohan21/fastf1_pitwall/pull/176)** / **[#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)** | `Repository cleanup, remove redundant code and AI slop, and streamline file tree` | Maintenance / Refactor | Purged 26 redundant duplicate function definitions from `app.py` (−2,021 lines) left behind by the `src/` modularisation, untracked compiled bytecode and scratch files, and strengthened `.gitignore` & `.dockerignore` for optimal Docker layer and Streamlit build caching. |
+| **[#175](https://github.com/parekhrohan21/fastf1_pitwall/pull/175)** | `Update README, DOCS.md, and AGENT.md manual documentation` | Documentation | Manual documentation refresh across the user guide, developer manual, and agent guidelines — added Docker deployment instructions and corrected stale test counts (87 → 95 tests, 15 → 16 modules). |
 | **[#174](https://github.com/parekhrohan21/fastf1_pitwall/pull/174)** | `Synchronize README, DOCS.md, and AGENT.md with active roadmap issues (#171, #172)` | Documentation | Synchronized active roadmap tables, developer manual roadmap, and agent guidelines with newly opened GitHub issues (#171, #172). |
 | **[#173](https://github.com/parekhrohan21/fastf1_pitwall/pull/173)** / **[#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)** | `Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown` | Strategy & Pit Stops | Micro-sector decomposition of pit lane transit duration ($t_{\text{pit\_lane}}$), in-lap push delta ($\Delta t_{\text{in}}$), out-lap cold tyre warm-up ($\Delta t_{\text{out}}$), net pit loss, and full-field efficiency leaderboard. |
 | **[#170](https://github.com/parekhrohan21/fastf1_pitwall/pull/170)** | `Update README and documentation files sync` | Documentation | Synchronized test counts and PR indices across user and developer documentation. |
