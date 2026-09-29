@@ -1435,6 +1435,291 @@ def _build_weather_correlation_data(sess_k: str, laps_df: pd.DataFrame, _session
         return None
 
 
+def _theil_sen_estimate(
+    x: np.ndarray,
+    y: np.ndarray,
+    max_pairs: int = 200_000,
+    seed: int = 0
+) -> tuple[float, float]:
+    """Theil-Sen robust line estimate: median of pairwise slopes, median intercept.
+
+    Tolerates up to ~29% contaminated points, which comfortably covers the
+    traffic and lift-and-coast laps that survive flyer filtering. Pair
+    enumeration is O(n^2), so for large lap sets a deterministic random subsample
+    of ``max_pairs`` pairs is used instead of the full set.
+    """
+    n = len(x)
+    if n < 2:
+        return 0.0, float(np.median(y)) if n else 0.0
+
+    total_pairs = n * (n - 1) // 2
+    if total_pairs <= max_pairs:
+        i_idx, j_idx = np.triu_indices(n, k=1)
+    else:
+        rng = np.random.default_rng(seed)
+        i_idx = rng.integers(0, n, size=max_pairs)
+        j_idx = rng.integers(0, n, size=max_pairs)
+
+    dx = x[j_idx] - x[i_idx]
+    valid = dx != 0
+    if not np.any(valid):
+        return 0.0, float(np.median(y))
+
+    slopes = (y[j_idx][valid] - y[i_idx][valid]) / dx[valid]
+    slope = float(np.median(slopes))
+    intercept = float(np.median(y - slope * x))
+    return slope, intercept
+
+
+def _robust_linear_fit(
+    x: np.ndarray,
+    y: np.ndarray,
+    max_iter: int = 3,
+    sigma: float = 2.0,
+    scale_floor: float = 1e-3,
+    min_inlier_frac: float = 0.5
+) -> tuple[float, float, np.ndarray] | None:
+    """Fit y = m*x + c with iterative MAD-based outlier trimming.
+
+    Ordinary least squares is dominated by traffic laps, lift-and-coast runs and
+    fuel-heavy race simulations, all of which sit far above the evolving track
+    limit. Each iteration refits on the points whose residual lies within
+    ``sigma`` robust standard deviations (1.4826 x MAD) of the current line.
+
+    ``scale_floor`` keeps the trim band from collapsing: once the gross outliers
+    are gone the residuals of a near-linear field fall to ~0, MAD follows, and an
+    unfloored band would then reject almost every remaining point. The default
+    1 ms matches F1 lap timing resolution, so the band can never shrink below the
+    precision of the underlying measurement. ``min_inlier_frac`` is a second
+    backstop that refuses any trim discarding more than half the sample.
+
+    Returns
+    -------
+    tuple[float, float, np.ndarray] | None
+        ``(slope, intercept, inlier_mask)``, or None when fewer than three
+        usable points survive.
+    """
+    if x is None or y is None or len(x) < 3 or len(x) != len(y):
+        return None
+
+    mask = np.ones(len(x), dtype=bool)
+
+    # Seed with Theil-Sen (median of pairwise slopes) rather than OLS. An OLS
+    # seed is itself dragged by the traffic laps we are trying to reject, and a
+    # residual band measured against that tilted line rejects the clean points
+    # at both ends of the session instead of the outliers.
+    slope, intercept = _theil_sen_estimate(x, y)
+
+    min_keep = max(3, int(np.ceil(min_inlier_frac * len(x))))
+
+    for _ in range(max_iter):
+        residuals = y - (slope * x + intercept)
+        mad = float(np.median(np.abs(residuals[mask] - np.median(residuals[mask]))))
+        robust_std = max(1.4826 * mad, scale_floor)
+        new_mask = np.abs(residuals) <= sigma * robust_std
+        # Stop on a degenerate or over-aggressive trim, or once the set is stable
+        if new_mask.sum() < min_keep or np.array_equal(new_mask, mask):
+            break
+        mask = new_mask
+        slope, intercept = np.polyfit(x[mask], y[mask], 1)
+
+    return float(slope), float(intercept), mask
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_track_evolution_data(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    _session_obj=None,
+    reference_percent: float = 1.07
+) -> dict | None:
+    """Model circuit rubbering-in by fitting the multi-car flyer lap distribution over session time.
+
+    As a Practice or Qualifying session runs, rubber laid into the racing line
+    progressively raises grip, so the whole field laps faster independently of
+    any single driver's improvement. This function isolates that effect:
+
+    - Keeps only valid flyer laps (accurate, green-flag, no in-lap or out-lap)
+      and drops laps slower than ``reference_percent`` of the session best, which
+      removes cool-down, traffic and race-simulation running.
+    - Fits a robust linear regression of lap time against elapsed session minutes
+      across *all* cars, giving the Track Evolution Ramp Rate in ms per minute.
+    - Fits a degree-2 polynomial as the displayed trend curve, since rubbering-in
+      typically saturates late in the session.
+    - Merges the track temperature profile so grip gain can be read against
+      falling or rising surface temperature.
+
+    Parameters
+    ----------
+    sess_k : str
+        Session cache key, present so Streamlit caches per session.
+    laps_df : pd.DataFrame
+        Session laps DataFrame with at minimum ``Driver``, ``LapNumber``,
+        ``LapTime`` and ``Time``.
+    _session_obj : optional
+        FastF1 session object, read only for ``weather_data``. Underscore-prefixed
+        so Streamlit does not attempt to hash it.
+    reference_percent : float, default 1.07
+        Flyer cutoff as a multiple of the session best lap. 1.07 mirrors the
+        107% qualifying rule and reliably separates push laps from everything else.
+
+    Returns
+    -------
+    dict | None
+        ``{"laps": DataFrame, "trend": dict, "temp_profile": DataFrame|None, "stats": dict}``
+        or None when the session has too few flyer laps to model.
+    """
+    MIN_FLYERS = 10
+
+    try:
+        if laps_df is None or laps_df.empty:
+            return None
+
+        required = {"LapTime", "Driver", "Time"}
+        if not required.issubset(set(laps_df.columns)):
+            return None
+
+        laps = laps_df.dropna(subset=["LapTime", "Driver", "Time"]).copy()
+        if laps.empty:
+            return None
+
+        # ── Flyer lap filtering ─────────────────────────────────────────────
+        flyer_mask = pd.Series(True, index=laps.index)
+        if "IsAccurate" in laps.columns:
+            flyer_mask &= (laps["IsAccurate"] == True)
+        if "PitInTime" in laps.columns:
+            flyer_mask &= laps["PitInTime"].isna()
+        if "PitOutTime" in laps.columns:
+            flyer_mask &= laps["PitOutTime"].isna()
+        # Track status: 1 = green. Exclude yellow (2), SC (4), red (5), VSC (6/7).
+        if "TrackStatus" in laps.columns:
+            flyer_mask &= (~laps["TrackStatus"].astype(str).str.contains("2|4|5|6|7"))
+
+        flyers = laps[flyer_mask].copy()
+        if flyers.empty:
+            return None
+
+        flyers["LapTime_s"] = flyers["LapTime"].dt.total_seconds()
+        flyers = flyers[flyers["LapTime_s"] > 0].copy()
+        if flyers.empty:
+            return None
+
+        # Elapsed session time (minutes) at the moment each lap was set
+        flyers["SessionMinutes"] = flyers["Time"].dt.total_seconds() / 60.0
+        flyers = flyers.dropna(subset=["SessionMinutes"]).sort_values("SessionMinutes").copy()
+        if flyers.empty:
+            return None
+
+        # Drop non-push laps using the 107% reference
+        session_best = float(flyers["LapTime_s"].min())
+        flyers = flyers[flyers["LapTime_s"] <= session_best * reference_percent].copy()
+        if len(flyers) < MIN_FLYERS:
+            return None
+
+        x_min = np.array(flyers["SessionMinutes"].values, dtype=float)
+        y_sec = np.array(flyers["LapTime_s"].values, dtype=float)
+
+        span_min = float(x_min.max() - x_min.min())
+        if span_min <= 0:
+            return None
+
+        # ── Robust linear ramp rate ─────────────────────────────────────────
+        fit = _robust_linear_fit(x_min, y_sec)
+        if fit is None:
+            return None
+        slope_s_per_min, intercept_s, inlier_mask = fit
+        flyers["IsTrendInlier"] = inlier_mask
+
+        ramp_rate_ms_per_min = slope_s_per_min * 1000.0
+        total_grip_gain_s = slope_s_per_min * span_min
+
+        # ── Quadratic trend curve (rubbering-in usually saturates) ──────────
+        x_in = x_min[inlier_mask]
+        y_in = y_sec[inlier_mask]
+        curve_x = np.linspace(float(x_min.min()), float(x_min.max()), 100)
+        quad_coeffs = None
+        if len(x_in) >= 5:
+            try:
+                quad_coeffs = tuple(float(c) for c in np.polyfit(x_in, y_in, 2))
+                curve_y = np.polyval(quad_coeffs, curve_x)
+            except Exception:
+                quad_coeffs = None
+        if quad_coeffs is None:
+            curve_y = slope_s_per_min * curve_x + intercept_s
+
+        # Coefficient of determination for the linear ramp on inliers
+        r_squared = None
+        try:
+            pred_in = slope_s_per_min * x_in + intercept_s
+            ss_res = float(np.sum((y_in - pred_in) ** 2))
+            ss_tot = float(np.sum((y_in - np.mean(y_in)) ** 2))
+            if ss_tot > 0:
+                r_squared = round(1.0 - ss_res / ss_tot, 3)
+        except Exception:
+            r_squared = None
+
+        # ── Track temperature profile ───────────────────────────────────────
+        temp_profile = None
+        temp_start = temp_end = None
+        if _session_obj is not None:
+            # hasattr() is inside the try: FastF1 exposes weather_data as a
+            # property that raises when the session was loaded with weather=False,
+            # and a non-AttributeError would otherwise escape and sink the
+            # whole evolution model over a missing temperature trace.
+            try:
+                w_raw = getattr(_session_obj, "weather_data", None)
+                if w_raw is not None and not w_raw.empty and "Time" in w_raw.columns and "TrackTemp" in w_raw.columns:
+                    w_df = w_raw.dropna(subset=["Time", "TrackTemp"]).sort_values("Time").copy()
+                    if not w_df.empty:
+                        temp_profile = pd.DataFrame({
+                            "SessionMinutes": w_df["Time"].dt.total_seconds() / 60.0,
+                            "TrackTemp": w_df["TrackTemp"].astype(float),
+                        })
+                        temp_start = round(float(temp_profile["TrackTemp"].iloc[0]), 1)
+                        temp_end = round(float(temp_profile["TrackTemp"].iloc[-1]), 1)
+            except Exception:
+                temp_profile = None
+
+        # ── Condition classification ────────────────────────────────────────
+        # Negative slope = lap times falling = track gripping up.
+        if ramp_rate_ms_per_min <= -30:
+            condition = "Rapidly Rubbering In"
+        elif ramp_rate_ms_per_min <= -8:
+            condition = "Gripping Up"
+        elif ramp_rate_ms_per_min < 8:
+            condition = "Stable Track"
+        else:
+            condition = "Track Degrading"
+
+        stats = {
+            "ramp_rate_ms_per_min": round(ramp_rate_ms_per_min, 1),
+            "total_grip_gain_s": round(total_grip_gain_s, 3),
+            "session_span_min": round(span_min, 1),
+            "flyer_lap_count": int(len(flyers)),
+            "inlier_count": int(inlier_mask.sum()),
+            "driver_count": int(flyers["Driver"].nunique()),
+            "session_best_s": round(session_best, 3),
+            "r_squared": r_squared,
+            "condition": condition,
+            "track_temp_start": temp_start,
+            "track_temp_end": temp_end,
+        }
+
+        return {
+            "laps": flyers,
+            "trend": {
+                "curve_x": curve_x,
+                "curve_y": np.asarray(curve_y, dtype=float),
+                "slope_s_per_min": slope_s_per_min,
+                "intercept_s": intercept_s,
+                "quad_coeffs": quad_coeffs,
+            },
+            "temp_profile": temp_profile,
+            "stats": stats,
+        }
+    except Exception:
+        return None
+
 def _build_multi_year_comparison(
     tel1: pd.DataFrame,
     tel2: pd.DataFrame,

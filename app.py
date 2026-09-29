@@ -38,6 +38,7 @@ from src.ui.components import (
     _render_gap_to_leader_section, _render_position_section, render_maps_block,
     render_live_status_banner, _render_grid_heatmap_section, render_export_section,
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
+    _render_track_evolution_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
@@ -919,6 +920,11 @@ _render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Temperature & Weather Impact Correlation ─────────────────────────
 _render_weather_correlation_section(sess_key, _all_laps1, sess, _hl_drivers, _hl_colours, _fmt_driver1)
+
+# ── Track Evolution & Grip Improvement Ramp (Practice / Qualifying only) ───
+_render_track_evolution_section(
+    sess_key, _all_laps1, sess, session_type, _hl_drivers, _hl_colours, _fmt_driver1
+)
 
 # ── Braking Efficiency & Trail-Braking Zone Analysis ───────────────────────
 st.markdown("<div class='section-title'>Braking Efficiency & Trail-Braking Zone Analysis</div>", unsafe_allow_html=True)

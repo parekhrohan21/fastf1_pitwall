@@ -43,6 +43,7 @@
 32. [Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler Architecture](#31-fuel-corrected-pure-tyre-degradation--fuel-burn-decoupler-architecture)
 33. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
 34. [Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture](#33-pit-lane-transit-loss--in-lap--out-lap-performance-breakdown-architecture)
+35. [Track Evolution & Grip Improvement Ramp Index Architecture](#34-track-evolution--grip-improvement-ramp-index-architecture)
 
 ---
 
@@ -569,6 +570,8 @@ _render_consistency_section()    ← Driver Consistency Index & Stint Pace Distr
         │
 _render_weather_correlation_section() ← Track Temperature & Weather Impact Correlation
         │
+_render_track_evolution_section() ← Track Evolution & Grip Improvement Ramp Index (Practice / Qualifying only)
+        │
 _render_braking_analysis_section() ← Braking Efficiency & Trail-Braking Zone Analysis
         │
 _render_gear_analysis_section()  ← Gear Shift Strategy & RPM Power Band Optimization
@@ -966,6 +969,7 @@ Run this after any significant change:
 - [ ] Tyre Life & Crossover Prediction Matrix renders with urgency badges
 - [ ] Driver Consistency section renders violin/boxplot with stat cards
 - [ ] Weather Impact Correlation chart renders with dual axis
+- [ ] Track Evolution section renders ramp rate, grip gain and temperature cards, condition banner, and dual-axis flyer scatter with trend curve (Practice / Qualifying sessions only; hidden on Race and Sprint)
 - [ ] Braking Efficiency section renders 3-subplot Plotly figure, corner selector, and 4 metric cards with advantage callouts
 - [ ] Gear Shift Strategy section renders 2-subplot Plotly figure (RPM curve + shift markers, gear distribution) and 4 metric cards
 - [ ] Speed Trap & Intermediate Velocity section renders 4-axis polar radar, constructor benchmarks, and classified leaderboard
@@ -1032,7 +1036,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | High | **Clean Air vs Dirty Air Pace Impact & Overtaking Analysis** ([#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)) | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. |
 | Medium | **Full Grand Prix Weekend Multi-Session Progression Tracker** ([#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)) | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
 | Medium | **Corner Exit Traction & Throttle Pick-Up Aggression Analysis** ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
-| Medium | **Track Evolution & Grip Improvement Ramp Index** ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | Modeling track rubbering-in rates, grip ramp curves, and lap time reduction across qualifying sessions and race distances. |
+| ~~Medium~~ | ~~**Track Evolution & Grip Improvement Ramp Index**~~ ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | ✅ **Done** — `_build_track_evolution_data` fits the multi-car flyer distribution against elapsed session time using a Theil-Sen seed with MAD trimming (`_robust_linear_fit`), yielding a ramp rate in ms/min and total grip gain in seconds. `build_track_evolution_fig` renders the dual-axis scatter, quadratic trend curve and track temperature profile; `_render_track_evolution_section` adds the metric cards and condition banner. |
 | ~~High~~ | ~~**Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown**~~ ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | ✅ **Done** — Deep-dive breakdown of pit lane transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta, out-lap cold tyre warm-up delta, sector splits, stacked horizontal bar chart (`build_pit_loss_fig`), and efficiency leaderboard table (`_render_pit_loss_section`). |
 | ~~Medium~~ | ~~**Repository Cleanup & Code Hygiene**~~ ([#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)) | ✅ **Done** — Streamlined repository file tree, purged 2,021 lines of redundant duplicate functions from `app.py`, removed tracked bytecode and temporary scratch files, and strengthened `.gitignore` and `.dockerignore` for optimal container build and Streamlit caching. |
 
@@ -1045,6 +1049,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **Issue #154** (`feat: Track Evolution & Grip Improvement Ramp Index`): Implemented `_theil_sen_estimate` and `_robust_linear_fit` (robust regression helpers), `_build_track_evolution_data` (multi-car flyer filtering, ramp rate, grip gain, quadratic trend, track temperature profile), `build_track_evolution_fig` (dual-axis field scatter + evolution curve + temperature overlay), and `_render_track_evolution_section` (Track Ramp Rate, Total Track Grip Gain, Track Temperature cards plus condition banner, gated to Practice and Qualifying sessions).
 - **Issue #164** (`refactor: repository cleanup, remove redundant code and AI slop, and streamline file tree`): Comprehensive repository cleanup and cache optimisation audit. Removed 26 redundant top-level function definitions from `app.py` (-2,021 lines) that were previously duplicated during modularisation into `src/` packages, unifying all caching on canonical `@st.cache_data` entry points in `src/data/loader.py` and reducing Streamlit memory pressure. Removed tracked bytecode (`__pycache__/app.cpython-311.pyc`) and temporary scratch files (`scratch.py`, `test_cf.py`) from git index. Strengthened `.gitignore` and `.dockerignore` to exclude cache directories, bytecode, test cache, and extraneous files to optimise Docker layer caching and prevent cache pollution. Verified all 95 unit tests in `tests/` pass with zero regressions.
 - **PR #174** (`docs: sync README, DOCS.md, and AGENT.md with active roadmap issues (#171, #172)`): Synchronized active roadmap documentation in `README.md` and `DOCS.md` with recently opened issues #172 (Architecture Decision Records in `DECISIONS.md`) and #171 (Latent Space Telemetry Video Generation), updated `AGENT.md` file tree and code review checklist, and verified test suite integrity (95 tests passing across 16 modules).
 - **PR #173** / **Issue #153** (`feat: Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown`): Implemented deep-dive analysis of pit lane time losses across all drivers and pit stops in `_build_pit_transit_data` (`src/data/loader.py`). Isolates pit lane speed-limiter transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push / entry delta vs clean-air baseline flyer pace ($\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$), and out-lap cold tyre warm-up performance ($\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$), plus net total pit loss ($\Delta t_{\text{total\_pit}} = (t_{\text{in}} + t_{\text{out}}) - 2 \cdot t_{\text{baseline}}$) and sector-by-sector ($S_1, S_2, S_3$) warm-up deltas. Implemented `build_pit_loss_fig` in `src/charts/plotly.py`, rendering an interactive horizontal stacked bar chart with phase colouring (Amber for In-Lap Push, Cyan for Pit Lane Transit, Purple for Out-Lap Warm-up) and rich custom hover tooltips. Implemented `_render_pit_loss_section` in `src/ui/components.py` with 4 top KPI cards (*Fastest Pit Lane Transit*, *Best In-Lap Push Delta*, *Best Out-Lap Warm-up*, *Grid Median Pit Loss*), Head-to-Head sector warm-up breakdown cards, and a full-field classified efficiency leaderboard table with constructor badge highlights. Integrated into `app.py` directly following the Pit Strategy & Undercut Analysis section. Added 8 unit tests in `tests/test_pit_transit_loss.py` (95 total suite tests passing across 16 modules).
@@ -1681,6 +1686,76 @@ A Formula 1 pit stop penalty is not limited to the 2.0–3.5s stationary tyre sw
   - Per-stop details: Lap, compound transition badge, transit time, in-lap push, and $S_1, S_2, S_3$ cold tyre warm-up badges.
 - **Full-Field Pit Stop Efficiency Leaderboard**:
   - Ranked HTML table showing Driver, Constructor with team badge, Stop/Lap, Tyre Transition, In-Lap Push $\Delta$, Pit Lane Transit, Out-Lap Warm-up $\Delta$, Sector Splits, and Net Pit Loss. Selected drivers are highlighted with team accent borders.
+
+
+---
+
+## 34. Track Evolution & Grip Improvement Ramp Index Architecture
+
+### Motivation & Background
+
+Across a Practice or Qualifying session the circuit itself gets faster. Every car that runs deposits rubber into the racing line, raising the available grip for everyone. A driver who improves by 0.8s between their first and last run has not necessarily found 0.8s of pace — a large share of it may simply be the track coming to them.
+
+This module separates the two. It treats the **whole field** as a sensor for the circuit: individual driver skill, setup changes and fuel loads vary car to car, but the common downward drift shared by all of them is track evolution.
+
+1. **Flyer isolation** — only accurate, green-flag laps with no pit in/out are considered, and laps slower than 107% of the session best are discarded. The 107% cutoff mirrors the qualifying rule and reliably separates push laps from cool-down, traffic and race-simulation running.
+2. **Ramp rate** — a robust linear fit of lap time against elapsed session minutes:
+   $$\text{RampRate} = 1000 \cdot \frac{dt_{\text{lap}}}{dt_{\text{session}}} \quad [\text{ms/min}]$$
+   A negative value means the circuit is gaining grip.
+3. **Total grip gain** — the ramp integrated over the session's running window:
+   $$\Delta t_{\text{grip}} = \text{slope} \cdot (t_{\max} - t_{\min})$$
+4. **Trend curve** — a degree-2 polynomial, since rubbering-in typically saturates late in a session rather than continuing linearly.
+
+### Robust Regression (`_theil_sen_estimate`, `_robust_linear_fit` — `src/data/loader.py`)
+
+Ordinary least squares is the wrong estimator here. The flyer set still contains traffic-compromised laps and lift-and-coast runs that sit well above the evolving track limit, and OLS is dragged upward by them.
+
+- **`_theil_sen_estimate`** — computes the median of all pairwise slopes, tolerating roughly 29% contamination. Pair enumeration is $O(n^2)$, so above `max_pairs` (200,000) a deterministic seeded subsample is used instead of the full triangular index.
+- **`_robust_linear_fit`** — seeds from Theil-Sen, then iteratively trims points whose residual exceeds `sigma` (default 2.0) robust standard deviations, where $\sigma_{\text{robust}} = 1.4826 \cdot \text{MAD}$, refitting on the survivors.
+
+Two guards matter, and both were added after the tests caught the failure modes:
+
+| Guard | Why it exists |
+| --- | --- |
+| `scale_floor` (1 ms) | Once the gross outliers are trimmed, a near-linear field has residuals of ~0, so MAD collapses and an unfloored band would reject almost every remaining point. The floor matches F1 lap timing resolution, so the band can never shrink below the precision of the measurement. |
+| `min_inlier_frac` (0.5) | Refuses any trim discarding more than half the sample, preventing a degenerate fit on an unusual distribution. |
+
+> **Why the Theil-Sen seed is required**: an OLS seed is itself tilted by the outliers being rejected. Measuring residuals against that tilted line rejects the *clean* laps at both ends of the session while keeping the outliers near the crossing point — the fit then collapses to a handful of points and returns a slope roughly double the true value.
+
+### Data Layer (`_build_track_evolution_data` — `src/data/loader.py`)
+
+- **Cache Decorator**: `@st.cache_data(show_spinner=False, ttl=3600)`
+- **Signature**: `(sess_k: str, laps_df: pd.DataFrame, _session_obj=None, reference_percent: float = 1.07)`
+- `_session_obj` is underscore-prefixed so Streamlit does not attempt to hash the FastF1 session; it is read only for `weather_data`.
+- **Filtering chain**: `IsAccurate == True` → `PitInTime` / `PitOutTime` null → `TrackStatus` excludes `2|4|5|6|7` (yellow, SC, red, VSC) → lap time within `reference_percent` of session best.
+- **Minimum sample**: 10 flyer laps, otherwise returns `None` and the UI shows an informational message.
+- **Session clock**: `SessionMinutes = Time.dt.total_seconds() / 60`, the elapsed time at which each lap was set.
+- **Track temperature**: read from `_session_obj.weather_data` via `getattr` inside a `try` — FastF1 raises when a session was loaded with `weather=False`, and a non-`AttributeError` escaping here would otherwise sink the whole model over a missing temperature trace.
+- **Condition classification** (from the ramp rate in ms/min):
+
+| Ramp rate | Condition |
+| --- | --- |
+| $\le -30$ | Rapidly Rubbering In |
+| $-30$ to $-8$ | Gripping Up |
+| $-8$ to $+8$ | Stable Track |
+| $\ge +8$ | Track Degrading |
+
+- **Returns**: `{"laps": DataFrame, "trend": {curve_x, curve_y, slope_s_per_min, intercept_s, quad_coeffs}, "temp_profile": DataFrame | None, "stats": {...}}`
+
+### Chart Layer (`build_track_evolution_fig` — `src/charts/plotly.py`)
+
+Dual-axis `make_subplots(specs=[[{"secondary_y": True}]])`:
+
+- **Secondary axis** — track temperature profile as a dotted filled line (`#FF5722`), drawn first so it sits behind the lap data.
+- **Primary axis** — the field's flyer laps as muted grey markers, with the selected drivers' laps redrawn in their team colours at larger size so they stand out against the field.
+- **Evolution trend curve** — the quadratic fit in green (`#00E676`), legend-labelled with the ramp rate (e.g. `Track Evolution (-18 ms/min)`).
+
+### UI Layer (`_render_track_evolution_section` — `src/ui/components.py`)
+
+- **Session gate**: renders only for Practice and Qualifying (`FP1`–`FP3`, `Q`, `SQ`, `SS`, plus raw-label fallbacks). Race and Sprint pace is dominated by fuel burn and tyre stint phases, which would swamp the evolution signal.
+- **Metric cards**: Track Ramp Rate (ms/min, with $R^2$ and car count), Total Track Grip Gain (s, with session span), and Track Temperature (start → end, with delta).
+- **Condition banner**: colour-coded left-border callout with a plain-language reading of what the ramp rate means for the session.
+- **Caption**: reports inliers vs total flyer laps and the session best, so the size of the fitted sample is always visible.
 
 ---
 

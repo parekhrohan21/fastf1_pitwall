@@ -10,7 +10,8 @@ from src.data.loader import (
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
     _build_grid_heatmap_data, _build_consistency_analysis,
-    _build_weather_correlation_data, _build_multi_year_comparison,
+    _build_weather_correlation_data, _build_track_evolution_data,
+    _build_multi_year_comparison,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data
@@ -19,6 +20,7 @@ from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
+    build_track_evolution_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig
@@ -1514,6 +1516,112 @@ def _render_weather_correlation_section(
     if fig is not None:
         st.plotly_chart(fig, width="stretch")
 
+
+def _render_track_evolution_section(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    session_obj=None,
+    session_type: str = "",
+    highlight_drivers: list[str] = None,
+    highlight_colours: list[str] = None,
+    fmt_func=None
+):
+    """Render track evolution ramp metric cards, condition banner and grip trend chart."""
+    if laps_df is None or laps_df.empty:
+        return
+
+    # Rubbering-in is only meaningful across Practice and Qualifying running.
+    # Race and Sprint pace is dominated by fuel burn and tyre stint phases.
+    # Codes come from app.py's _session_code_map, which falls back to the raw
+    # label when a schedule names a session it does not map.
+    st_code = str(session_type).upper()
+    _is_practice_or_quali = (
+        st_code.startswith("FP")
+        or st_code in {"Q", "SQ", "SS"}
+        or "PRACTICE" in st_code
+        or "QUALIFYING" in st_code
+        or "SHOOTOUT" in st_code
+    )
+    if not _is_practice_or_quali:
+        return
+
+    st.markdown("<div class='section-title'>🛞 Track Evolution & Grip Improvement Ramp</div>", unsafe_allow_html=True)
+
+    evo_data = _build_track_evolution_data(sess_k, laps_df, session_obj)
+    if not evo_data or "stats" not in evo_data:
+        st.info(
+            "ℹ️ Insufficient green-flag flyer laps (minimum 10 within 107% of the "
+            "session best) to model track evolution for this session."
+        )
+        return
+
+    stats = evo_data["stats"]
+
+    c1, c2, c3 = st.columns(3)
+
+    def _tcard(column, label, main_val, sub_val="", accent="#00E676"):
+        sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub_val}</div>" if sub_val else ""
+        column.markdown(
+            f"<div class='metric-card' style='--accent:{accent}; margin-bottom: 14px;'>"
+            f"<div class='metric-label'>{label}</div>"
+            f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{main_val}</div>"
+            f"{sub_html}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    ramp = stats.get("ramp_rate_ms_per_min")
+    r_sq = stats.get("r_squared")
+    ramp_str = f"{ramp:+.0f} ms/min" if ramp is not None else "—"
+    ramp_sub = f"R² {r_sq:.3f} across {stats.get('driver_count', 0)} cars" if r_sq is not None else "Robust multi-car fit"
+    _tcard(c1, "Track Ramp Rate", ramp_str, ramp_sub)
+
+    gain = stats.get("total_grip_gain_s")
+    span = stats.get("session_span_min")
+    gain_str = f"{gain:+.2f}s" if gain is not None else "—"
+    gain_sub = f"Over {span:.0f} min of running" if span is not None else ""
+    _tcard(c2, "Total Track Grip Gain", gain_str, gain_sub, accent="#00E5FF")
+
+    t_start = stats.get("track_temp_start")
+    t_end = stats.get("track_temp_end")
+    if t_start is not None and t_end is not None:
+        temp_str = f"{t_start:.1f}°C → {t_end:.1f}°C"
+        temp_sub = f"{t_end - t_start:+.1f}°C surface change"
+    else:
+        temp_str = "—"
+        temp_sub = "Track temp unavailable"
+    _tcard(c3, "Track Temperature", temp_str, temp_sub, accent="#FF5722")
+
+    # ── Track condition status banner ───────────────────────────────────────
+    condition = stats.get("condition", "Stable Track")
+    _banner_styles = {
+        "Rapidly Rubbering In": ("#00E676", "🟢", "Large lap time gains are coming from the circuit, not the cars — expect late-session improvement."),
+        "Gripping Up":          ("#8BC34A", "🟢", "The circuit is steadily gaining grip as rubber is laid into the racing line."),
+        "Stable Track":         ("#00E5FF", "🔵", "Track conditions are steady — lap time gains reflect genuine driver and setup performance."),
+        "Track Degrading":      ("#FF9800", "🟠", "Lap times are trending slower — rising surface temperature, wind or moisture is costing grip."),
+    }
+    accent, icon, blurb = _banner_styles.get(condition, _banner_styles["Stable Track"])
+    st.markdown(
+        f"<div style='border-left:4px solid {accent}; background:rgba(255,255,255,0.04); "
+        f"padding:10px 14px; border-radius:6px; margin:4px 0 14px 0;'>"
+        f"<span style='color:{accent}; font-weight:700;'>{icon} {condition}</span>"
+        f"<span style='opacity:0.8;'> — {blurb}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    hl = highlight_drivers or []
+    colors_map = dict(zip(hl, highlight_colours)) if highlight_colours else {}
+    labels_map = {d: (fmt_func(d) if fmt_func else d) for d in hl}
+
+    fig = build_track_evolution_fig(evo_data, colors_map, labels_map)
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch")
+
+    st.caption(
+        f"Fitted on {stats.get('inlier_count', 0)} of {stats.get('flyer_lap_count', 0)} valid flyer laps "
+        f"(session best {stats.get('session_best_s', 0):.3f}s). Negative ramp rate means the circuit is gaining grip."
+    )
 
 def _render_multi_year_comparison_section(
     tel1: pd.DataFrame,
