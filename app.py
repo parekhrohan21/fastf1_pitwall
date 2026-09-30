@@ -1,3 +1,56 @@
+"""Pit Wall — F1 Telemetry Dashboard: Streamlit entry point.
+
+Architecture
+------------
+This file is orchestration only: it owns the widget layout and the order in
+which sections render. All computation lives in the ``src/`` package:
+
+- ``src/data/loader.py``       FastF1 loading, ``@st.cache_data`` builders
+                               (``_build_*``), live timing, proxy patch
+- ``src/charts/plotly.py``     interactive Plotly figure builders
+- ``src/charts/matplotlib.py`` static telemetry figures (channels, deltas)
+- ``src/ui/styles.py``         CSS design system, team/compound colours, theme
+- ``src/ui/components.py``     self-contained section renderers (``_render_*``)
+
+Execution model
+---------------
+Streamlit re-runs this script top to bottom on every widget interaction; there
+are no callbacks driving the page. Two mechanisms make that affordable:
+
+- ``st.session_state`` holds the loaded FastF1 session(s) and their cache keys,
+  so a session survives reruns and is only fetched when Load is pressed.
+- ``@st.cache_data`` builders in the loader are keyed on ``sess_key``
+  (``"{year}_{gp}_{session}"``) plus plain-DataFrame lap snapshots, so each
+  section's data is computed once per session.
+
+Render flow
+-----------
+ 1. Page config & imports   ``set_page_config`` must be the first Streamlit call.
+ 2. Sidebar                 season / GP / session pickers, optional Session 2,
+                            theme toggle, live timing controls, Load button.
+ 3. Session state & loading fetch on Load; on failure clear cache and stop.
+ 4. Landing                 nothing loaded yet: show landing page and stop.
+ 5. Per-session prep        driver lists, lap snapshots, race control, labels.
+ 6. Driver & lap selection  Driver 1/2, lap pickers, chart view mode.
+ 7. Telemetry fetch         car data for the selected laps.
+ 8. Driver analysis         summaries, pace, tyres, pit stops, consistency,
+                            weather, track evolution, braking, gears, eras.
+ 9. Telemetry charts        channel filter, overlapping/separate, export, deltas.
+                            The run stops before this if the lap has no telemetry.
+10. Field-wide analysis     leaderboards, speed traps, ideal lap, teammates,
+                            heatmaps, gap, race control, positions, map, standings.
+11. PDF export & footer     sidebar debrief export of figures collected above.
+
+Comparison modes
+----------------
+- Driver compare: two drivers from one session. ``sess2`` is ``None``.
+- Session compare: Session 2 is loaded alongside Session 1 (any year, GP or
+  session), and ``compare`` is forced on with Driver 2 taken from Session 2.
+
+Session-2 inputs fall back to Session 1 (``_all_laps2 if _all_laps2 is not None
+else _all_laps1``), so both modes share one code path. Field-wide sections
+render one tab per session in session-compare mode.
+"""
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -51,6 +104,9 @@ from src.charts.plotly import (
 from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart, AVAILABLE_CHANNELS
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+# Every user control lives here. Values are re-read on each rerun, but nothing
+# is fetched until Load is pressed. Session names come from the event schedule
+# (Session1–Session5), so sprint weekends list their real session formats.
 # Inject design system & dark/light theme CSS early on every render
 inject_styles("#FF8700")
 
@@ -189,6 +245,9 @@ with st.sidebar:
     load_btn = st.button("⬇️  Load Session(s)", use_container_width=True)
 
     # ── Diagnostics expander ──────────────────────────────────────────────────
+    # Shows whether loader.py's curl_cffi HTTP patch imported and applied, plus
+    # any recorded request failures — for debugging FastF1 downloads on hosts
+    # that block the default HTTP client.
     with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
         st.write(f"**Patch Imported:** {_PATCH_STATUS['imported']}")
         st.write(f"**Patch Applied:** {_PATCH_STATUS['patched']}")
@@ -217,6 +276,13 @@ with st.sidebar:
     )
 
 # ── Session state ─────────────────────────────────────────────────────────────
+# Loaded sessions persist in st.session_state; the sidebar widgets only describe
+# what *would* be loaded. On Load, live mode reads a recorded SignalR stream
+# file, otherwise load_session() fetches through FastF1's disk cache (./cache).
+# A failed load clears that GP's cache so the next click is a clean retry, then
+# st.stop() ends the run. Session 2 loads only in session-compare mode and never
+# in live mode. sess / sess2 / sess_key / sess_key2 are then read back from
+# state — they are the source of truth for everything below.
 if "session" not in st.session_state:
     st.session_state["session"] = None
     st.session_state["sess_key"] = None
@@ -306,6 +372,8 @@ if live_mode:
     render_live_status_banner(live_status, auto_refresh_sec > 0, auto_refresh_sec)
 
 # ── Landing ───────────────────────────────────────────────────────────────────
+# Nothing loaded yet: show the landing page and stop. Every section below can
+# assume `sess` is a loaded session.
 if sess is None:
     st.markdown(
         "<a href='http://rohanparekh.uk' target='_top' class='back-home-link main-back-home'>"
@@ -338,6 +406,9 @@ if sess is None:
     st.stop()
 
 # ── Driver & lap controls ──────────────────────────────────────────────────────
+# Guard: a session can load with no lap data (very recent or cancelled events).
+# In that case clear both the FastF1 cache and session state, so the user is not
+# stuck re-running against a broken session.
 try:
     all_drivers1 = sorted(sess.laps["Driver"].dropna().unique().tolist())
     if not all_drivers1:
@@ -376,13 +447,19 @@ except Exception as e:
     st.stop()
 
 # ── Laps snapshot ─────────────────────────────────────────────────────────────
+# Plain pandas copies of the lap tables. @st.cache_data cannot hash
+# fastf1.core.Laps, so cached builders take these instead of sess.laps
+# (AGENT.md coding standard). _all_laps2 is None outside session-compare mode.
 _all_laps1: pd.DataFrame = pd.DataFrame(sess.laps.copy())
 _all_laps2: pd.DataFrame = pd.DataFrame(sess2.laps.copy()) if sess2 is not None else None
 
 # ── Race Control Messages ──────────────────────────────────────────────────────
+# Built once and shared: flag and safety car periods are shaded on Lap Time
+# History and Gap to Leader, and the full log renders in Race Control Feed.
 _rc_messages = _build_race_control_messages(sess_key, sess)
 
 # ── Driver name labels (built once per session) ───────────────────────────────
+# 'VER · Verstappen'-style display labels for selectbox format_func and legends.
 _drv_labels1: dict = _build_driver_labels(sess)
 _drv_labels2: dict = _build_driver_labels(sess2) if sess2 is not None else None
 
@@ -391,6 +468,9 @@ _fmt_driver1 = _make_fmt_driver(_drv_labels1)
 _fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labels1)
 
 # ── Export Figures Collection ──────────────────────────────────────────────────
+# Plotly figures are registered here as their sections render (Lap Time History,
+# Tyre Stints, Gap to Leader, Position History) and bundled into the sidebar PDF
+# debrief at the very end of the script.
 _export_figs = {}
 
 
@@ -421,6 +501,11 @@ else:
     _session_info_header(sess, session_type)
 
 # ── Driver Selection ──────────────────────────────────────────────────────────
+# Driver 1 defaults to the session winner. In session-compare mode Driver 2 is
+# picked from Session 2 and `compare` is forced on; otherwise Driver 2 is
+# optional and drawn from the same session. `compare` and `driver2` gate every
+# head-to-head element below. Each driver then gets a lap picker, and with two
+# drivers the user chooses Overlapping or Separate telemetry charts.
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
@@ -476,6 +561,9 @@ if compare and driver2:
 
 
 # ── Telemetry ─────────────────────────────────────────────────────────────────
+# Car data (speed, throttle, brake, RPM, gear, DRS) for the selected lap(s),
+# used by braking, gears, era comparison and the telemetry charts. inject_styles
+# runs again so the page accent colour follows Driver 1's team.
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
 
@@ -486,6 +574,7 @@ colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver
 matplotlib.rcParams.update(MATPLOTLIB_THEME)
 
 # ── Lap Summary ───────────────────────────────────────────────────────────────
+# Headline cards for each selected lap.
 st.markdown("<div class='section-title'>Lap Summary</div>", unsafe_allow_html=True)
 
 
@@ -500,6 +589,7 @@ else:
     render_summary(lap1, driver1, colour1, sess, year1)
 
 # ── Session Statistics ────────────────────────────────────────────────────────
+# Per-driver aggregates across the whole session, not just the selected lap.
 st.markdown("<div class='section-title'>Session Statistics</div>", unsafe_allow_html=True)
 
 
@@ -516,6 +606,9 @@ else:
     render_session_stats(driver1, colour1, sess, _all_laps1)
 
 # ── Lap Time History ──────────────────────────────────────────────────────────
+# Every lap for each driver, with the selected lap highlighted and race control
+# periods shaded. Labels carry the year in session-compare mode so the legend
+# stays unambiguous across seasons.
 st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_html=True)
 
 
@@ -539,6 +632,8 @@ if _all_none:
     st.info("Lap time history not available for this session.")
 else:
     # ── Compound filter ───────────────────────────────────────────────────────
+    # Options are the union of compounds either driver used; the filter is
+    # applied to each driver's laps before plotting.
     _all_compounds = sorted({
         str(c).upper()
         for _, _, _ldf in _hist_pairs if _ldf is not None and not _ldf.empty
@@ -573,6 +668,8 @@ else:
     st.plotly_chart(_lap_hist_fig_obj, width="stretch", config={"displayModeBar": False})
 
 # ── Fuel-Adjusted Pace Analysis ───────────────────────────────────────────────
+# Normalises lap times to empty-tank pace so stints on different fuel loads
+# can be compared directly.
 st.markdown("<div class='section-title'>Fuel-Adjusted Pace</div>", unsafe_allow_html=True)
 st.markdown(
     "<div style='font-size:11px; opacity:0.55; margin:-6px 0 10px; letter-spacing:0.3px;'>"
@@ -585,6 +682,7 @@ st.markdown(
 )
 
 # ── Fuel effect tuner
+# One slider value drives both the pace chart and the simulated leaderboard.
 _fuel_col, _ = st.columns([1, 3])
 with _fuel_col:
     _fuel_effect = st.slider(
@@ -617,6 +715,7 @@ else:
     st.plotly_chart(_fuel_pace_fig(_fuel_pairs), width="stretch", config={"displayModeBar": False})
 
     # ── Pace summary stat cards
+    # Best fuel-adjusted lap per driver, with best raw and median adjusted pace.
     _pace_cols = st.columns(len(_fuel_pairs))
     for _pc, (drv, col, df) in zip(_pace_cols, _fuel_pairs):
         if df is None or df.empty:
@@ -636,6 +735,8 @@ else:
         )
 
     # ── Simulated Qualifying Leaderboard
+    # Ranks the whole field by median fuel-corrected pace; one tab per session
+    # in session-compare mode.
     st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
     with st.expander("📋 View Simulated Qualifying Leaderboard (Fuel-Corrected)", expanded=False):
         st.markdown(
@@ -669,9 +770,9 @@ else:
                 _render_fuel_sim_leaderboard(_sim_df, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Tyre Stint Timeline ───────────────────────────────────────────────────────
+# Compound and length of each stint per driver.
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
 
-# _CMP_PALETTE removed — use COMPOUND_COLOURS (defined in Constants block) directly.
 
 
 
@@ -691,6 +792,8 @@ else:
 
 
 # ── Pit Stop Summary ──────────────────────────────────────────────────────────
+# Derived from lap PitIn/PitOut times, so only Race and Sprint sessions produce
+# data. _pit_d1 / _pit_d2 are reused by the undercut simulator below.
 st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_html=True)
 
 
@@ -719,6 +822,10 @@ else:
         st.info("No pit stops recorded for the selected driver(s).")
 
 # ── Pit Strategy & Undercut / Overcut Simulator ───────────────────────────────
+# Runs only when two compared drivers both pitted. Pairs the first stops made
+# within 3 laps of each other, then compares the on-track gap one lap before
+# the earlier stop with the gap two laps after the later one: the stop is
+# 'Successful' if whoever pitted first gained time across that window.
 if compare and driver2 and _pit_d1 and _pit_d2:
     st.markdown("<div class='section-title'>Pit Strategy & Undercut Analysis</div>", unsafe_allow_html=True)
     
@@ -769,6 +876,9 @@ if compare and driver2 and _pit_d1 and _pit_d2:
 
 
 # ── Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown ───────────
+# Field-wide pit loss breakdown: in-lap push, pit lane transit, out-lap warm-up.
+# The whole block sits in a try/except that swallows errors, so a failure here
+# renders nothing rather than taking down the rest of the page.
 try:
     _transit_laps = sess.laps if hasattr(sess, "laps") and sess.laps is not None else _all_laps1
     _transit_data = _build_pit_transit_data(sess_key, _transit_laps, sess_obj=sess, driver=driver1)
@@ -788,6 +898,10 @@ except Exception:
 
 
 # ── Tyre Degradation Analysis ──────────────────────────────────────────────────
+# Per-stint regression of lap time against tyre age on green-flag flyer laps.
+# With the fuel decoupler on (default), the fuel-burn gain is removed before
+# fitting so the slope reflects mechanical wear. The rates table and the
+# crossover matrix below both reuse `table_rows` from build_tyre_deg_fig.
 st.markdown("<div class='section-title'>Tyre Degradation Analysis</div>", unsafe_allow_html=True)
 st.markdown(
     "<div style='font-size:11px; opacity:0.55; margin:-6px 0 10px; letter-spacing:0.3px;'>"
@@ -902,6 +1016,7 @@ else:
     )
 
     # ── Tyre Life & Crossover Prediction Matrix ──────────────────────────────
+    # Projects each stint's cliff lap and pit window from the same fitted rows.
     render_tyre_crossover_matrix(
         table_rows=table_rows,
         fmt_driver1=_fmt_driver1,
@@ -913,20 +1028,26 @@ else:
     )
 
 # ── Driver Consistency & Stint Pace Distribution ───────────────────────────
+# Lap time spread per driver and stint. _hl_drivers / _hl_colours set here are
+# reused by the next two sections.
 st.markdown("<div class='section-title'>Driver Consistency & Stint Pace Distribution</div>", unsafe_allow_html=True)
 _hl_drivers = [driver1] + ([driver2] if compare and driver2 else [])
 _hl_colours = [colour1] + ([colour2] if compare and driver2 else [])
 _render_consistency_section(_all_laps1, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Temperature & Weather Impact Correlation ─────────────────────────
+# Lap pace against track temperature, read from the session's weather data.
 _render_weather_correlation_section(sess_key, _all_laps1, sess, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Track Evolution & Grip Improvement Ramp (Practice / Qualifying only) ───
+# Practice and Qualifying only. The session gate lives inside the renderer,
+# which is why session_type is passed; other sessions render nothing.
 _render_track_evolution_section(
     sess_key, _all_laps1, sess, session_type, _hl_drivers, _hl_colours, _fmt_driver1
 )
 
 # ── Braking Efficiency & Trail-Braking Zone Analysis ───────────────────────
+# Needs Driver 1 telemetry; adds Driver 2 when comparing.
 st.markdown("<div class='section-title'>Braking Efficiency & Trail-Braking Zone Analysis</div>", unsafe_allow_html=True)
 if tel1 is not None:
     _render_braking_analysis_section(
@@ -935,6 +1056,7 @@ if tel1 is not None:
     )
 
 # ── Gear Shift Strategy & RPM Power Band Optimization ──────────────────────
+# Gear usage, shift points and RPM bands from the fetched telemetry.
 st.markdown("<div class='section-title'>Gear Shift Strategy & RPM Power Band Optimization</div>", unsafe_allow_html=True)
 if tel1 is not None:
     _render_gear_analysis_section(
@@ -946,6 +1068,8 @@ if tel1 is not None:
 
 
 # ── Multi-Year Historical Lap Comparison ─────────────────────────────────
+# Only when both compared laps have telemetry — built for session-compare
+# across seasons. Both laps are aligned on a shared distance grid.
 if compare and tel1 is not None and tel2 is not None:
     _era_label1 = f"{year1} {_fmt_driver1(driver1)}"
     _era_label2 = f"{year2} {_fmt_driver2(driver2)}"
@@ -966,6 +1090,8 @@ if tel1 is None:
     st.stop()
 
 # ── Telemetry Channel Filter ──────────────────────────────────────────────────
+# Note the stop just above: without Driver 1 telemetry the run ends there, so
+# every section below (including the field-wide ones) is skipped.
 selected_channels = st.multiselect(
     "Telemetry Channels",
     options=AVAILABLE_CHANNELS,
@@ -974,6 +1100,7 @@ selected_channels = st.multiselect(
 )
 
 # ── Overlapping ───────────────────────────────────────────────────────────────
+# All drivers on shared axes. Also the single-driver view.
 if chart_mode == "Overlapping" or not compare:
     drv_list = [(label1, colour1, tel1)]
     if compare and tel2 is not None:
@@ -996,6 +1123,7 @@ if chart_mode == "Overlapping" or not compare:
         st.info("Select at least one telemetry channel above to display the chart.")
 
 # ── Separate ──────────────────────────────────────────────────────────────────
+# Side-by-side charts, one per driver.
 else:
     lc, rc = st.columns(2)
     for col_ctx, drv_lbl, driver, tel, colour, lap_obj in [
@@ -1021,6 +1149,7 @@ else:
 
 
 # ── Export Telemetry ──────────────────────────────────────────────────────────
+# Download the selected laps' telemetry as CSV, Parquet or JSON.
 render_telemetry_export_panel(
     driver1,
     tel1,
@@ -1032,6 +1161,9 @@ render_telemetry_export_panel(
 )
 
 # ── Speed delta (overlapping + comparison) ────────────────────────────────────
+# Overlapping mode only. Speed Delta compares the two telemetry traces; Time
+# Delta runs fastf1.utils.delta_time on the two lap objects to show where time
+# is gained or lost along the lap.
 
 if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not None:
     if "Speed" in tel1.columns and "Speed" in tel2.columns:
@@ -1049,6 +1181,8 @@ if compare and chart_mode == "Overlapping" and lap1 is not None and lap2 is not 
         plt.close(fig_td)
 
 # ── Fastest Laps Leaderboard ──────────────────────────────────────────────────
+# From here on, sections are field-wide: they read the whole lap table rather
+# than the selected laps, and render one tab per session in session-compare mode.
 st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_allow_html=True)
 
 
@@ -1078,6 +1212,7 @@ else:
         _render_leaderboard(_lb, _hl_drivers, _hl_colours, _fmt_driver1)
 
 # ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
+# Official speed trap sensors (ST, I1, I2, FL), Session 1 only.
 st.markdown("<div class='section-title'>Speed Trap & Intermediate Velocity Radar Breakdown</div>", unsafe_allow_html=True)
 _render_speed_trap_section(
     sess_key, _all_laps1, driver1, driver2 if compare else None,
@@ -1086,6 +1221,8 @@ _render_speed_trap_section(
 )
 
 # ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
+# Each driver's best sectors combined into a theoretical lap, against their
+# actual best.
 st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_allow_html=True)
 
 
@@ -1105,6 +1242,8 @@ else:
                               [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
 
 # ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
+# Teammates paired by constructor. In session-compare mode Session 2 gets its
+# own tab with only Driver 2 highlighted.
 st.markdown("<div class='section-title'>Intra-Team Teammate Battle & Qualifying Delta Matrix</div>", unsafe_allow_html=True)
 if sess2 is not None:
     tab_tb1, tab_tb2 = st.tabs([f"Session 1 Teammate Battles ({year1})", f"Session 2 Teammate Battles ({year2})"])
@@ -1133,12 +1272,15 @@ else:
 
 
 # ── Multi-Driver Grid Analysis & Heatmaps ───────────────────────────────────────
+# Sector, pace and top-speed matrices across the grid, Session 1 only.
 st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
 _render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
 
 
 
 # ── Gap to Leader ─────────────────────────────────────────────────────────────
+# Gap to the leader per lap, with race control periods shaded. Only the
+# Session 1 figure is registered for PDF export.
 st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
 
 if sess2 is not None:
@@ -1158,6 +1300,7 @@ else:
         _export_figs["Gap to Leader"] = _gtl_fig
 
 # ── Race Control Feed ─────────────────────────────────────────────────────────────
+# Filterable log of the race control messages built near the top of the script.
 st.markdown("<div class='section-title'>Race Control Feed</div>", unsafe_allow_html=True)
 
 if _rc_messages is None or _rc_messages.empty:
@@ -1195,6 +1338,7 @@ else:
 
 
 # ── Race Position Chart ───────────────────────────────────────────────────────
+# Running order lap by lap.
 st.markdown("<div class='section-title'>Race Position</div>", unsafe_allow_html=True)
 
 if sess2 is not None:
@@ -1213,6 +1357,9 @@ else:
         _export_figs["Position History"] = _pos_fig
 
 # ── Track Map ─────────────────────────────────────────────────────────────────
+# Speed-coloured circuit map for the selected lap(s). In driver-compare mode
+# the second driver's line is overlaid; in session-compare mode each session
+# gets its own tab.
 st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
 
 
@@ -1231,6 +1378,8 @@ else:
 
 
 # ── Championship Standings & Classification ───────────────────────────────────
+# Constructors' standings up to this round and the official session
+# classification, with the selected drivers and their teams highlighted.
 st.markdown("<hr style='margin:24px 0 16px; border-style: solid; opacity:0.15;'>", unsafe_allow_html=True)
 st.markdown("<div class='section-title'>Championship Standings & Classification</div>", unsafe_allow_html=True)
 
@@ -1286,6 +1435,8 @@ else:
     standings_d = _build_driver_standings(year, r)
     _render_final_classification(_cls, _hl_drivers, _hl_colours, _fmt_driver1, standings_d, laps_df=_all_laps1)
 
+# ── PDF Debrief Export & Footer ───────────────────────────────────────────────
+# Added last, once the sections above have populated _export_figs.
 with st.sidebar:
     if not live_mode and "driver1" in locals() and "driver2" in locals():
         render_export_section(f"{year} {gp} {session_label}", driver1, driver2 if compare else None, _export_figs)
