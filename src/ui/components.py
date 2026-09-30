@@ -1551,7 +1551,7 @@ def _render_track_evolution_section(
     if not evo_data or "stats" not in evo_data:
         st.info(
             "ℹ️ Insufficient green-flag flyer laps (minimum 10 within 107% of the "
-            "session best) to model track evolution for this session."
+            "session best, from drivers with 2+ flyers) to model track evolution for this session."
         )
         return
 
@@ -1620,7 +1620,9 @@ def _render_track_evolution_section(
 
     st.caption(
         f"Fitted on {stats.get('inlier_count', 0)} of {stats.get('flyer_lap_count', 0)} valid flyer laps "
-        f"(session best {stats.get('session_best_s', 0):.3f}s). Negative ramp rate means the circuit is gaining grip."
+        f"(session best {stats.get('session_best_s', 0):.3f}s). Lap times are pace-adjusted: each driver's "
+        f"median flyer is removed so the trend reflects the track, not which cars were still running late "
+        f"in the session. Negative ramp rate means the circuit is gaining grip."
     )
 
 def _render_multi_year_comparison_section(

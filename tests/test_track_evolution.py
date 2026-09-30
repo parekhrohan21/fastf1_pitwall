@@ -70,6 +70,35 @@ def test_build_track_evolution_data_basic_ramp():
     assert stats["r_squared"] is not None
 
 
+
+def test_build_track_evolution_data_removes_qualifying_knockout_bias():
+    """Slow cars eliminated early must not make the late-session field look faster."""
+    rows = []
+    # 12 drivers 0.1s apart; the slowest 4 stop after Q1 (~18 min), the next 4 after Q2 (~36 min)
+    for d_i in range(12):
+        last_min = 18.0 if d_i >= 8 else (36.0 if d_i >= 4 else 54.0)
+        minutes = 3.0 + d_i * 0.1
+        lap = 1
+        while minutes <= last_min:
+            rows.append({
+                "Driver": f"D{d_i:02d}",
+                "LapNumber": lap,
+                "LapTime": pd.Timedelta(seconds=90.0 + d_i * 0.1 - 0.01 * minutes),
+                "Time": pd.Timedelta(minutes=minutes),
+                "IsAccurate": True,
+                "TrackStatus": "1",
+                "PitInTime": pd.NaT,
+                "PitOutTime": pd.NaT,
+            })
+            minutes += 5.0
+            lap += 1
+
+    res = _build_track_evolution_data("2024_Knockout_Q", pd.DataFrame(rows))
+    assert res is not None
+    # True track ramp is -10 ms/min; a pooled field fit reads roughly double
+    assert res["stats"]["ramp_rate_ms_per_min"] == pytest.approx(-10.0, abs=1.0)
+    assert "PaceAdjusted_s" in res["laps"].columns
+
 def test_build_track_evolution_data_classifies_rapid_and_degrading():
     rapid = _build_track_evolution_data("2024_Rapid_Q", _make_session_laps(ramp_s_per_min=-0.06))
     assert rapid["stats"]["condition"] == "Rapidly Rubbering In"

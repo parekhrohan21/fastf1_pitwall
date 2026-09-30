@@ -12,7 +12,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **6-Channel Telemetry & Interactive Filtering**: View combined or separate traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS, with an interactive multiselect toggle to filter and reorder channels on the fly.
 - **Head-to-Head Comparison**: Overlay two drivers on the primary charts, plus a **Speed Delta (Δ)** chart and a **Continuous Time Delta (Δ)** chart showing exactly where time is gained/lost per meter along the track.
 - **Interactive Track Map**: A Plotly-powered map coloured by speed, with secondary driver path overlays. Gracefully falls back to a clean gray track outline with warning banners if telemetry data (like speed or driver pedal inputs) is incomplete or partially unavailable, ensuring the dashboard never crashes.
-- **Track Evolution & Grip Improvement Ramp Index** ([Issue #154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)): Models circuit rubbering-in across Practice and Qualifying by fitting the whole field's flyer laps against elapsed session time. Uses a Theil-Sen robust regression (with MAD outlier trimming) to compute a **Track Ramp Rate** in ms per minute and a **Total Track Grip Gain** in seconds, then renders a dual-axis Plotly chart of every car's lap scatter overlaid with the quadratic evolution trend curve and the track temperature profile. A condition banner classifies the circuit as Rapidly Rubbering In, Gripping Up, Stable, or Degrading, separating genuine driver improvement from grip the track handed back.
+- **Track Evolution & Grip Improvement Ramp Index** ([Issue #154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)): Models circuit rubbering-in across Practice and Qualifying by fitting the whole field's flyer laps against elapsed session time, after removing each driver's own pace level (driver fixed effects) so that Qualifying knockout eliminations cannot masquerade as grip gain. Uses a Theil-Sen robust regression (with MAD outlier trimming) to compute a **Track Ramp Rate** in ms per minute and a **Total Track Grip Gain** in seconds, then renders a dual-axis Plotly chart of every car's pace-adjusted lap scatter overlaid with the quadratic evolution trend curve and the track temperature profile. A condition banner classifies the circuit as Rapidly Rubbering In, Gripping Up, Stable, or Degrading, separating genuine driver improvement from grip the track handed back.
 - **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([Issue #153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)): Deep-dive telemetry breakdown of pit lane time losses isolating pit lane speed-limiter transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta against clean-air baseline flyer pace ($\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$), net pit loss, and sector-by-sector warm-up deltas ($S_1, S_2, S_3$). Visualised via an interactive stacked horizontal bar chart (`build_pit_loss_fig`), 4 summary KPI cards (*Fastest Pit Lane Transit*, *Best In-Lap Push Delta*, *Best Out-Lap Warm-up*, *Grid Median Pit Loss*), Head-to-Head sector warm-up cards, and a full-field classified efficiency leaderboard table.
 - **Intra-Team Teammate Battle & Qualifying Delta Matrix** ([Issue #152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)): Automated teammate head-to-head comparison analytics across all constructors for Qualifying and Race sessions. Renders a grid-wide horizontal diverging bar chart of teammate gaps, sector split advantages (S1, S2, S3), clean-air median race pace deltas, and an interactive classified matrix with top KPI cards for closest battle, largest delta, and grid median gap.
 - **Speed Trap & Intermediate Velocity Radar Breakdown** ([Issue #150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)): Grid-wide speed trap and intermediate velocity analytics using official timing sensors (`SpeedST`, `SpeedI1`, `SpeedI2`, `SpeedFL`). Extracts maximum velocities, calculates DRS aerodynamic efficiency deltas, and aggregates top speeds by constructor and Power Unit manufacturer (Ferrari, Mercedes, Red Bull Powertrains, Renault). Renders an interactive 4-axis polar radar profile (`build_speed_trap_radar_fig`), grouped constructor/engine benchmark bar charts (`build_speed_trap_bar_fig`), and a classified Speed Trap Leaderboard table with top-speed advantage metric cards.
@@ -53,7 +53,7 @@ Select a season, Grand Prix, session, driver, and lap — then instantly visuali
 - **Connection Diagnostics & Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105)): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks.
 - **Design Origin Footer** ([Issue #72](https://github.com/parekhrohan21/fastf1_pitwall/issues/72), [Issue #75](https://github.com/parekhrohan21/fastf1_pitwall/issues/75)): Styled footer displaying `Made proudly in Great Britain 🇬🇧`.
 - **Modular Codebase Architecture** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`).
-- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **104 pytest unit and integration tests** across 17 dedicated test modules.
+- **Comprehensive Automated Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Fully automated test coverage with **105 pytest unit and integration tests** across 17 dedicated test modules.
 - **High Performance**: FastF1 disk caching combined with Streamlit `@st.cache_data` keeps data processing instant after first load.
 
 ---
@@ -72,8 +72,8 @@ fastf1_pitwall/
 │   └── ui/
 │       ├── styles.py    # CSS design system, team/compound constants & dark/light theme toggler
 │       └── components.py # UI layout components, metrics cards, map blocks, teammate battle matrix, pit loss breakdown & telemetry export panel
-├── tests/              # Pytest automated test suite (104 tests across 17 modules)
-│   ├── test_track_evolution.py        # Theil-Sen ramp rate, grip gain & flyer lap filtering
+├── tests/              # Pytest automated test suite (105 tests across 17 modules)
+│   ├── test_track_evolution.py        # Theil-Sen ramp rate, grip gain, flyer filtering & knockout bias
 │   ├── test_pit_transit_loss.py       # Pit lane transit duration, in-lap/out-lap deltas & sector warm-up
 │   ├── test_teammate_battle.py        # Teammate head-to-head battle, qualifying & race pace deltas
 │   ├── test_fuel_decoupled_tyre_deg.py # Pure mechanical tyre degradation & fuel burn decoupler
@@ -140,7 +140,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (104 unit/integration tests across 17 modules). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (105 unit/integration tests across 17 modules). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -334,7 +334,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **104 unit and integration tests** across 17 test modules should pass cleanly.
+All **105 unit and integration tests** across 17 test modules should pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -398,7 +398,7 @@ All development on FastF1 Pitwall is tracked transparently via GitHub Issues and
 
 | Issue | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
-| **[#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)** | `Track Evolution & Grip Improvement Ramp Index` | Track Analytics | Theil-Sen robust multi-car ramp rate (ms/min), total grip gain (s), evolution trend curve, and track condition banner. |
+| **[#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)** | `Track Evolution & Grip Improvement Ramp Index` | Track Analytics | Driver pace-normalised, Theil-Sen robust multi-car ramp rate (ms/min), total grip gain (s), evolution trend curve, and track condition banner. |
 | **[#176](https://github.com/parekhrohan21/fastf1_pitwall/pull/176)** / **[#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)** | `repository cleanup, remove redundant code and AI slop, and streamline file tree` | Maintenance / Refactor | Purged 26 redundant function definitions from `app.py` (-2,021 lines), untracked compiled bytecode and scratch files, strengthened `.gitignore` & `.dockerignore` for optimal build caching. |
 | **[#175](https://github.com/parekhrohan21/fastf1_pitwall/pull/175)** | `Update README, DOCS.md, and AGENT.md manual documentation` | Documentation | Refreshed the user and developer manuals with Docker deployment instructions and corrected stale test counts (87 → 95) across README and AGENT.md. |
 | **[#174](https://github.com/parekhrohan21/fastf1_pitwall/pull/174)** | `Synchronize README, DOCS.md, and AGENT.md with active roadmap issues (#171, #172)` | Documentation | Synchronized active roadmap tables, developer manual roadmap, and agent guidelines with newly opened GitHub issues (#171, #172). |

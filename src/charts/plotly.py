@@ -1553,7 +1553,10 @@ def build_track_evolution_fig(
         )
 
     # 2. Field-wide flyer lap scatter — highlighted drivers keep their team colour,
-    #    everyone else is muted so the evolution trend stays readable.
+    #    everyone else is muted so the evolution trend stays readable. Laps are
+    #    plotted pace-adjusted (driver fixed effects removed) so the scatter is on
+    #    the same scale the trend was fitted on; the raw lap time is in the hover.
+    y_col = "PaceAdjusted_s" if "PaceAdjusted_s" in laps.columns else "LapTime_s"
     highlighted = [d for d in labels.keys() if d in set(laps["Driver"].unique())]
     field = laps[~laps["Driver"].isin(highlighted)]
 
@@ -1561,12 +1564,13 @@ def build_track_evolution_fig(
         fig.add_trace(
             go.Scatter(
                 x=field["SessionMinutes"],
-                y=field["LapTime_s"],
+                y=field[y_col],
                 mode="markers",
                 name="Field Flyers",
                 marker=dict(size=5, color="rgba(160,160,170,0.45)"),
                 text=field["Driver"],
-                hovertemplate="<b>%{text}</b><br>%{x:.1f} min<br>Lap: %{y:.3f}s<extra></extra>",
+                customdata=field["LapTime_s"],
+                hovertemplate="<b>%{text}</b><br>%{x:.1f} min<br>Adjusted: %{y:.3f}s<br>Actual: %{customdata:.3f}s<extra></extra>",
             ),
             secondary_y=False,
         )
@@ -1580,11 +1584,12 @@ def build_track_evolution_fig(
         fig.add_trace(
             go.Scatter(
                 x=df_drv["SessionMinutes"],
-                y=df_drv["LapTime_s"],
+                y=df_drv[y_col],
                 mode="markers",
                 name=f"{lbl} Flyers",
                 marker=dict(size=9, color=clr, line=dict(color="#ffffff", width=1)),
-                hovertemplate=f"<b>{lbl}</b><br>%{{x:.1f}} min<br>Lap: %{{y:.3f}}s<extra></extra>",
+                customdata=df_drv["LapTime_s"],
+                hovertemplate=f"<b>{lbl}</b><br>%{{x:.1f}} min<br>Adjusted: %{{y:.3f}}s<br>Actual: %{{customdata:.3f}}s<extra></extra>",
             ),
             secondary_y=False,
         )
@@ -1615,13 +1620,15 @@ def build_track_evolution_fig(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(15,15,20,0.6)",
         font=dict(color="#e8e8e8", family="Inter, sans-serif"),
-        margin=dict(l=60, r=60, t=60, b=50),
+        margin=dict(l=60, r=60, t=60, b=100),
+        # Legend sits below the plot: with up to five entries it is wide enough
+        # to collide with the title when placed above the chart.
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
+            yanchor="top",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
             bgcolor="rgba(0,0,0,0.5)",
         ),
         hovermode="closest",
@@ -1634,7 +1641,7 @@ def build_track_evolution_fig(
     )
 
     fig.update_yaxes(
-        title_text="Lap Time (seconds)",
+        title_text="Pace-Adjusted Lap Time (s)",
         gridcolor="rgba(128,128,128,0.2)",
         zerolinecolor="rgba(128,128,128,0.2)",
         secondary_y=False,

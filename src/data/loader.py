@@ -1542,8 +1542,13 @@ def _build_track_evolution_data(
     - Keeps only valid flyer laps (accurate, green-flag, no in-lap or out-lap)
       and drops laps slower than ``reference_percent`` of the session best, which
       removes cool-down, traffic and race-simulation running.
-    - Fits a robust linear regression of lap time against elapsed session minutes
-      across *all* cars, giving the Track Evolution Ramp Rate in ms per minute.
+    - Removes each driver's own pace level (driver fixed effects) by subtracting
+      their median flyer time and re-levelling to the field median. Without this,
+      a Qualifying knockout biases the ramp: slower cars stop running after Q1/Q2,
+      so the late-session field is faster purely by composition, not grip.
+    - Fits a robust linear regression of pace-adjusted lap time against elapsed
+      session minutes across all cars with 2+ flyers, giving the Track Evolution
+      Ramp Rate in ms per minute.
     - Fits a degree-2 polynomial as the displayed trend curve, since rubbering-in
       typically saturates late in the session.
     - Merges the track temperature profile so grip gain can be read against
@@ -1616,18 +1621,32 @@ def _build_track_evolution_data(
         if len(flyers) < MIN_FLYERS:
             return None
 
+        # ── Driver pace normalisation (fixed effects) ───────────────────────
+        # Subtracting each driver's median flyer leaves only their within-session
+        # improvement, so the slope measures the track rather than which cars
+        # happened to still be running. A driver with a single flyer carries no
+        # within-driver information and is plotted but not fitted.
+        field_median = float(flyers["LapTime_s"].median())
+        driver_median = flyers.groupby("Driver")["LapTime_s"].transform("median")
+        flyers["PaceAdjusted_s"] = flyers["LapTime_s"] - driver_median + field_median
+        fit_mask = (flyers.groupby("Driver")["LapTime_s"].transform("size") >= 2).to_numpy()
+        if int(fit_mask.sum()) < MIN_FLYERS:
+            return None
+
         x_min = np.array(flyers["SessionMinutes"].values, dtype=float)
-        y_sec = np.array(flyers["LapTime_s"].values, dtype=float)
+        y_sec = np.array(flyers["PaceAdjusted_s"].values, dtype=float)
 
         span_min = float(x_min.max() - x_min.min())
         if span_min <= 0:
             return None
 
         # ── Robust linear ramp rate ─────────────────────────────────────────
-        fit = _robust_linear_fit(x_min, y_sec)
+        fit = _robust_linear_fit(x_min[fit_mask], y_sec[fit_mask])
         if fit is None:
             return None
-        slope_s_per_min, intercept_s, inlier_mask = fit
+        slope_s_per_min, intercept_s, fit_inliers = fit
+        inlier_mask = np.zeros(len(flyers), dtype=bool)
+        inlier_mask[fit_mask] = fit_inliers
         flyers["IsTrendInlier"] = inlier_mask
 
         ramp_rate_ms_per_min = slope_s_per_min * 1000.0

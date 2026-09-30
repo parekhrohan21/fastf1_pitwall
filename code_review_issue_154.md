@@ -70,13 +70,47 @@ A third robustness issue was fixed proactively: `hasattr(_session_obj, "weather_
 
 ---
 
+## Revision 2 — Real-Session Validation (2026-09-30)
+
+The first review left one box open: the model had only been exercised on synthetic sessions. It was run against two real cached sessions (2024 Bahrain and 2024 China Qualifying, loaded offline from `./cache/`), and that surfaced a third estimator defect.
+
+3. **Qualifying knockout bias inflated the ramp ~2–3x.** Pooling raw lap times across the field is biased by composition: the slowest cars stop running after Q1 and Q2, so late-session flyers come only from the fastest cars and the field looks faster with no change in grip. The synthetic tests missed it because every synthetic driver ran the whole session. Confirmed by refitting on Q3 drivers only and with per-driver demeaning, both of which roughly halved the slope.
+
+   **Fix**: driver fixed effects in `_build_track_evolution_data` — each driver's median flyer is subtracted and the field median added back (`PaceAdjusted_s`), so only within-driver improvement drives the fit. Single-flyer drivers carry no within-driver information and are plotted but excluded from the fit. The minimum sample of 10 now counts fittable laps.
+
+   | Session | Before (pooled) | After (fixed effects) |
+   | --- | --- | --- |
+   | 2024 Bahrain Q | −28.5 ms/min · −1.639 s · R² 0.822 | **−10.0 ms/min · −0.578 s** · R² 0.351 |
+   | 2024 China Q | −23.9 ms/min · −1.657 s · R² 0.683 | **−13.2 ms/min · −0.915 s** · R² 0.629 |
+
+   The lower Bahrain R² is expected, not a regression: most of the old fit was explaining car-to-car pace differences rather than the track.
+
+   **Regression test**: `test_build_track_evolution_data_removes_qualifying_knockout_bias` simulates a 12-car knockout with a known −10 ms/min ramp. It reads **−17.7 ms/min against the original loader (fails)** and −10 ± 1 with the fix (passes).
+
+4. **Legend overlapped the chart title.** Rendering the real Bahrain figure to PNG showed the horizontal legend (five entries once drivers are highlighted) drawn over `Track Evolution & Grip Improvement Ramp`. The legend now sits centred below the plot area with a larger bottom margin. `build_weather_correlation_fig` uses the same legend placement but has fewer entries; it is outside this PR's scope and was not changed.
+
+**Chart consistency**: the scatter now plots `PaceAdjusted_s` (falling back to `LapTime_s`) on a `Pace-Adjusted Lap Time (s)` axis, so the points and the trend curve share one scale; the actual lap time is kept in the hover. The section caption explains the adjustment.
+
+**Revision 2 files**: `src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py`, `tests/test_track_evolution.py`, `README.md`, `DOCS.md` (§16 test list and count, §34 motivation, method, data and chart layers, roadmap, changelog), `AGENT.md` (test count, Decision #39).
+
+**Revision 2 checks**
+
+- [x] Pytest — **105 passed** (1 new).
+- [x] `py_compile` across all six modules passes.
+- [x] App boots headless — HTTP 200, no errors, tracebacks or deprecation warnings in the log.
+- [x] Model and figure validated on two real Qualifying sessions; figure rendered to PNG and inspected.
+- [x] Correctness checklist re-verified for the changed code: `laps_df` still passed explicitly, driver grouping uses `groupby("Driver")` on the plain DataFrame (no `.pick_drivers()`), still inside the existing `try/except`, no new cache signature.
+- [ ] In-browser dark/light mode and compare mode — **still not exercised**; the verification was a static render, not the live Streamlit page.
+
+---
+
 ## Notes & Limitations
 
 - **Session gating**: the section renders only for Practice and Qualifying (`FP1`–`FP3`, `Q`, `SQ`, `SS`, with raw-label fallbacks). Race and Sprint pace is dominated by fuel burn and tyre stint phases, which would swamp the evolution signal. This matches the issue's stated scope ("across Practice and Qualifying sessions").
-- **Minimum sample**: 10 flyer laps within 107% of the session best. Below that the function returns `None` and the UI explains why rather than rendering a misleading fit.
-- **Live verification scope**: the app was confirmed to boot cleanly and all logic is covered by unit tests against synthetic sessions with known ramp rates. Rendering was **not** visually verified against a live FastF1 session, nor were dark/light mode and compare mode exercised in the browser for this section — the chart follows the existing `build_weather_correlation_fig` theming and layout conventions, but a visual pass on a real Practice/Qualifying session is still recommended before relying on it.
+- **Minimum sample**: 10 fittable flyer laps (within 107% of the session best, from drivers with 2+ flyers). Below that the function returns `None` and the UI explains why rather than rendering a misleading fit.
+- **Live verification scope**: *(updated in Revision 2)* the model and chart have now been validated on two real Qualifying sessions. Dark/light mode and compare mode have still not been exercised in the browser for this section; a quick visual pass there is still recommended.
 - **Theil-Sen cost**: pair enumeration is $O(n^2)$; above 200,000 pairs a deterministic seeded subsample is used, so large lap sets stay bounded.
 
 ## Verdict
 
-**Approved for merge.** Two real estimator defects were found and fixed during development, both now regression-tested. The one unchecked documentation box (`DECISIONS.md`) is blocked on a separate open issue and is explained above.
+**Approved for merge.** Three estimator defects and one chart-layout defect were found and fixed, and each estimator fix is covered by a regression test. The most consequential was the Qualifying knockout bias, found only by validating against real sessions. It had overstated grip gain by roughly 2–3x. The one unchecked documentation box (`DECISIONS.md`) is blocked on a separate open issue, and in-browser theme and compare mode checks remain outstanding, as noted above.
