@@ -1510,6 +1510,152 @@ def build_weather_correlation_fig(
     return fig
 
 
+def build_track_evolution_fig(
+    evolution_data: dict,
+    driver_colors: dict[str, str] = None,
+    driver_labels: dict[str, str] = None
+) -> go.Figure | None:
+    """
+    Build dual-axis Plotly chart scattering every car's flyer lap over elapsed
+    session time, overlaid with the track evolution trend curve and the track
+    temperature profile.
+    """
+    if not evolution_data or "laps" not in evolution_data:
+        return None
+
+    laps = evolution_data["laps"]
+    trend = evolution_data.get("trend", {})
+    temp_profile = evolution_data.get("temp_profile")
+    stats = evolution_data.get("stats", {})
+
+    if laps is None or laps.empty:
+        return None
+
+    colors = driver_colors or {}
+    labels = driver_labels or {}
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # 1. Track temperature profile on the secondary axis (drawn first, sits behind)
+    if temp_profile is not None and not temp_profile.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=temp_profile["SessionMinutes"],
+                y=temp_profile["TrackTemp"],
+                mode="lines",
+                name="Track Temp (°C)",
+                line=dict(color="#FF5722", width=2, dash="dot"),
+                fill="tozeroy",
+                fillcolor="rgba(255, 87, 34, 0.06)",
+                hovertemplate="<b>%{x:.1f} min</b><br>Track Temp: %{y:.1f}°C<extra></extra>",
+            ),
+            secondary_y=True,
+        )
+
+    # 2. Field-wide flyer lap scatter — highlighted drivers keep their team colour,
+    #    everyone else is muted so the evolution trend stays readable. Laps are
+    #    plotted pace-adjusted (driver fixed effects removed) so the scatter is on
+    #    the same scale the trend was fitted on; the raw lap time is in the hover.
+    y_col = "PaceAdjusted_s" if "PaceAdjusted_s" in laps.columns else "LapTime_s"
+    highlighted = [d for d in labels.keys() if d in set(laps["Driver"].unique())]
+    field = laps[~laps["Driver"].isin(highlighted)]
+
+    if not field.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=field["SessionMinutes"],
+                y=field[y_col],
+                mode="markers",
+                name="Field Flyers",
+                marker=dict(size=5, color="rgba(160,160,170,0.45)"),
+                text=field["Driver"],
+                customdata=field["LapTime_s"],
+                hovertemplate="<b>%{text}</b><br>%{x:.1f} min<br>Adjusted: %{y:.3f}s<br>Actual: %{customdata:.3f}s<extra></extra>",
+            ),
+            secondary_y=False,
+        )
+
+    for drv in highlighted:
+        df_drv = laps[laps["Driver"] == drv]
+        if df_drv.empty:
+            continue
+        clr = colors.get(drv, "#00E5FF")
+        lbl = labels.get(drv, drv)
+        fig.add_trace(
+            go.Scatter(
+                x=df_drv["SessionMinutes"],
+                y=df_drv[y_col],
+                mode="markers",
+                name=f"{lbl} Flyers",
+                marker=dict(size=9, color=clr, line=dict(color="#ffffff", width=1)),
+                customdata=df_drv["LapTime_s"],
+                hovertemplate=f"<b>{lbl}</b><br>%{{x:.1f}} min<br>Adjusted: %{{y:.3f}}s<br>Actual: %{{customdata:.3f}}s<extra></extra>",
+            ),
+            secondary_y=False,
+        )
+
+    # 3. Track evolution trend curve
+    curve_x = trend.get("curve_x")
+    curve_y = trend.get("curve_y")
+    if curve_x is not None and curve_y is not None and len(curve_x) > 0:
+        ramp = stats.get("ramp_rate_ms_per_min")
+        ramp_lbl = f"Track Evolution ({ramp:+.0f} ms/min)" if ramp is not None else "Track Evolution"
+        fig.add_trace(
+            go.Scatter(
+                x=curve_x,
+                y=curve_y,
+                mode="lines",
+                name=ramp_lbl,
+                line=dict(color="#00E676", width=4),
+                hovertemplate="<b>%{x:.1f} min</b><br>Trend pace: %{y:.3f}s<extra></extra>",
+            ),
+            secondary_y=False,
+        )
+
+    fig.update_layout(
+        title=dict(
+            text="<b>Track Evolution & Grip Improvement Ramp</b>",
+            font=dict(size=16, color="#ffffff", family="Inter, sans-serif"),
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,15,20,0.6)",
+        font=dict(color="#e8e8e8", family="Inter, sans-serif"),
+        margin=dict(l=60, r=60, t=60, b=100),
+        # Legend sits below the plot: with up to five entries it is wide enough
+        # to collide with the title when placed above the chart.
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(0,0,0,0.5)",
+        ),
+        hovermode="closest",
+    )
+
+    fig.update_xaxes(
+        title_text="Elapsed Session Time (minutes)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+    )
+
+    fig.update_yaxes(
+        title_text="Pace-Adjusted Lap Time (s)",
+        gridcolor="rgba(128,128,128,0.2)",
+        zerolinecolor="rgba(128,128,128,0.2)",
+        secondary_y=False,
+    )
+
+    fig.update_yaxes(
+        title_text="Track Temperature (°C)",
+        gridcolor="rgba(255, 87, 34, 0.15)",
+        showgrid=False,
+        secondary_y=True,
+    )
+
+    return fig
+
 def build_multi_year_comparison_fig(
     multi_year_data: dict,
     color1: str = "#FF8700",
