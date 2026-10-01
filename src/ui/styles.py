@@ -91,9 +91,13 @@ if "dark_mode" not in st.session_state:
 
 def _toggle_theme():
     """Called before rerun — so the CSS block above sees the new value immediately."""
+    if "dark_mode" not in st.session_state:
+        st.session_state["dark_mode"] = True
     st.session_state["dark_mode"] = not st.session_state["dark_mode"]
 
 def inject_styles(primary_colour="#FF8700"):
+    if "dark_mode" not in st.session_state:
+        st.session_state["dark_mode"] = True
     dark_mode = st.session_state["dark_mode"]
     # ── Progressive Web App (PWA) Injection ───────────────────────────────────────
     # Streamlit does not expose the raw <head> for static file handling in Community Cloud.

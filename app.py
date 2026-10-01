@@ -208,7 +208,7 @@ with st.sidebar:
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
-    mode_label = "☀️  Light Mode" if st.session_state["dark_mode"] else "🌙  Dark Mode"
+    mode_label = "☀️  Light Mode" if st.session_state.get("dark_mode", True) else "🌙  Dark Mode"
     st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, use_container_width=True)
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
@@ -829,12 +829,19 @@ else:
 if compare and driver2 and _pit_d1 and _pit_d2:
     st.markdown("<div class='section-title'>Pit Strategy & Undercut Analysis</div>", unsafe_allow_html=True)
     
+    # Filter laps specifically for each compared driver to ensure gap lookups
+    # compute the true on-track distance between them, and gracefully handle
+    # single-session compare mode where _all_laps2 is None.
+    _laps_driver1 = _all_laps1[_all_laps1['Driver'] == driver1]
+    _laps_source2 = _all_laps2 if _all_laps2 is not None else _all_laps1
+    _laps_driver2 = _laps_source2[_laps_source2['Driver'] == driver2]
+
     battles = []
     for p1 in _pit_d1:
-        lap1 = p1['lap']
+        _u_lap1 = p1['lap']
         for p2 in _pit_d2:
-            lap2 = p2['lap']
-            if abs(lap1 - lap2) <= 3:
+            _u_lap2 = p2['lap']
+            if abs(_u_lap1 - _u_lap2) <= 3:
                 battles.append((p1, p2))
                 break
                 
@@ -842,25 +849,26 @@ if compare and driver2 and _pit_d1 and _pit_d2:
         st.info("The selected drivers were on divergent strategies and did not engage in a direct pit stop battle.")
     else:
         battle = battles[0]
-        lap1 = battle[0]['lap']
-        lap2 = battle[1]['lap']
+        # Use prefixed variables (_u_lap1, _u_lap2) to prevent shadowing outer lap1 / lap2 objects
+        _u_lap1 = battle[0]['lap']
+        _u_lap2 = battle[1]['lap']
         
-        w_start = min(lap1, lap2) - 1
-        w_end = max(lap1, lap2) + 2
+        w_start = min(_u_lap1, _u_lap2) - 1
+        w_end = max(_u_lap1, _u_lap2) + 2
         
         try:
-            t1_start = _all_laps1[_all_laps1['LapNumber'] == w_start]['Time'].iloc[0]
-            t2_start = _all_laps2[_all_laps2['LapNumber'] == w_start]['Time'].iloc[0]
+            t1_start = _laps_driver1[_laps_driver1['LapNumber'] == w_start]['Time'].iloc[0]
+            t2_start = _laps_driver2[_laps_driver2['LapNumber'] == w_start]['Time'].iloc[0]
             gap_start = (t1_start - t2_start).total_seconds()
             
-            t1_end = _all_laps1[_all_laps1['LapNumber'] == w_end]['Time'].iloc[0]
-            t2_end = _all_laps2[_all_laps2['LapNumber'] == w_end]['Time'].iloc[0]
+            t1_end = _laps_driver1[_laps_driver1['LapNumber'] == w_end]['Time'].iloc[0]
+            t2_end = _laps_driver2[_laps_driver2['LapNumber'] == w_end]['Time'].iloc[0]
             gap_end = (t1_end - t2_end).total_seconds()
             
-            first_pitter = label1 if lap1 < lap2 else (label2 if lap2 < lap1 else "Simultaneous")
+            first_pitter = label1 if _u_lap1 < _u_lap2 else (label2 if _u_lap2 < _u_lap1 else "Simultaneous")
             
             net_change = gap_start - gap_end
-            success = "Successful" if (lap1 < lap2 and net_change > 0) or (lap2 < lap1 and net_change < 0) else "Failed"
+            success = "Successful" if (_u_lap1 < _u_lap2 and net_change > 0) or (_u_lap2 < _u_lap1 and net_change < 0) else "Failed"
             success_color = "#52E252" if success == "Successful" else "#E8002D"
             
             col1, col2, col3, col4 = st.columns(4)
@@ -869,7 +877,7 @@ if compare and driver2 and _pit_d1 and _pit_d2:
             col3.metric(f"Gap at Lap {w_end}", f"{abs(gap_end):.2f}s", f"{'Behind' if gap_end > 0 else 'Ahead'}")
             col4.markdown(f"<div style='text-align:center;'><div>Status</div><h3 style='color:{success_color}; margin-top:0;'>{success}</h3></div>", unsafe_allow_html=True)
             
-            st.plotly_chart(build_undercut_chart(_all_laps1, _all_laps2, label1, label2, colour1, colour2, w_start, w_end, lap1, lap2), width="stretch", config={"displayModeBar": False})
+            st.plotly_chart(build_undercut_chart(_laps_driver1, _laps_driver2, label1, label2, colour1, colour2, w_start, w_end, _u_lap1, _u_lap2), width="stretch", config={"displayModeBar": False})
             
         except Exception as e:
             st.warning("Could not calculate undercut gap due to missing telemetry on the battle laps.")
@@ -880,8 +888,9 @@ if compare and driver2 and _pit_d1 and _pit_d2:
 # The whole block sits in a try/except that swallows errors, so a failure here
 # renders nothing rather than taking down the rest of the page.
 try:
-    _transit_laps = sess.laps if hasattr(sess, "laps") and sess.laps is not None else _all_laps1
-    _transit_data = _build_pit_transit_data(sess_key, _transit_laps, sess_obj=sess, driver=driver1)
+    # Use _all_laps1 (DataFrame) and _sess_obj (prefixed with _ to bypass Streamlit cache hashing)
+    _transit_laps = _all_laps1
+    _transit_data = _build_pit_transit_data(sess_key, _transit_laps, _sess_obj=sess, driver=driver1)
     if _transit_data and _transit_data.get("has_data") and _transit_data.get("all_stops"):
         _render_pit_loss_section(
             _transit_data,

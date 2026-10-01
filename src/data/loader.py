@@ -3202,8 +3202,9 @@ def _build_teammate_battle_data(
 def _build_pit_transit_data(
     sess_k: str,
     laps_df: pd.DataFrame,
-    sess_obj=None,
-    driver: str | None = None
+    _sess_obj=None,
+    driver: str | None = None,
+    **kwargs
 ) -> dict:
     """Decompose pit lane time loss into in-lap, pit lane transit, and out-lap warm-up.
 
@@ -3223,8 +3224,8 @@ def _build_pit_transit_data(
         Session cache key (e.g. "2024_British Grand Prix_R").
     laps_df : pd.DataFrame
         Session laps DataFrame.
-    sess_obj : fastf1.core.Session, optional
-        Official session object containing results and team metadata.
+    _sess_obj : fastf1.core.Session, optional
+        Official session object containing results and team metadata (prefixed with _ to bypass Streamlit hashing).
     driver : str, optional
         Specific driver filter, or None for grid-wide evaluation.
 
@@ -3234,6 +3235,9 @@ def _build_pit_transit_data(
         Structured dictionary containing all pit stops, driver stops map,
         summary KPIs, and status flags.
     """
+    if _sess_obj is None and "sess_obj" in kwargs:
+        _sess_obj = kwargs["sess_obj"]
+
     fallback = {
         "all_stops": [],
         "driver_stops": {},
@@ -3271,8 +3275,8 @@ def _build_pit_transit_data(
 
         # Build driver and constructor metadata lookup
         driver_meta = {}
-        if sess_obj is not None and hasattr(sess_obj, "results") and sess_obj.results is not None:
-            for _, r in sess_obj.results.iterrows():
+        if _sess_obj is not None and hasattr(_sess_obj, "results") and _sess_obj.results is not None:
+            for _, r in _sess_obj.results.iterrows():
                 d_code = str(r.get("Abbreviation") or r.get("DriverNumber") or r.get("BroadcastName", ""))
                 t_name = str(r.get("TeamName") or "Unknown")
                 driver_meta[d_code] = {
