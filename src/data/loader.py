@@ -2453,6 +2453,225 @@ def _calculate_braking_metrics(df: pd.DataFrame | None, apex_dist: float) -> dic
         return metrics
 
 
+def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> dict:
+    """
+    Calculate corner exit traction dynamics and throttle pick-up aggression metrics around a corner apex.
+    Returns:
+        dict with:
+            apex_dist: float
+            apex_speed: float | None
+            dist_to_initial_throttle: float | None (meters from apex to initial throttle > 5%)
+            initial_throttle_speed: float | None (speed at initial throttle pick-up)
+            dist_to_full_throttle: float | None (meters from apex to full throttle >= 98%)
+            full_throttle_speed: float | None (speed at full throttle)
+            throttle_application_dist: float | None (meters from initial to full throttle)
+            throttle_application_time: float | None (seconds from initial to full throttle)
+            throttle_ramp_rate: float | None (% throttle per meter)
+            throttle_gradient: float | None (% throttle per second)
+            hesitation_count: int (count of throttle modulations / lifts)
+            hesitations: list of hesitation dicts
+            oversteer_corrections_count: int | None (count of counter-steer corrections)
+            exit_speed_100m: float | None (speed 100m post-apex)
+            peak_exit_accel_g: float | None (peak longitudinal acceleration in G)
+            traction_aggression_score: float | None (composite 0-100 score)
+            df_processed: pd.DataFrame | None (processed telemetry slice)
+    """
+    metrics = {
+        "apex_dist": float(apex_dist) if apex_dist is not None else None,
+        "apex_speed": None,
+        "dist_to_initial_throttle": None,
+        "initial_throttle_speed": None,
+        "dist_to_full_throttle": None,
+        "full_throttle_speed": None,
+        "throttle_application_dist": None,
+        "throttle_application_time": None,
+        "throttle_ramp_rate": None,
+        "throttle_gradient": None,
+        "hesitation_count": 0,
+        "hesitations": [],
+        "oversteer_corrections_count": 0,
+        "exit_speed_100m": None,
+        "peak_exit_accel_g": None,
+        "traction_aggression_score": None,
+        "df_processed": None,
+    }
+    if df is None or df.empty or not {"Distance", "Speed", "Time"}.issubset(df.columns):
+        return metrics
+
+    try:
+        df_calc = df.copy()
+        df_calc["DistToApex"] = df_calc["Distance"] - apex_dist
+
+        # Compute dt and longitudinal acceleration / G force
+        if pd.api.types.is_timedelta64_dtype(df_calc["Time"]):
+            dt = df_calc["Time"].dt.total_seconds().diff()
+        else:
+            dt = pd.to_numeric(df_calc["Time"], errors="coerce").diff()
+
+        dt = dt.replace(0, np.nan)
+        dv = df_calc["Speed"].diff() / 3.6  # km/h to m/s
+        accel_ms2 = dv / dt
+        df_calc["G_Force"] = (accel_ms2 / 9.81).rolling(window=3, min_periods=1, center=True).mean().clip(-6.0, 3.5)
+
+        # Apex speed (minimum speed within 35m of apex or global minimum)
+        apex_zone = df_calc[(df_calc["DistToApex"] >= -35) & (df_calc["DistToApex"] <= 35)]
+        if not apex_zone.empty:
+            metrics["apex_speed"] = float(apex_zone["Speed"].min())
+        else:
+            metrics["apex_speed"] = float(df_calc["Speed"].min())
+
+        if "Throttle" in df_calc.columns and not df_calc["Throttle"].isna().all():
+            th_raw = pd.to_numeric(df_calc["Throttle"], errors="coerce").fillna(0.0)
+            # Handle normalized (0..1) vs percentage (0..100) throttle
+            th_max = float(th_raw.max()) if not th_raw.empty else 0.0
+            if th_max <= 1.0 and th_max > 0:
+                df_calc["Throttle_Pct"] = th_raw * 100.0
+            else:
+                df_calc["Throttle_Pct"] = th_raw
+        else:
+            df_calc["Throttle_Pct"] = 0.0
+
+        # Post-apex acceleration zone (starting 10m before apex to allow early throttle application)
+        post_apex = df_calc[df_calc["DistToApex"] >= -10].copy()
+        if not post_apex.empty and "Throttle_Pct" in post_apex.columns:
+            # Initial throttle application: first point where Throttle > 5%
+            th_active = post_apex[post_apex["Throttle_Pct"] > 5.0]
+            if not th_active.empty:
+                init_row = th_active.iloc[0]
+                init_d = float(init_row["Distance"])
+                init_dist_apex = float(init_d - apex_dist)
+                metrics["dist_to_initial_throttle"] = init_dist_apex
+                metrics["initial_throttle_speed"] = float(init_row["Speed"])
+
+                # Look forward from initial throttle application
+                after_init = post_apex[post_apex["Distance"] >= init_d]
+                max_post_th = float(after_init["Throttle_Pct"].max())
+                # Full throttle threshold
+                if max_post_th >= 98.0:
+                    full_thresh = 98.0
+                elif max_post_th >= 90.0:
+                    full_thresh = max_post_th - 1.5
+                else:
+                    full_thresh = max(10.0, max_post_th - 0.5)
+
+                full_active = after_init[after_init["Throttle_Pct"] >= full_thresh]
+                if not full_active.empty:
+                    full_row = full_active.iloc[0]
+                    full_d = float(full_row["Distance"])
+                    metrics["dist_to_full_throttle"] = float(full_d - apex_dist)
+                    metrics["full_throttle_speed"] = float(full_row["Speed"])
+
+                    app_dist = max(0.5, full_d - init_d)
+                    metrics["throttle_application_dist"] = float(app_dist)
+
+                    if pd.api.types.is_timedelta64_dtype(df_calc["Time"]):
+                        app_time = (full_row["Time"] - init_row["Time"]).total_seconds()
+                    else:
+                        app_time = float(full_row["Time"]) - float(init_row["Time"])
+                    app_time = max(0.01, app_time)
+                    metrics["throttle_application_time"] = float(app_time)
+
+                    th_delta = float(full_row["Throttle_Pct"] - init_row["Throttle_Pct"])
+                    metrics["throttle_ramp_rate"] = float(th_delta / app_dist)  # %/m
+                    metrics["throttle_gradient"] = float(th_delta / app_time)   # %/s
+
+                    accel_zone = after_init[(after_init["Distance"] >= init_d) & (after_init["Distance"] <= full_d)]
+                else:
+                    accel_zone = after_init
+
+                # Detect hesitations / throttle modulations
+                hesitations = []
+                if not accel_zone.empty:
+                    peak_th = -1.0
+                    peak_d = init_d
+                    dropped = False
+                    drop_val = 0.0
+                    for _, r in accel_zone.iterrows():
+                        curr_th = float(r["Throttle_Pct"])
+                        curr_d = float(r["Distance"])
+                        curr_spd = float(r["Speed"])
+                        if curr_th > peak_th:
+                            if dropped and drop_val >= 3.5:
+                                hesitations.append({
+                                    "distance": peak_d,
+                                    "dist_to_apex": float(peak_d - apex_dist),
+                                    "throttle_before": float(peak_th),
+                                    "throttle_drop": float(drop_val),
+                                    "speed": curr_spd,
+                                })
+                                dropped = False
+                                drop_val = 0.0
+                            peak_th = curr_th
+                            peak_d = curr_d
+                        elif peak_th - curr_th >= 3.5:
+                            dropped = True
+                            drop_val = max(drop_val, peak_th - curr_th)
+
+                    if dropped and drop_val >= 3.5:
+                        hesitations.append({
+                            "distance": peak_d,
+                            "dist_to_apex": float(peak_d - apex_dist),
+                            "throttle_before": float(peak_th),
+                            "throttle_drop": float(drop_val),
+                            "speed": float(accel_zone.iloc[-1]["Speed"]),
+                        })
+
+                metrics["hesitation_count"] = len(hesitations)
+                metrics["hesitations"] = hesitations
+
+                # Oversteer corrections detection
+                has_steering = False
+                oversteer_count = 0
+                if "Steering" in df_calc.columns:
+                    st_series = pd.to_numeric(df_calc["Steering"], errors="coerce")
+                    if not st_series.isna().all() and st_series.abs().max() > 1.0:
+                        has_steering = True
+                        st_zone = df_calc[(df_calc["Distance"] >= apex_dist) & (df_calc["Distance"] <= apex_dist + 150)]
+                        if len(st_zone) >= 4:
+                            st_vals = pd.to_numeric(st_zone["Steering"], errors="coerce").fillna(0.0).values
+                            initial_sign = np.sign(np.mean(st_vals[:min(len(st_vals), 5)]))
+                            if initial_sign != 0:
+                                diff_st = np.diff(st_vals) * initial_sign
+                                c_count = 0
+                                i = 0
+                                while i < len(diff_st) - 1:
+                                    if diff_st[i] < -2.5:
+                                        c_count += 1
+                                        i += 3
+                                    else:
+                                        i += 1
+                                oversteer_count = c_count
+                metrics["oversteer_corrections_count"] = oversteer_count if has_steering else None
+
+                # Exit speed at 100m post-apex
+                post_100 = df_calc[df_calc["DistToApex"] >= 100]
+                if not post_100.empty:
+                    metrics["exit_speed_100m"] = float(post_100.iloc[0]["Speed"])
+
+                # Peak exit acceleration (G)
+                exit_g_zone = df_calc[(df_calc["DistToApex"] >= 0) & (df_calc["DistToApex"] <= 200)]
+                if not exit_g_zone.empty and "G_Force" in exit_g_zone.columns:
+                    valid_g = exit_g_zone["G_Force"].dropna()
+                    if not valid_g.empty:
+                        metrics["peak_exit_accel_g"] = float(valid_g.max())
+
+                # Traction Aggression Score (10..99)
+                score = 50.0
+                if metrics["throttle_ramp_rate"] is not None:
+                    score += min(30.0, metrics["throttle_ramp_rate"] * 15.0)
+                if metrics["dist_to_full_throttle"] is not None:
+                    score += max(-15.0, min(25.0, (75.0 - metrics["dist_to_full_throttle"]) * 0.5))
+                score -= metrics["hesitation_count"] * 7.0
+                if metrics["oversteer_corrections_count"]:
+                    score -= metrics["oversteer_corrections_count"] * 5.0
+                metrics["traction_aggression_score"] = float(np.clip(score, 10.0, 99.0))
+
+        metrics["df_processed"] = df_calc
+        return metrics
+    except Exception:
+        return metrics
+
+
 def _calculate_gear_shift_metrics(tel_df: pd.DataFrame | None) -> dict:
     """
     Calculate powertrain metrics, gear shift events, and gear usage distributions.

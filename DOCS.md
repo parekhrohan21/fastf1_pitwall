@@ -44,6 +44,7 @@
 33. [Intra-Team Teammate Battle & Qualifying Delta Matrix Architecture](#32-intra-team-teammate-battle--qualifying-delta-matrix-architecture)
 34. [Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown Architecture](#33-pit-lane-transit-loss--in-lap--out-lap-performance-breakdown-architecture)
 35. [Track Evolution & Grip Improvement Ramp Index Architecture](#34-track-evolution--grip-improvement-ramp-index-architecture)
+36. [Corner Exit Traction & Throttle Pick-Up Aggression Analysis Architecture](#35-corner-exit-traction--throttle-pick-up-aggression-analysis-architecture)
 
 ---
 
@@ -574,6 +575,8 @@ _render_track_evolution_section() ← Track Evolution & Grip Improvement Ramp In
         │
 _render_braking_analysis_section() ← Braking Efficiency & Trail-Braking Zone Analysis
         │
+_render_traction_exit_section()  ← Corner Exit Traction & Throttle Pick-Up Aggression Analysis
+        │
 _render_gear_analysis_section()  ← Gear Shift Strategy & RPM Power Band Optimization
         │
 _render_multi_year_comparison_section() ← Multi-Year Historical Lap Comparison (compare mode only)
@@ -601,7 +604,7 @@ Race Control Feed                ← Filterable st.dataframe of flag events + fl
         │
 _render_position_section()       ← Race Position (Plotly line chart)
         │
-render_maps_block()              ← Track Map (Speed Map, Inputs Map, Corner Analysis 4-subplot, Race Replay)
+render_maps_block()              ← Track Map (Speed Map, Inputs Map, Corner Analysis 4-subplot, Race Replay, Traction & Exit 3-subplot)
         │
 _render_constructor_standings()  ← Constructors' Championship Standings (HTML table)
         │
@@ -645,6 +648,7 @@ Each chart section follows the same pattern:
 | Driver Inputs Map | Plotly | `_get_telemetry_for_map` | `_input_map_fig` | `lap.get_car_data()`. Colours markers by Throttle/Brake state. |
 | Corner Analysis (4-subplot) | Plotly subplots | `_get_telemetry_for_map` | `build_corner_fig` (`with map_tab4`) | `lap.get_car_data()`. 4 subplots: Racing Line, Speed Profile, Steering Angle (°), DRS Activation Status. |
 | Braking Efficiency & Trail-Braking (3-subplot) | Plotly subplots | `_calculate_braking_metrics` | `build_braking_efficiency_fig` | `_render_braking_analysis_section`. 3 subplots: Speed, Brake Pressure (%), Deceleration (G) vs distance to apex. |
+| Corner Exit Traction & Throttle Pick-Up (3-subplot) | Plotly subplots | `_calculate_traction_metrics` | `build_traction_exit_fig` | `_render_traction_exit_section` and `render_maps_block` (`with map_tab5`). 3 subplots: Throttle (%) with pick-up/full/hesitation markers, Speed (km/h), Longitudinal Acceleration ($G$) vs distance relative to apex. |
 | Gear Shift Strategy & RPM Power Band (2-subplot) | Plotly subplots | `_calculate_gear_shift_metrics` | `build_gear_shift_fig` | `_render_gear_analysis_section`. 2 subplots: Engine RPM vs Track Distance with shift markers & Horizontal gear distribution (% distance in gears 1-8). |
 | Speed Trap Radar Profile (4-axis) | Plotly polar radar | `_calculate_speed_trap_metrics` | `build_speed_trap_radar_fig` | `_render_speed_trap_section`. 4 polar axes (ST, I1, I2, FL) with driver overlays and grid maximum baseline. |
 | Speed Trap / PU Benchmarks (Grouped Bars) | Plotly grouped bar | `_calculate_speed_trap_metrics` | `build_speed_trap_bar_fig` | `_render_speed_trap_section`. Compares timing trap velocities across constructors or power units (Max vs Mean). |
@@ -924,9 +928,10 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (105 tests across 17 modules):
+The tests reside in the `tests/` directory (113 tests across 18 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_traction_exit.py`: Corner exit traction dynamics, distance to initial and 100% full throttle, throttle ramp rate (%/m), throttle gradient (%/s), hesitation/modulation detection, oversteer corrections, peak exit acceleration ($G$), exit speed at 100m, composite Traction Aggression Score, and 3-row stacked Plotly traction exit profile.
 - `tests/test_track_evolution.py`: Theil-Sen seeded robust regression with MAD trimming, flyer lap filtering (107%, pit in/out, track status), ramp rate and grip gain recovery on synthetic sessions with known ramps, Qualifying knockout bias removal via driver fixed effects, condition classification, track temperature merging, and dual-axis figure rendering.
 - `tests/test_pit_transit_loss.py`: Pit lane speed-limiter transit duration ($t_{\text{pit\_lane}}$), in-lap push delta vs clean-air baseline ($\Delta t_{\text{in}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}}$), net total pit loss, sector-by-sector ($S_1, S_2, S_3$) warm-up deltas, multi-stop sequencing, edge cases, and stacked horizontal bar figures.
 - `tests/test_teammate_battle.py`: Automated intra-team teammate comparison engine, qualifying deltas ($\Delta\text{s}$ and $\Delta\%$), sector dominance resolution, clean-air race pace filtering, summary KPIs, single-driver edge cases, and diverging matrix figures.
@@ -972,6 +977,7 @@ Run this after any significant change:
 - [ ] Weather Impact Correlation chart renders with dual axis
 - [ ] Track Evolution section renders ramp rate, grip gain and temperature cards, condition banner, and dual-axis flyer scatter with trend curve (Practice / Qualifying sessions only; hidden on Race and Sprint)
 - [ ] Braking Efficiency section renders 3-subplot Plotly figure, corner selector, and 4 metric cards with advantage callouts
+- [ ] Corner Exit Traction section renders 3-subplot Plotly figure, corner selector, 4 metric cards, and comparative advantage callouts
 - [ ] Gear Shift Strategy section renders 2-subplot Plotly figure (RPM curve + shift markers, gear distribution) and 4 metric cards
 - [ ] Speed Trap & Intermediate Velocity section renders 4-axis polar radar, constructor benchmarks, and classified leaderboard
 - [ ] Fuel-Decoupled Tyre Wear toggle unmasks pure degradation rate and thermal cliff laps
@@ -985,7 +991,7 @@ Run this after any significant change:
 - [ ] Delta card shows green (≤0.05s) or red (>0.05s) colour correctly
 - [ ] Gap to Leader chart renders
 - [ ] Race Position chart renders (Race/Sprint sessions only)
-- [ ] Track Map renders with speed colours, inputs map, corner analysis (4 subplots), and race replay
+- [ ] Track Map renders with speed colours, inputs map, corner analysis (4 subplots), race replay, and traction & exit profiles
 - [ ] Dark mode toggle switches all backgrounds including top bar
 - [ ] Light mode toggle reverses all backgrounds
 
@@ -1036,7 +1042,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | High | **Automated Session Brag Video Generation via Latent Space Telemetry Embeddings** ([#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)) | Dimensionality reduction (PCA / manifold embedding) projecting 9D telemetry into fluid camera tracking reels, HUD telemetry overlays, and exportable MP4 brag videos. |
 | High | **Clean Air vs Dirty Air Pace Impact & Overtaking Analysis** ([#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)) | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. |
 | Medium | **Full Grand Prix Weekend Multi-Session Progression Tracker** ([#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)) | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. |
-| Medium | **Corner Exit Traction & Throttle Pick-Up Aggression Analysis** ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | Throttle pick-up rate (%/s), wheelspin/traction management, and exit acceleration profiles out of low-speed apexes. |
+| ~~Medium~~ | ~~**Corner Exit Traction & Throttle Pick-Up Aggression Analysis**~~ ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)) | ✅ **Done** — `_calculate_traction_metrics` extracts distance to initial and full throttle, throttle ramp rate (%/m), throttle gradient (%/s), hesitation/modulation count, oversteer corrections, peak exit acceleration ($G$), and Traction Aggression Score (0–100). `build_traction_exit_fig` renders the 3-row stacked Plotly figure with hesitation markers, and `_render_traction_exit_section` provides 4 KPI cards and comparative advantage summaries. Integrated into `app.py` and `render_maps_block`. |
 | ~~Medium~~ | ~~**Track Evolution & Grip Improvement Ramp Index**~~ ([#154](https://github.com/parekhrohan21/fastf1_pitwall/issues/154)) | ✅ **Done** — `_build_track_evolution_data` normalises each driver's pace (driver fixed effects) and fits the multi-car flyer distribution against elapsed session time using a Theil-Sen seed with MAD trimming (`_robust_linear_fit`), yielding a ramp rate in ms/min and total grip gain in seconds. `build_track_evolution_fig` renders the dual-axis scatter, quadratic trend curve and track temperature profile; `_render_track_evolution_section` adds the metric cards and condition banner. |
 | ~~High~~ | ~~**Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown**~~ ([#153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)) | ✅ **Done** — Deep-dive breakdown of pit lane transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta, out-lap cold tyre warm-up delta, sector splits, stacked horizontal bar chart (`build_pit_loss_fig`), and efficiency leaderboard table (`_render_pit_loss_section`). |
 | ~~Medium~~ | ~~**Repository Cleanup & Code Hygiene**~~ ([#164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164)) | ✅ **Done** — Streamlined repository file tree, purged 2,021 lines of redundant duplicate functions from `app.py`, removed tracked bytecode and temporary scratch files, and strengthened `.gitignore` and `.dockerignore` for optimal container build and Streamlit caching. |
@@ -1050,6 +1056,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
+- **PR #182** / **Issue #155** (`feat: Corner Exit Traction & Throttle Pick-Up Aggression Analysis`): Added high-precision corner exit telemetry evaluating throttle pick-up dynamics, driver wheelspin modulation, and traction aggression out of corner apexes. Implemented `_calculate_traction_metrics` in `src/data/loader.py`, slicing telemetry across a $[d_{\text{apex}} - 60\,\text{m}, d_{\text{apex}} + 260\,\text{m}]$ distance window. Extracts Distance to Initial Throttle, Distance to 100% Full Throttle, Throttle Application Ramp Distance and Duration, Throttle Ramp Rate ($100 / \Delta d$ %/m), Throttle Gradient ($100 / \Delta t$ %/s), Throttle Hesitations/Lifts ($\ge 3.5\%$ drop from running maximum envelope), Oversteer Corrections Count ($d(\text{Steering})/dt \cdot \text{sign}(\text{TurnDirection}) < -2.5^\circ$), Peak Exit Acceleration ($G$), Exit Speed at 100m post-apex, and composite Traction Aggression Score (0–100). Implemented `build_traction_exit_fig` in `src/charts/plotly.py` with 3 stacked subplots (Throttle % with pick-up/full/hesitation markers, Speed profile, Longitudinal Acceleration $G$). Implemented `_render_traction_exit_section` in `src/ui/components.py` with 4 summary KPI cards (*Distance to 100% Throttle*, *Throttle Ramp Rate*, *Throttle Hesitations / Lifts*, *Traction Aggression Score*), automated comparative advantage callouts, and integrated both as a standalone section in `app.py` (following Braking Analysis) and as a 5th tab (`⚡ Traction & Exit`) in `render_maps_block`. Added 8 comprehensive unit tests in `tests/test_traction_exit.py` (113 total suite tests passing across 18 modules).
 - **PR #180** / **Issue #177** (`docs: add app.py architecture commentary and close README gaps`): Added a module docstring to `app.py` covering the `src/` package map, the Streamlit rerun execution model (`st.session_state` plus `@st.cache_data` keyed on `sess_key`), the 11-stage top-to-bottom render flow and the two comparison modes, plus an explanatory block under all 46 section dividers. Comment-only: the AST is unchanged apart from the docstring. README gained GitHub Codespaces and CI documentation, a complete project tree, PR #175, PR #176 / #164 in the Resolved Issues Index, and correct chronological ordering.
 - **PR #179** / **Issue #154** (`feat: Track Evolution & Grip Improvement Ramp Index`): Implemented `_theil_sen_estimate` and `_robust_linear_fit` (robust regression helpers), `_build_track_evolution_data` (multi-car flyer filtering, driver fixed-effects pace normalisation, ramp rate, grip gain, quadratic trend, track temperature profile), `build_track_evolution_fig` (dual-axis field scatter + evolution curve + temperature overlay), and `_render_track_evolution_section` (Track Ramp Rate, Total Track Grip Gain, Track Temperature cards plus condition banner, gated to Practice and Qualifying sessions).
 - **Issue #164** (`refactor: repository cleanup, remove redundant code and AI slop, and streamline file tree`): Comprehensive repository cleanup and cache optimisation audit. Removed 26 redundant top-level function definitions from `app.py` (-2,021 lines) that were previously duplicated during modularisation into `src/` packages, unifying all caching on canonical `@st.cache_data` entry points in `src/data/loader.py` and reducing Streamlit memory pressure. Removed tracked bytecode (`__pycache__/app.cpython-311.pyc`) and temporary scratch files (`scratch.py`, `test_cf.py`) from git index. Strengthened `.gitignore` and `.dockerignore` to exclude cache directories, bytecode, test cache, and extraneous files to optimise Docker layer caching and prevent cache pollution. Verified all 95 unit tests in `tests/` pass with zero regressions.
@@ -1768,7 +1775,65 @@ Dual-axis `make_subplots(specs=[[{"secondary_y": True}]])`:
 
 ---
 
-*Last updated: September 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+## 35. Corner Exit Traction & Throttle Pick-Up Aggression Analysis Architecture
+
+### Motivation & Background
+
+Corner exits are where lap time is made in Formula 1. How early and aggressively a driver can roll into the throttle and achieve 100% wide-open throttle (WOT) out of a corner determines not only their minimum apex recovery, but their terminal velocity down the subsequent straight.
+
+However, throttle application is constrained by rear tyre traction. Over-aggressive throttle pick-up breaks rear traction, causing wheelspin, snap oversteer, and micro-lifts or hesitations that bleed momentum and overheat tyre surfaces. Conversely, overly cautious throttle application leaves performance on the table.
+
+This module provides high-precision telemetry analytics isolating the corner exit acceleration phase:
+1. **Initial Throttle Pick-up Point** — Distance relative to the apex where positive throttle application begins ($> 5\%$).
+2. **Commitment to Full Throttle** — Distance and elapsed time required to achieve continuous 100% throttle.
+3. **Throttle Ramp Rate & Gradient** — Spatial ramp rate ($\%/\text{m}$) and temporal gradient ($\%/\text{s}$) capturing the driver's throttle application profile.
+4. **Hesitations & Modulation Events** — Wheelspin management detection tracking dips in throttle ($\ge 3.5\%$) before reaching full throttle.
+5. **Oversteer Corrections** — Steering wheel counter-steer reversals in the direction opposing the turn.
+6. **Exit Traction Acceleration ($G$)** — Longitudinal forward acceleration drive achieved post-apex.
+7. **Traction Aggression Score (0–100)** — Composite index scoring commitment, smoothness, and traction efficiency.
+
+### Data Layer (`_calculate_traction_metrics` — `src/data/loader.py`)
+
+- **Distance Window**: Telemetry is sliced in a $[d_{\text{apex}} - 60\,\text{m}, d_{\text{apex}} + 260\,\text{m}]$ window around turn apexes. This safely captures the apex minimum speed, the initial throttle pick-up, the ramp to full throttle, and the initial straight-line acceleration without bleeding into the braking zone of the subsequent turn.
+- **Normalization**: Handles both percentage ($0\dots 100$) and fractional ($0\dots 1$) telemetry representations safely (`Throttle = Throttle * 100` if max $\le 1.5$).
+- **Key Metrics Extracted**:
+  - `dist_to_initial_throttle`: $d_{\text{init\_throttle}} - d_{\text{apex}}$ (m). Negative indicates pick-up prior to apex (early commitment); positive indicates post-apex pick-up.
+  - `dist_to_full_throttle`: $d_{\text{full\_throttle}} - d_{\text{apex}}$ (m). Distance from apex where $100\%$ throttle is achieved.
+  - `throttle_ramp_dist`: $d_{\text{full\_throttle}} - d_{\text{init\_throttle}}$ (m).
+  - `throttle_ramp_time`: $t_{\text{full\_throttle}} - t_{\text{init\_throttle}}$ (s).
+  - `throttle_ramp_rate`: $\frac{100}{\max(1.0, \Delta d)}$ ($\%/\text{m}$).
+  - `throttle_gradient`: $\frac{100}{\max(0.05, \Delta t)}$ ($\%/\text{s}$).
+  - `hesitation_count` & `hesitation_events`: Detects drops $\ge 3.5\%$ from the running maximum envelope during the ramp-up phase ($5\% \le \text{Throttle} < 98\%$), isolating driver lifts due to rear wheelspin.
+  - `oversteer_corrections`: Detects counter-steer reversals in the steering channel ($d(\text{Steering})/dt \cdot \text{sign}(\text{TurnDirection}) < -2.5^\circ$), falling back gracefully if steering is unavailable.
+  - `peak_exit_accel`: Peak positive longitudinal acceleration in $G$-force ($a = \frac{\Delta v}{\Delta t \cdot 9.81}$) with 3-point moving average smoothing.
+  - `exit_speed_100m`: Speed (km/h) achieved at exactly 100m post-apex.
+  - `traction_aggression_score`: Normalized 0–100 score:
+    $$\text{Score} = \text{clip}\left(50 + 20 \cdot \left(\frac{\text{RampRate} - 1.5}{1.5}\right) - 15 \cdot \left(\frac{\text{DistToFull} - 45}{35}\right) - 8 \cdot \text{Hesitations} - 10 \cdot \text{Oversteer}, 0, 100\right)$$
+
+### Chart Layer (`build_traction_exit_fig` — `src/charts/plotly.py`)
+
+Constructs a stacked 3-row Plotly figure sharing an aligned X-axis (Track Distance relative to apex in meters):
+1. **Row 1 — Throttle Position (%)**: Full throttle trace with annotated markers:
+   - Green / team-coloured marker at initial throttle application.
+   - Gold star marker at 100% full throttle attainment.
+   - Red cross markers marking hesitation/lift dips.
+2. **Row 2 — Speed Profile (km/h)**: Continuous vehicle speed showing minimum apex speed and post-apex velocity ramp.
+3. **Row 3 — Longitudinal Acceleration ($G$)**: Forward traction drive acceleration curve with a zero parity baseline, highlighting traction grip limit.
+
+### UI Layer (`_render_traction_exit_section` — `src/ui/components.py`)
+
+- **Interactive Corner Selector**: Populated dynamically from circuit corner coordinates (`session_obj.get_circuit_info()`), with `key_suffix` scoping to avoid Streamlit duplicate widget key collisions.
+- **4 Primary Metric KPI Cards**:
+  - *Distance to 100% Throttle*: Distance (m) to achieve wide-open throttle with delta comparison.
+  - *Throttle Ramp Rate*: Application intensity ($\%/\text{m}$) and temporal gradient ($\%/\text{s}$).
+  - *Throttle Hesitations / Lifts*: Count of wheelspin modulation dips and oversteer corrections.
+  - *Traction Aggression Score*: 0–100 rating with commitment classifications (Aggressive, Moderate, Progressive, Cautious).
+- **Automated Comparative Advantage Callouts**: Highlights earlier throttle pick-up, superior ramp rate, and cleaner traction drive between drivers.
+- **Dual Placement**: Available both as a standalone analytical block in `app.py` directly following Braking Efficiency, and as Tab 5 (`⚡ Traction & Exit`) inside `render_maps_block`.
+
+---
+
+*Last updated: October 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
 
 
 
