@@ -1883,6 +1883,144 @@ def build_braking_efficiency_fig(
     return fig
 
 
+def build_traction_exit_fig(
+    win1: pd.DataFrame | None,
+    win2: pd.DataFrame | None,
+    driver1: str,
+    driver2: str | None,
+    colour1: str,
+    colour2: str | None,
+    apex_dist: float,
+    fmt_func1=None,
+    fmt_func2=None
+) -> go.Figure | None:
+    """
+    Build a 3-row Plotly figure comparing corner exit traction & throttle pick-up dynamics:
+    1. Throttle Application (%) vs Distance from Apex (with marked full throttle and hesitation points)
+    2. Speed (km/h) vs Distance from Apex
+    3. Longitudinal Acceleration (G) vs Distance from Apex
+    """
+    if win1 is None or win1.empty or not {"Distance", "Speed", "Time"}.issubset(win1.columns):
+        return None
+
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=(
+            "<b>Throttle Position (%) & Modulation Events</b>",
+            "<b>Exit Speed Profile (km/h)</b>",
+            "<b>Longitudinal Acceleration (G) — Traction Drive</b>"
+        )
+    )
+
+    from src.data.loader import _calculate_traction_metrics
+
+    def _add_traces(df: pd.DataFrame, drv: str, col: str, drv_label: str):
+        if df is None or df.empty or not {"Distance", "Speed", "Time"}.issubset(df.columns):
+            return
+
+        m = _calculate_traction_metrics(df, apex_dist)
+        df_proc = m.get("df_processed")
+        if df_proc is None or df_proc.empty:
+            return
+
+        # 1. Throttle curve
+        if "Throttle_Pct" in df_proc.columns:
+            fig.add_trace(go.Scatter(
+                x=df_proc["DistToApex"], y=df_proc["Throttle_Pct"],
+                mode="lines", line=dict(color=col, width=2.5),
+                name=drv_label, legendgroup=drv,
+                hovertemplate=f"<b>{drv_label}</b><br>Dist from Apex: %{{x:.0f}} m<br>Throttle: %{{y:.1f}}%<extra></extra>"
+            ), row=1, col=1)
+
+            # Initial throttle marker
+            if m.get("dist_to_initial_throttle") is not None:
+                fig.add_trace(go.Scatter(
+                    x=[m["dist_to_initial_throttle"]], y=[5.0],
+                    mode="markers",
+                    marker=dict(symbol="circle", size=8, color=col, line=dict(color="white", width=1.5)),
+                    name=f"{drv_label} Initial Throttle", legendgroup=drv, showlegend=False,
+                    hovertemplate=f"<b>{drv_label} Initial Throttle</b><br>Dist: %{{x:.1f}} m post-apex<extra></extra>"
+                ), row=1, col=1)
+
+            # Full throttle marker
+            if m.get("dist_to_full_throttle") is not None:
+                fig.add_trace(go.Scatter(
+                    x=[m["dist_to_full_throttle"]], y=[100.0],
+                    mode="markers+text",
+                    marker=dict(symbol="star", size=12, color=col, line=dict(color="white", width=1)),
+                    text=[f"{drv_label} 100%"],
+                    textposition="top center",
+                    textfont=dict(size=10, color=col),
+                    name=f"{drv_label} 100% Throttle", legendgroup=drv, showlegend=False,
+                    hovertemplate=f"<b>{drv_label} 100% Full Throttle</b><br>Dist: %{{x:.1f}} m post-apex<br>Speed: {m.get('full_throttle_speed', 0):.0f} km/h<extra></extra>"
+                ), row=1, col=1)
+
+            # Hesitation / lift markers
+            hesitations = m.get("hesitations", [])
+            if hesitations:
+                h_x = [h["dist_to_apex"] for h in hesitations]
+                h_y = [h["throttle_before"] - h["throttle_drop"] for h in hesitations]
+                h_text = [f"Lift -{h['throttle_drop']:.1f}%" for h in hesitations]
+                fig.add_trace(go.Scatter(
+                    x=h_x, y=h_y,
+                    mode="markers",
+                    marker=dict(symbol="x", size=11, color="#FF5252", line=dict(width=2.5, color="#FF5252")),
+                    name=f"{drv_label} Hesitation", legendgroup=drv, showlegend=False,
+                    hovertemplate=f"<b>{drv_label} Hesitation / Modulation</b><br>Dist: %{{x:.1f}} m<br>Drop: %{{text}}<extra></extra>",
+                    text=h_text
+                ), row=1, col=1)
+
+        # 2. Speed profile
+        fig.add_trace(go.Scatter(
+            x=df_proc["DistToApex"], y=df_proc["Speed"],
+            mode="lines", line=dict(color=col, width=2.5),
+            name=drv_label, legendgroup=drv, showlegend=False,
+            hovertemplate=f"<b>{drv_label}</b><br>Dist from Apex: %{{x:.0f}} m<br>Speed: %{{y:.0f}} km/h<extra></extra>"
+        ), row=2, col=1)
+
+        # 3. Longitudinal Acceleration (G)
+        if "G_Force" in df_proc.columns:
+            fig.add_trace(go.Scatter(
+                x=df_proc["DistToApex"], y=df_proc["G_Force"],
+                mode="lines", line=dict(color=col, width=2.5),
+                name=drv_label, legendgroup=drv, showlegend=False,
+                hovertemplate=f"<b>{drv_label}</b><br>Dist from Apex: %{{x:.0f}} m<br>Accel: %{{y:.2f}} G<extra></extra>"
+            ), row=3, col=1)
+
+    label1 = fmt_func1(driver1) if fmt_func1 else driver1
+    _add_traces(win1, driver1, colour1, label1)
+
+    if win2 is not None and driver2 and colour2:
+        label2 = fmt_func2(driver2) if fmt_func2 else driver2
+        _add_traces(win2, driver2, colour2, label2)
+
+    fig.update_layout(
+        height=620,
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1)
+    )
+
+    for i in range(1, 4):
+        fig.add_vline(x=0, line_dash="dash", line_color="rgba(255,255,255,0.4)", row=i, col=1)
+        fig.update_xaxes(
+            gridcolor="rgba(128,128,128,0.2)",
+            zerolinecolor="rgba(128,128,128,0.4)",
+            row=i, col=1
+        )
+        if i == 3:
+            fig.update_xaxes(title_text="Distance relative to Apex (m)", row=i, col=1)
+
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", range=[0, 108], row=1, col=1)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.2)", row=2, col=1)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,0.2)", zerolinecolor="rgba(128,128,128,0.4)", range=[-1.5, 3.0], row=3, col=1)
+
+    return fig
+
+
 def build_gear_shift_fig(
     gear_data1: dict, gear_data2: dict | None,
     driver1: str, driver2: str | None,

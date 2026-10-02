@@ -93,7 +93,7 @@ from src.ui.components import (
     render_telemetry_export_panel, _render_consistency_section, _render_weather_correlation_section,
     _render_track_evolution_section,
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
-    _render_braking_analysis_section, _render_gear_analysis_section,
+    _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section
 )
@@ -1060,6 +1060,15 @@ _render_track_evolution_section(
 st.markdown("<div class='section-title'>Braking Efficiency & Trail-Braking Zone Analysis</div>", unsafe_allow_html=True)
 if tel1 is not None:
     _render_braking_analysis_section(
+        sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare,
+        fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+    )
+
+# ── Corner Exit Traction & Throttle Pick-Up Analysis ───────────────────────
+# Measures throttle application aggression, hesitation lifts, and traction drive.
+st.markdown("<div class='section-title'>Corner Exit Traction & Throttle Pick-Up Analysis</div>", unsafe_allow_html=True)
+if tel1 is not None:
+    _render_traction_exit_section(
         sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare,
         fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
     )

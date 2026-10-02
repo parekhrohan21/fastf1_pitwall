@@ -13,7 +13,7 @@ from src.data.loader import (
     _build_weather_correlation_data, _build_track_evolution_data,
     _build_multi_year_comparison,
     _build_export_csv, _build_export_parquet, _build_export_json,
-    _calculate_braking_metrics, _calculate_gear_shift_metrics,
+    _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data
 )
 from src.charts.plotly import (
@@ -21,7 +21,7 @@ from src.charts.plotly import (
     _speed_map_fig, _input_map_fig, build_replay_fig, build_corner_fig,
     build_grid_heatmap_fig, build_stint_consistency_fig, build_weather_correlation_fig,
     build_track_evolution_fig,
-    build_multi_year_comparison_fig, build_braking_efficiency_fig, build_gear_shift_fig,
+    build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig
 )
@@ -1012,11 +1012,12 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                       other_driver: str | None = None, other_colour: str | None = None, other_lap=None,
                       fmt_func=None, **kwargs):
     compare = bool(other_driver and other_lap is not None)
-    map_tab1, map_tab2, map_tab3, map_tab4 = st.tabs([
+    map_tab1, map_tab2, map_tab3, map_tab4, map_tab5 = st.tabs([
         "🎨  Track Map",
         "🕹️  Driver Inputs",
         "🎬  Race Replay",
-        "🔍  Corner Analysis"
+        "🔍  Corner Analysis",
+        "⚡  Traction & Exit"
     ])
     
     with map_tab1:
@@ -1129,6 +1130,19 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                 st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
         else:
             st.info("Load a session to view corner analysis.")
+
+    with map_tab5:
+        st.markdown("<h4 style='margin-top:0;'>Corner Exit Traction & Throttle Pick-Up Analysis</h4>", unsafe_allow_html=True)
+        if lap is not None and session_obj is not None:
+            _render_traction_exit_section(
+                sess_k, session_obj, lap, other_lap if compare else None,
+                driver, other_driver if compare else None,
+                colour, other_colour if compare else None,
+                compare=compare, fmt_func1=fmt_func, fmt_func2=fmt_func,
+                key_suffix=f"maptab_{key_suffix}"
+            )
+        else:
+            st.info("Load a session to view corner exit traction analysis.")
 
 
 def _render_grid_heatmap_section(sess, laps_df: pd.DataFrame, all_drivers: list[str], sess_key: str, fmt_func=None):
@@ -2049,6 +2063,126 @@ def _render_braking_analysis_section(
         st.markdown("<br>", unsafe_allow_html=True)
     
     fig = build_braking_efficiency_fig(
+        win1, win2, driver1, driver2, colour1, colour2, apex_dist,
+        fmt_func1=fmt_func1, fmt_func2=fmt_func2
+    )
+    if fig:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _render_traction_exit_section(
+    sess_k: str, session_obj, l1, l2, driver1: str, driver2: str | None,
+    colour1: str, colour2: str | None, compare: bool,
+    fmt_func1=None, fmt_func2=None, key_suffix: str = "main"
+):
+    """Render the Corner Exit Traction & Throttle Pick-Up Aggression Analysis section."""
+    if session_obj is None:
+        st.warning("Session object not available. Cannot load circuit geometry.")
+        return
+
+    try:
+        circuit_info = session_obj.get_circuit_info()
+    except Exception:
+        st.warning("Circuit geometry info is not available for this track.")
+        return
+
+    if circuit_info is None or not hasattr(circuit_info, "corners") or circuit_info.corners is None or circuit_info.corners.empty:
+        st.warning("No corner data available in circuit info.")
+        return
+
+    corners = circuit_info.corners
+    corners_clean = corners.copy()
+    corners_clean["Number"] = corners_clean["Number"].astype(str)
+    corner_labels = [f"Turn {row['Number']}{row['Letter'] or ''}" for _, row in corners_clean.iterrows()]
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        selected_corner_label = st.selectbox("Select Corner for Traction Analysis", corner_labels, key=f"traction_corner_selector_{key_suffix}")
+
+    idx = corner_labels.index(selected_corner_label)
+    selected_corner = corners_clean.iloc[idx]
+    apex_dist = selected_corner["Distance"]
+
+    try:
+        tel1_all = _get_telemetry_for_map(l1, driver1, sess_k)
+        tel2_all = _get_telemetry_for_map(l2, driver2, sess_k) if (compare and driver2) else None
+    except Exception:
+        st.warning("Could not load telemetry for traction analysis.")
+        return
+
+    if tel1_all is None or tel1_all.empty:
+        st.warning(f"No telemetry available for {fmt_func1(driver1) if fmt_func1 else driver1}.")
+        return
+
+    # Window for corner exit (from 60m before apex to 260m after apex)
+    win1 = tel1_all[(tel1_all["Distance"] >= apex_dist - 60) & (tel1_all["Distance"] <= apex_dist + 260)].copy()
+    win2 = tel2_all[(tel2_all["Distance"] >= apex_dist - 60) & (tel2_all["Distance"] <= apex_dist + 260)].copy() if (compare and tel2_all is not None and not tel2_all.empty) else None
+
+    if win1.empty:
+        st.warning("Insufficient telemetry around this corner exit.")
+        return
+
+    m1 = _calculate_traction_metrics(win1, apex_dist)
+    m2 = _calculate_traction_metrics(win2, apex_dist) if win2 is not None else None
+
+    drv1_name = fmt_func1(driver1) if fmt_func1 else driver1
+    drv2_name = fmt_func2(driver2) if (fmt_func2 and driver2) else driver2
+
+    # Render Metrics
+    st.markdown("##### Corner Exit Traction & Throttle Metrics")
+    c1, c2, c3, c4 = st.columns(4)
+
+    def render_metric(col, title, val1, val2, unit="", fmt_str="{:.1f}"):
+        v1_str = f"{fmt_str.format(val1)}{unit}" if val1 is not None else "—"
+        v2_str = f"{fmt_str.format(val2)}{unit}" if val2 is not None else "—"
+
+        html = f"<div style='font-size:13px; color:#aaa; margin-bottom:4px;'>{title}</div>"
+        html += f"<div style='font-size:16px; font-weight:bold; color:{colour1};'>{v1_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({drv1_name})</span></div>"
+        if compare and driver2:
+            html += f"<div style='font-size:16px; font-weight:bold; color:{colour2}; margin-top:2px;'>{v2_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({drv2_name})</span></div>"
+
+        col.markdown(html, unsafe_allow_html=True)
+
+    render_metric(c1, "Distance to 100% Throttle", m1["dist_to_full_throttle"], m2["dist_to_full_throttle"] if m2 else None, " m")
+    render_metric(c2, "Throttle Ramp Rate", m1["throttle_ramp_rate"], m2["throttle_ramp_rate"] if m2 else None, " %/m", fmt_str="{:.2f}")
+    render_metric(c3, "Throttle Hesitations / Lifts", m1["hesitation_count"], m2["hesitation_count"] if m2 else None, "", fmt_str="{:d}")
+    render_metric(c4, "Traction Aggression Score", m1["traction_aggression_score"], m2["traction_aggression_score"] if m2 else None, " / 100", fmt_str="{:.0f}")
+
+    if compare and m1 and m2 and m1["dist_to_full_throttle"] is not None and m2["dist_to_full_throttle"] is not None:
+        delta_m = m1["dist_to_full_throttle"] - m2["dist_to_full_throttle"]
+        # If delta_m < 0, driver1 reached full throttle closer to the apex (earlier full throttle)
+        if delta_m < -1.0:
+            earlier_drv = drv1_name
+            earlier_col = colour1
+            adv_m = abs(delta_m)
+            summary_txt = (
+                f"<b>{earlier_drv}</b> reached 100% full throttle <b>{adv_m:.1f} m earlier</b> out of {selected_corner_label} than {drv2_name}, "
+                f"applying power at <b>{m1['throttle_ramp_rate']:.2f} %/m</b> with {m1['hesitation_count']} hesitation lift(s) "
+                f"(Traction Score: <b>{m1['traction_aggression_score']:.0f}</b> vs <b>{m2['traction_aggression_score']:.0f}</b>)."
+            )
+        elif delta_m > 1.0:
+            earlier_drv = drv2_name
+            earlier_col = colour2
+            adv_m = abs(delta_m)
+            summary_txt = (
+                f"<b>{earlier_drv}</b> reached 100% full throttle <b>{adv_m:.1f} m earlier</b> out of {selected_corner_label} than {drv1_name}, "
+                f"applying power at <b>{m2['throttle_ramp_rate']:.2f} %/m</b> with {m2['hesitation_count']} hesitation lift(s) "
+                f"(Traction Score: <b>{m2['traction_aggression_score']:.0f}</b> vs <b>{m1['traction_aggression_score']:.0f}</b>)."
+            )
+        else:
+            earlier_col = "rgba(255,255,255,0.2)"
+            summary_txt = f"Both drivers reached full throttle within <b>1.0 m</b> of each other out of {selected_corner_label}."
+
+        st.markdown(
+            f"<div style='background:rgba(255,255,255,0.03); border-left:4px solid {earlier_col}; "
+            f"padding:10px 14px; border-radius:6px; margin:12px 0 16px 0; font-size:13px;'>"
+            f"{summary_txt}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    fig = build_traction_exit_fig(
         win1, win2, driver1, driver2, colour1, colour2, apex_dist,
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
