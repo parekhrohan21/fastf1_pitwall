@@ -84,7 +84,7 @@ Issue numbers link to the GitHub issue that introduced each feature. Implementat
 
 - **Corner-by-corner analysis**: pick a turn to see apex speed, braking point, steering angle and DRS, with racing-line, speed, steering and DRS subplots ([#80](https://github.com/parekhrohan21/fastf1_pitwall/issues/80), [#136](https://github.com/parekhrohan21/fastf1_pitwall/issues/136)).
 - **Braking efficiency & trail-braking**: braking distance before apex, peak deceleration (G), trail-brake release point and brake-to-throttle transition time ([#148](https://github.com/parekhrohan21/fastf1_pitwall/issues/148)).
-- **Corner exit traction**: distance to full throttle, throttle ramp rate, hesitation lifts, oversteer corrections, exit acceleration and a 0–100 Traction Aggression Score ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)).
+- **Corner exit traction**: distance to full throttle, throttle ramp rate, hesitation lifts, oversteer corrections, exit acceleration and a 0–100 Traction Aggression Score. Corners taken flat out are labelled as such rather than scored ([#155](https://github.com/parekhrohan21/fastf1_pitwall/issues/155)).
 - **Gear shift strategy**: RPM curve with shift markers, gear usage for gears 1–8, short-shift and redline detection ([#149](https://github.com/parekhrohan21/fastf1_pitwall/issues/149)).
 - **Speed traps**: grid-wide ST / I1 / I2 / FL speeds on a radar chart, benchmarked by constructor and power unit, with DRS gain ([#150](https://github.com/parekhrohan21/fastf1_pitwall/issues/150)).
 

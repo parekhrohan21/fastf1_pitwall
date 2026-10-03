@@ -194,6 +194,58 @@ def test_calculate_traction_metrics_edge_cases():
     assert m_zero["dist_to_full_throttle"] is None
 
 
+def test_calculate_traction_metrics_flat_out_corner():
+    """A corner taken at full throttle has no pick-up: flagged flat out, no ramp or score."""
+    apex_dist = 1200.0
+    df = _create_synthetic_traction_telemetry(apex_dist=apex_dist)
+    df["Throttle"] = 100.0
+
+    metrics = _calculate_traction_metrics(df, apex_dist)
+    assert metrics["flat_out"] is True
+    assert metrics["dist_to_initial_throttle"] is None
+    assert metrics["throttle_ramp_rate"] is None
+    assert metrics["traction_aggression_score"] is None
+    assert metrics["hesitation_count"] == 0
+    # Exit metrics do not depend on a pick-up and are still reported
+    assert metrics["exit_speed_100m"] is not None
+    assert metrics["peak_exit_accel_g"] is not None
+
+    assert build_traction_exit_fig(df, None, "VER", None, "#3671C6", None, apex_dist) is not None
+
+
+def test_calculate_traction_metrics_flat_out_threshold():
+    """A small breath above the threshold is flat out; a real lift below it is not."""
+    apex_dist = 1200.0
+
+    breath = _create_synthetic_traction_telemetry(apex_dist=apex_dist)
+    breath["Throttle"] = 100.0
+    near_apex = (breath["Distance"] >= apex_dist - 10) & (breath["Distance"] <= apex_dist + 10)
+    breath.loc[near_apex, "Throttle"] = 90.0
+    assert _calculate_traction_metrics(breath, apex_dist)["flat_out"] is True
+
+    lift = breath.copy()
+    lift.loc[near_apex, "Throttle"] = 60.0
+    m_lift = _calculate_traction_metrics(lift, apex_dist)
+    assert m_lift["flat_out"] is False
+    assert m_lift["traction_aggression_score"] is not None
+
+
+def test_calculate_traction_metrics_snap_pick_up():
+    """Closed-to-full between two samples must give a steep ramp, not 0 %/m."""
+    apex_dist = 1200.0
+    df = _create_synthetic_traction_telemetry(
+        apex_dist=apex_dist, initial_pick_up_m=10.0, full_throttle_m=10.0
+    )
+    metrics = _calculate_traction_metrics(df, apex_dist)
+
+    assert metrics["flat_out"] is False
+    assert metrics["dist_to_initial_throttle"] == metrics["dist_to_full_throttle"]
+    # 0 -> 100% across one 5m sample
+    assert metrics["throttle_application_dist"] == pytest.approx(5.0)
+    assert metrics["throttle_ramp_rate"] == pytest.approx(20.0)
+    assert metrics["throttle_gradient"] > 0
+
+
 def test_build_traction_exit_fig_single_driver():
     """Test Plotly figure generation for a single driver."""
     apex_dist = 1200.0

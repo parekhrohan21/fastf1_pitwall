@@ -2453,6 +2453,11 @@ def _calculate_braking_metrics(df: pd.DataFrame | None, apex_dist: float) -> dic
         return metrics
 
 
+# Minimum throttle (%) within 10m of the apex for a corner to count as taken flat out.
+# Lifts to ~88% (e.g. Bahrain T12) are a breath, not a traction pick-up.
+FLAT_OUT_THROTTLE_PCT = 85.0
+
+
 def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> dict:
     """
     Calculate corner exit traction dynamics and throttle pick-up aggression metrics around a corner apex.
@@ -2473,7 +2478,8 @@ def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> di
             oversteer_corrections_count: int | None (count of counter-steer corrections)
             exit_speed_100m: float | None (speed 100m post-apex)
             peak_exit_accel_g: float | None (peak longitudinal acceleration in G)
-            traction_aggression_score: float | None (composite 0-100 score)
+            traction_aggression_score: float | None (composite 0-100 score; None if no pick-up)
+            flat_out: bool (throttle stayed >= FLAT_OUT_THROTTLE_PCT within 10m of the apex)
             df_processed: pd.DataFrame | None (processed telemetry slice)
     """
     metrics = {
@@ -2493,6 +2499,7 @@ def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> di
         "exit_speed_100m": None,
         "peak_exit_accel_g": None,
         "traction_aggression_score": None,
+        "flat_out": False,
         "df_processed": None,
     }
     if df is None or df.empty or not {"Distance", "Speed", "Time"}.issubset(df.columns):
@@ -2531,9 +2538,18 @@ def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> di
         else:
             df_calc["Throttle_Pct"] = 0.0
 
+        # Flat-out corner: throttle at the apex never drops below the threshold, so there is
+        # no pick-up phase to measure. Pick-up metrics and the score stay None. The window is
+        # kept tight so a lift for the *next* corner (e.g. Bahrain T5 -> T6) is not counted;
+        # at high speed samples can be >10m apart, so fall back to the nearest sample.
+        apex_th = df_calc.loc[df_calc["DistToApex"].abs() <= 10, "Throttle_Pct"]
+        if apex_th.empty:
+            apex_th = df_calc.loc[[df_calc["DistToApex"].abs().idxmin()], "Throttle_Pct"]
+        metrics["flat_out"] = bool(float(apex_th.min()) >= FLAT_OUT_THROTTLE_PCT)
+
         # Post-apex acceleration zone (starting 10m before apex to allow early throttle application)
         post_apex = df_calc[df_calc["DistToApex"] >= -10].copy()
-        if not post_apex.empty and "Throttle_Pct" in post_apex.columns:
+        if not metrics["flat_out"] and not post_apex.empty and "Throttle_Pct" in post_apex.columns:
             # Initial throttle application: first point where Throttle > 5%
             th_active = post_apex[post_apex["Throttle_Pct"] > 5.0]
             if not th_active.empty:
@@ -2561,17 +2577,27 @@ def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> di
                     metrics["dist_to_full_throttle"] = float(full_d - apex_dist)
                     metrics["full_throttle_speed"] = float(full_row["Speed"])
 
-                    app_dist = max(0.5, full_d - init_d)
+                    # A snap pick-up can go from closed to full between two samples, making
+                    # init_row and full_row the same point. Measure the ramp from the
+                    # preceding sample instead of reporting a 0 %/m ramp.
+                    ramp_start = init_row
+                    if full_row.name == init_row.name:
+                        pos = df_calc.index.get_loc(init_row.name)
+                        if isinstance(pos, int) and pos > 0:
+                            ramp_start = df_calc.iloc[pos - 1]
+                    start_d = float(ramp_start["Distance"])
+
+                    app_dist = max(0.5, full_d - start_d)
                     metrics["throttle_application_dist"] = float(app_dist)
 
                     if pd.api.types.is_timedelta64_dtype(df_calc["Time"]):
-                        app_time = (full_row["Time"] - init_row["Time"]).total_seconds()
+                        app_time = (full_row["Time"] - ramp_start["Time"]).total_seconds()
                     else:
-                        app_time = float(full_row["Time"]) - float(init_row["Time"])
+                        app_time = float(full_row["Time"]) - float(ramp_start["Time"])
                     app_time = max(0.01, app_time)
                     metrics["throttle_application_time"] = float(app_time)
 
-                    th_delta = float(full_row["Throttle_Pct"] - init_row["Throttle_Pct"])
+                    th_delta = float(full_row["Throttle_Pct"] - ramp_start["Throttle_Pct"])
                     metrics["throttle_ramp_rate"] = float(th_delta / app_dist)  # %/m
                     metrics["throttle_gradient"] = float(th_delta / app_time)   # %/s
 
@@ -2619,52 +2645,53 @@ def _calculate_traction_metrics(df: pd.DataFrame | None, apex_dist: float) -> di
                 metrics["hesitation_count"] = len(hesitations)
                 metrics["hesitations"] = hesitations
 
-                # Oversteer corrections detection
-                has_steering = False
-                oversteer_count = 0
-                if "Steering" in df_calc.columns:
-                    st_series = pd.to_numeric(df_calc["Steering"], errors="coerce")
-                    if not st_series.isna().all() and st_series.abs().max() > 1.0:
-                        has_steering = True
-                        st_zone = df_calc[(df_calc["Distance"] >= apex_dist) & (df_calc["Distance"] <= apex_dist + 150)]
-                        if len(st_zone) >= 4:
-                            st_vals = pd.to_numeric(st_zone["Steering"], errors="coerce").fillna(0.0).values
-                            initial_sign = np.sign(np.mean(st_vals[:min(len(st_vals), 5)]))
-                            if initial_sign != 0:
-                                diff_st = np.diff(st_vals) * initial_sign
-                                c_count = 0
-                                i = 0
-                                while i < len(diff_st) - 1:
-                                    if diff_st[i] < -2.5:
-                                        c_count += 1
-                                        i += 3
-                                    else:
-                                        i += 1
-                                oversteer_count = c_count
-                metrics["oversteer_corrections_count"] = oversteer_count if has_steering else None
+        # Oversteer corrections detection
+        has_steering = False
+        oversteer_count = 0
+        if "Steering" in df_calc.columns:
+            st_series = pd.to_numeric(df_calc["Steering"], errors="coerce")
+            if not st_series.isna().all() and st_series.abs().max() > 1.0:
+                has_steering = True
+                st_zone = df_calc[(df_calc["Distance"] >= apex_dist) & (df_calc["Distance"] <= apex_dist + 150)]
+                if len(st_zone) >= 4:
+                    st_vals = pd.to_numeric(st_zone["Steering"], errors="coerce").fillna(0.0).values
+                    initial_sign = np.sign(np.mean(st_vals[:min(len(st_vals), 5)]))
+                    if initial_sign != 0:
+                        diff_st = np.diff(st_vals) * initial_sign
+                        c_count = 0
+                        i = 0
+                        while i < len(diff_st) - 1:
+                            if diff_st[i] < -2.5:
+                                c_count += 1
+                                i += 3
+                            else:
+                                i += 1
+                        oversteer_count = c_count
+        metrics["oversteer_corrections_count"] = oversteer_count if has_steering else None
 
-                # Exit speed at 100m post-apex
-                post_100 = df_calc[df_calc["DistToApex"] >= 100]
-                if not post_100.empty:
-                    metrics["exit_speed_100m"] = float(post_100.iloc[0]["Speed"])
+        # Exit speed at 100m post-apex
+        post_100 = df_calc[df_calc["DistToApex"] >= 100]
+        if not post_100.empty:
+            metrics["exit_speed_100m"] = float(post_100.iloc[0]["Speed"])
 
-                # Peak exit acceleration (G)
-                exit_g_zone = df_calc[(df_calc["DistToApex"] >= 0) & (df_calc["DistToApex"] <= 200)]
-                if not exit_g_zone.empty and "G_Force" in exit_g_zone.columns:
-                    valid_g = exit_g_zone["G_Force"].dropna()
-                    if not valid_g.empty:
-                        metrics["peak_exit_accel_g"] = float(valid_g.max())
+        # Peak exit acceleration (G)
+        exit_g_zone = df_calc[(df_calc["DistToApex"] >= 0) & (df_calc["DistToApex"] <= 200)]
+        if not exit_g_zone.empty and "G_Force" in exit_g_zone.columns:
+            valid_g = exit_g_zone["G_Force"].dropna()
+            if not valid_g.empty:
+                metrics["peak_exit_accel_g"] = float(valid_g.max())
 
-                # Traction Aggression Score (10..99)
-                score = 50.0
-                if metrics["throttle_ramp_rate"] is not None:
-                    score += min(30.0, metrics["throttle_ramp_rate"] * 15.0)
-                if metrics["dist_to_full_throttle"] is not None:
-                    score += max(-15.0, min(25.0, (75.0 - metrics["dist_to_full_throttle"]) * 0.5))
-                score -= metrics["hesitation_count"] * 7.0
-                if metrics["oversteer_corrections_count"]:
-                    score -= metrics["oversteer_corrections_count"] * 5.0
-                metrics["traction_aggression_score"] = float(np.clip(score, 10.0, 99.0))
+        # Traction Aggression Score (10..99) — only meaningful when a pick-up was observed
+        if metrics["dist_to_initial_throttle"] is not None:
+            score = 50.0
+            if metrics["throttle_ramp_rate"] is not None:
+                score += min(30.0, metrics["throttle_ramp_rate"] * 15.0)
+            if metrics["dist_to_full_throttle"] is not None:
+                score += max(-15.0, min(25.0, (75.0 - metrics["dist_to_full_throttle"]) * 0.5))
+            score -= metrics["hesitation_count"] * 7.0
+            if metrics["oversteer_corrections_count"]:
+                score -= metrics["oversteer_corrections_count"] * 5.0
+            metrics["traction_aggression_score"] = float(np.clip(score, 10.0, 99.0))
 
         metrics["df_processed"] = df_calc
         return metrics

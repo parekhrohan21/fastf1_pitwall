@@ -2132,9 +2132,18 @@ def _render_traction_exit_section(
     st.markdown("##### Corner Exit Traction & Throttle Metrics")
     c1, c2, c3, c4 = st.columns(4)
 
-    def render_metric(col, title, val1, val2, unit="", fmt_str="{:.1f}"):
-        v1_str = f"{fmt_str.format(val1)}{unit}" if val1 is not None else "—"
-        v2_str = f"{fmt_str.format(val2)}{unit}" if val2 is not None else "—"
+    def _fmt_val(m, key, unit, fmt_str):
+        # Flat-out corners have no pick-up phase, so say so rather than showing "—"
+        if m is None:
+            return "—"
+        if m.get("flat_out"):
+            return "Flat out"
+        val = m[key]
+        return f"{fmt_str.format(val)}{unit}" if val is not None else "—"
+
+    def render_metric(col, title, key, unit="", fmt_str="{:.1f}"):
+        v1_str = _fmt_val(m1, key, unit, fmt_str)
+        v2_str = _fmt_val(m2, key, unit, fmt_str)
 
         html = f"<div style='font-size:13px; color:#aaa; margin-bottom:4px;'>{title}</div>"
         html += f"<div style='font-size:16px; font-weight:bold; color:{colour1};'>{v1_str} <span style='font-size:12px; font-weight:normal; color:#888;'>({drv1_name})</span></div>"
@@ -2143,12 +2152,30 @@ def _render_traction_exit_section(
 
         col.markdown(html, unsafe_allow_html=True)
 
-    render_metric(c1, "Distance to 100% Throttle", m1["dist_to_full_throttle"], m2["dist_to_full_throttle"] if m2 else None, " m")
-    render_metric(c2, "Throttle Ramp Rate", m1["throttle_ramp_rate"], m2["throttle_ramp_rate"] if m2 else None, " %/m", fmt_str="{:.2f}")
-    render_metric(c3, "Throttle Hesitations / Lifts", m1["hesitation_count"], m2["hesitation_count"] if m2 else None, "", fmt_str="{:d}")
-    render_metric(c4, "Traction Aggression Score", m1["traction_aggression_score"], m2["traction_aggression_score"] if m2 else None, " / 100", fmt_str="{:.0f}")
+    render_metric(c1, "Distance to 100% Throttle", "dist_to_full_throttle", " m")
+    render_metric(c2, "Throttle Ramp Rate", "throttle_ramp_rate", " %/m", fmt_str="{:.2f}")
+    render_metric(c3, "Throttle Hesitations / Lifts", "hesitation_count", "", fmt_str="{:d}")
+    render_metric(c4, "Traction Aggression Score", "traction_aggression_score", " / 100", fmt_str="{:.0f}")
 
-    if compare and m1 and m2 and m1["dist_to_full_throttle"] is not None and m2["dist_to_full_throttle"] is not None:
+    flat1 = bool(m1.get("flat_out"))
+    flat2 = bool(m2.get("flat_out")) if m2 else False
+    if compare and m2 and (flat1 or flat2):
+        if flat1 and flat2:
+            summary_txt = f"Both drivers took {selected_corner_label} <b>flat out</b>, so there is no throttle pick-up to compare."
+            border_col = "rgba(255,255,255,0.2)"
+        else:
+            flat_drv, lift_drv = (drv1_name, drv2_name) if flat1 else (drv2_name, drv1_name)
+            border_col = colour1 if flat1 else colour2
+            summary_txt = f"<b>{flat_drv}</b> took {selected_corner_label} <b>flat out</b>, while {lift_drv} lifted and picked the throttle back up."
+        st.markdown(
+            f"<div style='background:rgba(255,255,255,0.03); border-left:4px solid {border_col}; "
+            f"padding:10px 14px; border-radius:6px; margin:12px 0 16px 0; font-size:13px;'>"
+            f"{summary_txt}</div>",
+            unsafe_allow_html=True
+        )
+    elif not compare and flat1:
+        st.info(f"{drv1_name} took {selected_corner_label} flat out, so there is no throttle pick-up phase to measure.")
+    elif compare and m1 and m2 and m1["dist_to_full_throttle"] is not None and m2["dist_to_full_throttle"] is not None:
         delta_m = m1["dist_to_full_throttle"] - m2["dist_to_full_throttle"]
         # If delta_m < 0, driver1 reached full throttle closer to the apex (earlier full throttle)
         if delta_m < -1.0:
