@@ -1,5 +1,6 @@
 # 🏎 Pit Wall — F1 Telemetry Dashboard
 
+
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry, strategic pacing, and performance analytics from any Formula 1 session since 2018.
 
 Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6-channel high-frequency telemetry** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, corner exit traction aggression, track evolution grip ramp indexes, pit lane transit loss breakdowns, intra-team teammate battles, braking dynamics, gear shift strategies, speed trap velocity radars, fastest laps leaderboards, interactive track maps, full race replays, and detailed lap/weather summaries.
