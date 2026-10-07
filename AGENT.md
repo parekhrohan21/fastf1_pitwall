@@ -39,16 +39,21 @@ fastf1_pitwall/
 │   │   └── loader.py   ← data fetching, caching, and proxy patching
 │   ├── charts/
 │   │   ├── __init__.py
-│   │   ├── matplotlib.py ← Matplotlib figure builders (6-channel, speed delta)
-│   │   └── plotly.py     ← Plotly figure builders (History, stints, gap, replay, maps, corner analysis)
+│   │   ├── matplotlib.py ← Matplotlib figure builders (channel-toggle telemetry, speed delta)
+│   │   └── plotly.py     ← Plotly figure builders (History, stints, gap, replay, maps, corner, braking, traction, track evolution, gears, radars, teammate, pit loss)
 │   └── ui/
 │       ├── __init__.py
 │       ├── styles.py    ← styling sheets, constants, PWA headers, dark/light injection
 │       └── components.py ← layout rendering components (Summary, stats, classifications, map tabs, footer)
+├── tests/              ← pytest suite (116 tests across 18 modules, see Codebase Architecture Map)
+├── .github/workflows/test.yml ← CI: runs pytest on every push / PR to main
+├── .devcontainer/      ← GitHub Codespaces / Dev Container definition
 ├── requirements.txt    ← pinned dependencies
 ├── Dockerfile          ← containerisation
 ├── .dockerignore
 ├── .gitignore
+├── icon-192.png, icon-512.png ← PWA icons
+├── code_review_issue_<n>.md ← per-issue code review artifacts
 ├── README.md           ← user-facing documentation (keep in sync)
 ├── AGENT.md            ← this file
 ├── DOCS.md             ← technical developer documentation
