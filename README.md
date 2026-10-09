@@ -256,7 +256,7 @@ fastf1_pitwall/
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
 ├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
-└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #177, #183, #185)
+└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #177, #183, #185, #187)
 ```
 
 ---
@@ -376,7 +376,8 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
-| **[#185](https://github.com/parekhrohan21/fastf1_pitwall/issues/185)** | `docs: sync README with recent updates (#184, README restructure, #155 flat-out fix)` | Documentation | Synchronised project tree (PWA icons, cache dir, review artifacts) in `README.md` & `AGENT.md` and updated the Resolved Issues Index with PR #184 and onboarding restructure commits. |
+| **[#187](https://github.com/parekhrohan21/fastf1_pitwall/issues/187)** | `docs: sync DOCS.md and documentation with recent updates (#185, PR #186, flat-out traction fix)` | Documentation | Synchronised `DOCS.md` Section 18 changelog and Section 35 architecture with PR #186, commit `a37295d`, and Decision #41 (`FLAT_OUT_THROTTLE_PCT`). |
+| **[#186](https://github.com/parekhrohan21/fastf1_pitwall/pull/186)** / **[#185](https://github.com/parekhrohan21/fastf1_pitwall/issues/185)** | `docs: sync README with recent updates (#184, README restructure, #155 flat-out fix)` | Documentation | Synchronised project tree (PWA icons, cache dir, review artifacts) in `README.md` & `AGENT.md` and updated the Resolved Issues Index with PR #184 and onboarding restructure commits. |
 | **[#184](https://github.com/parekhrohan21/fastf1_pitwall/pull/184)** / **[#183](https://github.com/parekhrohan21/fastf1_pitwall/issues/183)** | `docs: update README with recent features, architecture updates, and full resolved issues index` | Documentation | Comprehensive synchronization of README documentation covering all recent features (#148–#155, #164, #177), 116 tests across 18 modules, and Docker setup. |
 | **[#155 Follow-up](https://github.com/parekhrohan21/fastf1_pitwall/commit/3a0b5f3)** | `fix: flat-out corners and snap pick-ups in traction analysis` | Corner Dynamics | Added `FLAT_OUT_THROTTLE_PCT` (85%) within $\pm 10$m of apex to identify flat-out corners without computing spurious traction scores; measured snap pick-up ramps from preceding sample (Decision #41). |
 | **[a37295d](https://github.com/parekhrohan21/fastf1_pitwall/commit/a37295d)** | `docs: restructure README for faster onboarding` | Documentation | Reorganised README layout to surface Quick Start, Prerequisites, and Configuration immediately above grouped Key Features and 28-step walkthrough. |
