@@ -17,3 +17,4 @@
 ## 3. Testing & Verification
 - **Automated Test Suite**: Executed `python3.11 -m pytest tests/ -q` — **116 passed across 18 modules** with zero regressions.
 - **Syntax Compilation**: Verified clean compilation across `app.py` and all `src/` modules via `python3.11 -m py_compile`.
+
