@@ -11,7 +11,7 @@ from src.data.loader import (
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_track_evolution_data,
-    _build_multi_year_comparison,
+    _build_multi_year_comparison, _build_weekend_progression_data,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data
@@ -23,7 +23,7 @@ from src.charts.plotly import (
     build_track_evolution_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
-    build_pit_loss_fig
+    build_pit_loss_fig, build_weekend_progression_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -3036,3 +3036,86 @@ def _render_pit_loss_section(
 
 
 
+
+
+# ── Weekend Multi-Session Progression Tracker (Issue #156) ────────────────────
+# CHANGE (#156): new section. Loading every session of a weekend is slow on a cold
+# cache, so it sits behind a button; the result is cached by _build_weekend_progression_data.
+
+def _render_weekend_progression_section(
+    year: int,
+    gp: str,
+    driver: str,
+    colour: str = "#E8002D",
+    fmt_func=None,
+    circuit_length_km: float | None = None,
+) -> None:
+    """Render the weekend progression: pace chart, mileage / improvement cards and tyre matrix."""
+    st.markdown("<div class='section-title'>🗓️ Weekend Progression Tracker</div>", unsafe_allow_html=True)
+    label = fmt_func(driver) if fmt_func else driver
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px;'>"
+        f"Follows {label} through every session of the {year} {gp} — fastest lap, speed trap, "
+        "mileage and tyre usage from Friday practice to the race.</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Button state is stored per driver/event so switching driver asks again.
+    flag = f"weekend_prog_{year}_{gp}_{driver}"
+    if st.button("Load weekend progression", key=f"btn_{flag}"):
+        st.session_state[flag] = True
+    if not st.session_state.get(flag):
+        return
+
+    with st.spinner("Loading all weekend sessions…"):
+        data = _build_weekend_progression_data(year, gp, driver, circuit_length_km)
+    if not data:
+        st.info("ℹ️ No weekend session data is available for this driver.")
+        return
+
+    # Only offer the chart when at least two sessions give a comparison.
+    if data.get("skipped"):
+        st.caption("No data for: " + ", ".join(data["skipped"]))
+
+    imp = data.get("improvement")
+    c1, c2, c3 = st.columns(3)
+
+    def _card(col, title, value, sub=""):
+        sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub}</div>" if sub else ""
+        col.markdown(
+            f"<div class='metric-card' style='--accent:{colour}; margin-bottom:14px;'>"
+            f"<div class='metric-label'>{title}</div>"
+            f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{value}</div>{sub_html}</div>",
+            unsafe_allow_html=True,
+        )
+
+    km = data.get("total_km")
+    _card(c1, "Total Mileage", f"{data['total_laps']} laps", f"≈ {km:,.0f} km" if km else "circuit length unavailable")
+    if imp:
+        _card(c2, f"{imp['from_label']} → {imp['to_label']}", f"{imp['delta_s']:+.3f} s",
+              f"{imp['delta_pct']:+.2f}% vs best practice lap")
+        fg = imp.get("field_gap_change_s")
+        _card(c3, "Gap-to-Field Change", f"{fg:+.3f} s" if fg is not None else "—",
+              "positive = closed on the field (track evolution removed)")
+    else:
+        _card(c2, "Practice → Qualifying", "—", "needs a practice and a qualifying lap")
+        _card(c3, "Top Speed Trap", f"{data['max_top_speed']:.0f} km/h" if data.get("max_top_speed") else "—")
+
+    fig = build_weekend_progression_fig(data, colour, f"{label} — {year} {gp}")
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch")
+
+    # Tyre allocation matrix: laps run per compound per session.
+    matrix = data.get("tyre_matrix", {})
+    if matrix:
+        codes = [s["code"] for s in data["sessions"]]
+        heads = "".join(f"<th style='padding:4px 10px;'>{s['label']}</th>" for s in data["sessions"])
+        rows = ""
+        for cmp, per in matrix.items():
+            pal = COMPOUND_COLOURS.get(cmp, COMPOUND_COLOURS["UNKNOWN"])
+            cells = "".join(f"<td style='padding:4px 10px; text-align:center;'>{per.get(c, '—')}</td>" for c in codes)
+            rows += (f"<tr><td style='padding:4px 10px;'><span style='color:{pal['fill']}; font-weight:700;'>"
+                     f"● {cmp.title()}</span></td>{cells}</tr>")
+        st.markdown("<div style='font-size:12px; opacity:0.7; margin:6px 0;'>Tyre allocation — laps per compound</div>"
+                    f"<table style='font-size:13px; border-collapse:collapse;'><tr><th></th>{heads}</tr>{rows}</table>",
+                    unsafe_allow_html=True)
