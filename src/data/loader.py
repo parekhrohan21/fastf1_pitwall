@@ -3788,3 +3788,184 @@ def _build_pit_transit_data(
 
 
 
+
+
+# ── Weekend Multi-Session Progression Tracker (Issue #156) ────────────────────
+# CHANGE (#156): everything below is new. It traces one driver across every
+# session of a single Grand Prix (FP1 → FP2 → FP3 → Q / Sprint → Race).
+# The work is split in three so the maths stays testable without network access:
+#   1. _summarise_weekend_session   — pure: one session's laps  → one summary dict
+#   2. _aggregate_weekend_progression — pure: summaries          → deltas / matrix / cards
+#   3. _build_weekend_progression_data — I/O: loads the sessions, calls 1 and 2
+
+# Short code → display label, in running order. Used to order sessions and to
+# classify which ones count as "practice" or "qualifying" for the improvement card.
+_WEEKEND_SESSION_LABELS: dict[str, str] = {
+    "FP1": "FP1", "FP2": "FP2", "FP3": "FP3",
+    "SQ": "Sprint Quali", "SS": "Sprint Shootout", "S": "Sprint",
+    "Q": "Qualifying", "R": "Race",
+}
+# FastF1 schedule names → short codes (mirrors the map used by the sidebar in app.py).
+_WEEKEND_NAME_TO_CODE: dict[str, str] = {
+    "Practice 1": "FP1", "Practice 2": "FP2", "Practice 3": "FP3",
+    "Sprint Qualifying": "SQ", "Sprint Shootout": "SS", "Sprint": "S",
+    "Qualifying": "Q", "Race": "R",
+}
+
+
+def _summarise_weekend_session(code: str, laps_df: pd.DataFrame, driver: str) -> dict | None:
+    """Reduce one session's laps to the figures the progression tracker needs for ``driver``.
+
+    Returns the driver's fastest lap (with compound), lap count, top speed-trap reading,
+    per-compound lap / stint usage, and the field's fastest lap for context. ``None`` if the
+    driver set no laps in this session.
+    """
+    try:
+        if laps_df is None or laps_df.empty or "Driver" not in laps_df.columns:
+            return None
+        drv = laps_df[laps_df["Driver"] == driver].copy()
+        if drv.empty:
+            return None
+
+        # Field best, used later to express pace as a gap that is comparable across
+        # sessions run in different conditions (a raw lap time is not).
+        field_times = laps_df["LapTime"].dropna() if "LapTime" in laps_df.columns else pd.Series(dtype="timedelta64[ns]")
+        field_best_s = float(field_times.dt.total_seconds().min()) if not field_times.empty else None
+
+        timed = drv.dropna(subset=["LapTime"]) if "LapTime" in drv.columns else drv.iloc[0:0]
+        fastest_s = fastest_cmp = fastest_lap_no = None
+        if not timed.empty:
+            best = timed.loc[timed["LapTime"].idxmin()]
+            fastest_s = float(best["LapTime"].total_seconds())
+            fastest_cmp = str(best["Compound"]).upper() if "Compound" in best and pd.notna(best["Compound"]) else "UNKNOWN"
+            fastest_lap_no = int(best["LapNumber"]) if "LapNumber" in best and pd.notna(best["LapNumber"]) else None
+
+        top_speed = None
+        if "SpeedST" in drv.columns and drv["SpeedST"].notna().any():
+            top_speed = float(drv["SpeedST"].max())
+
+        # Tyre usage: laps run on each compound, and how many distinct stints used it.
+        compounds: dict[str, dict] = {}
+        if "Compound" in drv.columns:
+            for cmp, grp in drv.dropna(subset=["Compound"]).groupby("Compound"):
+                stints = grp["Stint"].nunique() if "Stint" in grp.columns else 1
+                compounds[str(cmp).upper()] = {"laps": int(len(grp)), "stints": int(stints)}
+
+        return {
+            "code": code,
+            "label": _WEEKEND_SESSION_LABELS.get(code, code),
+            "fastest_s": fastest_s,
+            "fastest_compound": fastest_cmp,
+            "fastest_lap_no": fastest_lap_no,
+            "field_best_s": field_best_s,
+            "gap_to_field_s": (fastest_s - field_best_s) if fastest_s is not None and field_best_s is not None else None,
+            "lap_count": int(len(drv)),
+            "top_speed": top_speed,
+            "compounds": compounds,
+        }
+    except Exception:
+        return None
+
+
+def _aggregate_weekend_progression(summaries: list[dict], circuit_length_km: float | None = None) -> dict | None:
+    """Combine per-session summaries into deltas, a tyre matrix and headline cards.
+
+    Computes: session-to-session fastest-lap delta (negative = quicker), total mileage
+    (laps, and km when ``circuit_length_km`` is known), a compound × session lap matrix,
+    and the best-practice → best-qualifying pace improvement.
+    """
+    if not summaries:
+        return None
+
+    order = list(_WEEKEND_SESSION_LABELS)
+    sessions = sorted(summaries, key=lambda s: order.index(s["code"]) if s["code"] in order else 99)
+
+    # Delta vs the previous session that produced a lap time (a step chart consumes this).
+    prev = None
+    for s in sessions:
+        cur = s.get("fastest_s")
+        s["delta_prev_s"] = (cur - prev) if cur is not None and prev is not None else None
+        if cur is not None:
+            prev = cur
+
+    total_laps = sum(s["lap_count"] for s in sessions)
+
+    # Tyre allocation matrix: {compound: {session_code: laps}}.
+    matrix: dict[str, dict[str, int]] = {}
+    for s in sessions:
+        for cmp, info in s["compounds"].items():
+            matrix.setdefault(cmp, {})[s["code"]] = info["laps"]
+
+    # Practice → Qualifying: best practice lap against the qualifying lap. Sprint
+    # qualifying is only used when the weekend has no standard "Q" lap.
+    practice = [s for s in sessions if s["code"].startswith("FP") and s["fastest_s"] is not None]
+    quali = next((s for s in sessions if s["code"] == "Q" and s["fastest_s"] is not None), None) \
+        or next((s for s in sessions if s["code"] in ("SQ", "SS") and s["fastest_s"] is not None), None)
+    improvement = None
+    if practice and quali:
+        best_fp = min(practice, key=lambda s: s["fastest_s"])
+        d = quali["fastest_s"] - best_fp["fastest_s"]
+        improvement = {
+            "from_label": best_fp["label"], "to_label": quali["label"],
+            "from_s": best_fp["fastest_s"], "to_s": quali["fastest_s"],
+            "delta_s": d, "delta_pct": d / best_fp["fastest_s"] * 100.0,
+            # Gap-to-field change strips out track evolution: positive = closed on the field.
+            "field_gap_change_s": (
+                best_fp["gap_to_field_s"] - quali["gap_to_field_s"]
+                if best_fp.get("gap_to_field_s") is not None and quali.get("gap_to_field_s") is not None else None
+            ),
+        }
+
+    speeds = [s["top_speed"] for s in sessions if s["top_speed"] is not None]
+    return {
+        "sessions": sessions,
+        "total_laps": total_laps,
+        "total_km": round(total_laps * circuit_length_km, 1) if circuit_length_km else None,
+        "tyre_matrix": matrix,
+        "improvement": improvement,
+        "max_top_speed": max(speeds) if speeds else None,
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_weekend_progression_data(
+    year: int,
+    gp: str,
+    driver: str,
+    circuit_length_km: float | None = None,
+) -> dict | None:
+    """Load every completed session of a Grand Prix and trace ``driver`` across them.
+
+    Sessions are loaded laps-only (no telemetry) so the batch stays fast; sessions that are
+    not yet available are listed under ``skipped`` rather than failing the whole build.
+    """
+    try:
+        event = fastf1.get_event(year, gp)
+    except Exception:
+        return None
+
+    summaries: list[dict] = []
+    skipped: list[str] = []
+    for i in range(1, 6):
+        name = event.get(f"Session{i}")
+        if name is None or pd.isna(name) or not str(name).strip():
+            continue
+        code = _WEEKEND_NAME_TO_CODE.get(str(name).strip())
+        if code is None:
+            continue
+        try:
+            sess = fastf1.get_session(year, gp, code)
+            sess.load(telemetry=False, laps=True, weather=False, messages=False)
+            laps = pd.DataFrame(sess.laps.copy())  # plain DataFrame — see _all_laps pattern
+            summary = _summarise_weekend_session(code, laps, driver)
+            if summary is None:
+                skipped.append(_WEEKEND_SESSION_LABELS.get(code, code))
+            else:
+                summaries.append(summary)
+        except Exception:
+            skipped.append(_WEEKEND_SESSION_LABELS.get(code, code))
+
+    result = _aggregate_weekend_progression(summaries, circuit_length_km)
+    if result is not None:
+        result["skipped"] = skipped
+    return result
