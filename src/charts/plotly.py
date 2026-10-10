@@ -2703,3 +2703,72 @@ def build_pit_loss_fig(
 
 
 
+
+
+# ── Weekend Multi-Session Progression Chart (Issue #156) ──────────────────────
+# CHANGE (#156): new figure builder. Two stacked rows share the session axis:
+#   row 1 — fastest lap per session, marker coloured by the compound it was set on
+#   row 2 — step chart of the change vs the previous session (green = quicker)
+
+def build_weekend_progression_fig(
+    progression: dict,
+    colour: str = "#E8002D",
+    title: str = "",
+) -> go.Figure | None:
+    """Build the lap-time evolution + session-delta step chart for a race weekend."""
+    if not progression or not progression.get("sessions"):
+        return None
+    sessions = [s for s in progression["sessions"] if s.get("fastest_s") is not None]
+    if not sessions:
+        return None
+
+    labels = [s["label"] for s in sessions]
+    times = [s["fastest_s"] for s in sessions]
+    # Compound colours come from the single canonical dict (never a new inline one).
+    marker_cols = [
+        COMPOUND_COLOURS.get(s["fastest_compound"], COMPOUND_COLOURS["UNKNOWN"])["fill"] for s in sessions
+    ]
+    hover = [
+        f"{s['label']}<br>{int(t // 60)}:{t % 60:06.3f}<br>{s['fastest_compound']}"
+        + (f"<br>+{s['gap_to_field_s']:.3f}s to session best" if s.get("gap_to_field_s") is not None else "")
+        for s, t in zip(sessions, times)
+    ]
+
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, row_heights=[0.62, 0.38],
+        subplot_titles=("Fastest lap per session", "Change vs previous session"),
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=labels, y=times, mode="lines+markers", name="Fastest lap",
+            line=dict(color=colour, width=2),
+            marker=dict(size=13, color=marker_cols, line=dict(color=colour, width=2)),
+            hovertext=hover, hoverinfo="text",
+        ),
+        row=1, col=1,
+    )
+
+    # Step chart: hv shape holds each delta flat until the next session.
+    deltas = [s.get("delta_prev_s") for s in sessions]
+    step_x = [l for l, d in zip(labels, deltas) if d is not None]
+    step_y = [d for d in deltas if d is not None]
+    if step_y:
+        fig.add_trace(
+            go.Scatter(
+                x=step_x, y=step_y, mode="lines+markers", name="Δ vs previous",
+                line=dict(color=colour, width=2, shape="hv"),
+                marker=dict(size=9, color=["#00E676" if d < 0 else "#FF5252" for d in step_y]),
+                hovertemplate="%{x}<br>%{y:+.3f} s<extra></extra>",
+            ),
+            row=2, col=1,
+        )
+        fig.add_hline(y=0, line=dict(color="rgba(150,150,150,0.5)", dash="dot"), row=2, col=1)
+
+    fig.update_yaxes(title_text="Lap time (s)", row=1, col=1)
+    fig.update_yaxes(title_text="Δ (s)", row=2, col=1)
+    fig.update_layout(
+        title=title, height=520, showlegend=False,
+        margin=dict(l=50, r=20, t=60, b=40),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
