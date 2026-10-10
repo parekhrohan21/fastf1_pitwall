@@ -95,7 +95,7 @@ from src.ui.components import (
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
-    _render_pit_loss_section
+    _render_pit_loss_section, _render_weekend_progression_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1237,6 +1237,18 @@ _render_speed_trap_section(
     colour1, colour2 if compare else None, compare,
     fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
 )
+
+# ── Weekend Multi-Session Progression Tracker (Issue #156) ─────────────────
+# Driver 1 across every session of the loaded event. The event name comes from the
+# loaded session (not the sidebar selector, which may have changed since loading).
+# Circuit length is read from Driver 1's loaded telemetry so mileage can be shown in km.
+try:
+    _wk_event = str(sess.event["EventName"])
+    _wk_len_km = float(tel1["Distance"].max()) / 1000.0 if tel1 is not None and "Distance" in tel1.columns else None
+except Exception:
+    _wk_event, _wk_len_km = None, None
+if _wk_event:
+    _render_weekend_progression_section(year1, _wk_event, driver1, colour1, _fmt_driver1, _wk_len_km)
 
 # ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
 # Each driver's best sectors combined into a theoretical lap, against their
