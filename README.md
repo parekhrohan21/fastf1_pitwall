@@ -221,13 +221,14 @@ fastf1_pitwall/
 │   │                           # robust regression, metric extractors & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
 │   │   ├── plotly.py           # Interactive Plotly figures (History, stints, maps, replays, corners, braking,
-│   │   │                       # traction exits, track evolution, gears, radars, teammate matrix, pit loss)
+│   │   │                       # traction exits, track evolution, gears, radars, teammate matrix, pit loss, weekend progression)
 │   │   └── matplotlib.py       # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, teammate matrix,
-│                               # pit loss breakdown, traction sections & telemetry export panels
+│                               # pit loss breakdown, weekend progression, traction sections & telemetry export panels
 ├── tests/                      # Automated Pytest suite (123 tests across 19 dedicated modules)
+│   ├── test_weekend_progression.py     # Weekend session summaries, deltas, mileage, tyre matrix & progression chart
 │   ├── test_traction_exit.py           # Corner exit traction, throttle ramp rate, flat-out corners & aggression score
 │   ├── test_track_evolution.py         # Theil-Sen ramp rate, grip gain, flyer filtering & knockout bias removal
 │   ├── test_pit_transit_loss.py        # Pit lane transit duration, in-lap/out-lap deltas & sector warm-up
@@ -258,7 +259,7 @@ fastf1_pitwall/
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
 ├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
-└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #177, #183, #185, #187)
+└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #177, #183, #185, #187)
 ```
 
 ---
@@ -356,6 +357,7 @@ git fetch -p
 | **Verify API connectivity or TLS status** | Network firewall or CDN blocking. | Expand **🛠️ Diagnostics & Debug Info** at the bottom of the sidebar and click **Run Connection Test** to verify connectivity. |
 | **Plotly deprecation warning on `use_container_width`** | Running an older codebase version. | The codebase uses `width='stretch'` / `width='content'` throughout. Update to the latest version of the repository. |
 | **Top bar keeps the old theme** | Browser cached stylesheet edge case. | Toggle the dark/light mode button in the sidebar once more — CSS injection re-applies on every rerun. |
+| **Pit Stop Efficiency Leaderboard not working** | Known open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)) in the full-field leaderboard of the Pit Lane Transit Loss section. | The rest of the section (KPI cards, stacked bar chart) is unaffected; follow the issue for a fix. |
 
 ---
 
@@ -370,7 +372,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `docs: add DECISIONS.md to document Architectural choices and AI implementation decisions` | Architecture & Governance | Standardised Architecture Decision Records (ADRs) cataloguing key algorithmic choices, mathematical rationale, engineering trade-offs, and rejected alternatives. | Open |
 | **[#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)** | `feat: Automated Session Brag Video Generation via Latent Space Telemetry Embeddings` | Telemetry & Video | Dimensionality reduction (PCA / manifold embedding) projecting 9D telemetry into fluid camera tracking reels, HUD telemetry overlays, and exportable MP4 brag videos. | Open |
 | **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `feat: Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Telemetry & Strategy | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. | Open |
-| **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `feat: Full Grand Prix Weekend Multi-Session Progression Tracker` | Grid Analytics | Cross-session pace evolution and setup refinement tracking across FP1, FP2, FP3, Qualifying, and Race sessions. | Open |
+| **[#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)** | `bug: Full-Field Pit Stop Efficiency Leaderboard is not working` | Bug · Pit Strategy | Leaderboard in the Pit Lane Transit Loss section does not render correctly; under investigation. | 🐛 Open |
 
 ---
 

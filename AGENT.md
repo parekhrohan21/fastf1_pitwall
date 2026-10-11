@@ -367,6 +367,8 @@ When upgrading any dependency:
 | `fastf1.core.Laps` hashing | `sess.laps` is a pandas subclass with custom state. Streamlit's `@st.cache_data` hasher raises `UnhashableParamError` on it. Always cast: `pd.DataFrame(sess.laps.copy())`. Inside builders use `laps_df[laps_df["Driver"] == driver]` not `.pick_drivers()`. |
 | Headshot availability | Older sessions (pre-2021) may not have `HeadshotUrl` in FastF1. The `onerror` JS attribute hides broken images silently. |
 | Theme toggle first-click | Due to Streamlit's execution order, the first theme toggle click may not visually update the top bar. A second click always works. |
+| Pit Stop Efficiency Leaderboard | 🐛 Open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)): the full-field leaderboard in `_render_pit_loss_section` is not working. Do not rely on it until fixed; the KPI cards and `build_pit_loss_fig` chart are separate. |
+| Weekend Progression load time | `_build_weekend_progression_data` loads every session of the event (laps-only). Slow on a cold cache, so the section is behind a button (Decision #42). |
 
 ---
 
