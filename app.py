@@ -37,8 +37,8 @@ Render flow
                             weather, track evolution, braking, gears, eras.
  9. Telemetry charts        channel filter, overlapping/separate, export, deltas.
                             The run stops before this if the lap has no telemetry.
-10. Field-wide analysis     leaderboards, speed traps, ideal lap, teammates,
-                            heatmaps, gap, race control, positions, map, standings.
+10. Field-wide analysis     leaderboards, speed traps, weekend progression (#156),
+                            ideal lap, teammates, heatmaps, gap, race control, positions, map, standings.
 11. PDF export & footer     sidebar debrief export of figures collected above.
 
 Comparison modes
