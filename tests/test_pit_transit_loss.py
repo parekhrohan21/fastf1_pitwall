@@ -320,3 +320,99 @@ def test_figure_fallback_when_empty():
     assert build_pit_loss_fig(None) is None
     assert build_pit_loss_fig({}) is None
     assert build_pit_loss_fig({"has_data": False, "all_stops": []}) is None
+
+
+def test_leaderboard_ranking_and_rank_attribute(sample_pit_laps):
+    """Test that all stops are ranked sequentially by net pit loss and have the rank attribute."""
+    data = _build_pit_transit_data("mock_sess_ranking", sample_pit_laps)
+    assert data["has_data"] is True
+    stops = data["all_stops"]
+    assert len(stops) == 2
+    # NOR has net loss 29.0s, VER has 30.0s -> NOR is Rank 1, VER is Rank 2
+    assert stops[0]["driver"] == "NOR"
+    assert stops[0]["rank"] == 1
+    assert stops[1]["driver"] == "VER"
+    assert stops[1]["rank"] == 2
+
+
+def test_driver_meta_alias_lookup_and_stops_mapping(sample_pit_laps):
+    """Test that driver_meta maps both abbreviations and driver numbers, and driver_stops can be accessed by both."""
+    results_df = pd.DataFrame([
+        {"DriverNumber": "1", "Abbreviation": "VER", "TeamName": "Red Bull Racing", "FullName": "Max Verstappen", "Position": 1},
+        {"DriverNumber": "4", "Abbreviation": "NOR", "TeamName": "McLaren", "FullName": "Lando Norris", "Position": 2},
+    ])
+    mock_session = MockSession(results_df=results_df)
+
+    data = _build_pit_transit_data("mock_sess_meta", sample_pit_laps, _sess_obj=mock_session)
+    assert data["has_data"] is True
+    assert "driver_meta" in data
+    # Both abbreviation and number should be present in driver_meta
+    assert "VER" in data["driver_meta"]
+    assert "1" in data["driver_meta"]
+    assert "NOR" in data["driver_meta"]
+    assert "4" in data["driver_meta"]
+
+    # driver_stops should be accessible via both abbreviation and car number
+    assert "VER" in data["driver_stops"]
+    assert "1" in data["driver_stops"]
+    assert "NOR" in data["driver_stops"]
+    assert "4" in data["driver_stops"]
+
+
+def test_render_pit_loss_section_leaderboard_rendering(sample_pit_laps, monkeypatch):
+    """Test that _render_pit_loss_section renders the ranked leaderboard with # column, formatted driver names, and theme-adaptive styling."""
+    from unittest.mock import MagicMock
+    from src.ui.components import _render_pit_loss_section
+    import streamlit as st
+
+    markdown_calls = []
+    monkeypatch.setattr(st, "markdown", lambda content, **kwargs: markdown_calls.append(content))
+    monkeypatch.setattr(st, "columns", lambda n: [MagicMock() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(st, "radio", lambda *args, **kwargs: "Full Grid Overview")
+    monkeypatch.setattr(st, "plotly_chart", lambda *args, **kwargs: None)
+
+    results_df = pd.DataFrame([
+        {"DriverNumber": "1", "Abbreviation": "VER", "TeamName": "Red Bull Racing", "FullName": "Max Verstappen", "Position": 1},
+        {"DriverNumber": "4", "Abbreviation": "NOR", "TeamName": "McLaren", "FullName": "Lando Norris", "Position": 2},
+    ])
+    mock_session = MockSession(results_df=results_df)
+    data = _build_pit_transit_data("mock_sess_render", sample_pit_laps, _sess_obj=mock_session)
+
+    fmt_func = lambda d: f"{d} · Formatted"
+    _render_pit_loss_section(data, driver1="VER", driver2="NOR", compare=True, fmt_func=fmt_func)
+
+    # Check that leaderboard table was rendered
+    rendered_html = "\n".join(markdown_calls)
+    assert "Full-Field Pit Stop Efficiency Leaderboard" in rendered_html
+    assert "<th style='padding:8px 10px; text-align:center;'>#</th>" in rendered_html
+    # Verify rank badges exist
+    assert "<span style='color:#FFD700; font-weight:700;'>1</span>" in rendered_html
+    assert "<span style='color:#C0C0C0; font-weight:700;'>2</span>" in rendered_html
+    # Verify formatted driver name was used
+    assert "VER · Formatted" in rendered_html
+    assert "NOR · Formatted" in rendered_html
+    # Verify NO hardcoded white text in net loss
+    assert "color:#ffffff;" not in rendered_html
+
+
+def test_render_pit_loss_radio_state_sanitization(sample_pit_laps, monkeypatch):
+    """Test defensive sanitization of pit_loss_view_mode_selector in session_state prevents StreamlitAPIException."""
+    from unittest.mock import MagicMock
+    from src.ui.components import _render_pit_loss_section
+    import streamlit as st
+
+    monkeypatch.setattr(st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(st, "columns", lambda n: [MagicMock() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(st, "plotly_chart", lambda *args, **kwargs: None)
+
+    radio_key = "pit_loss_view_mode_selector"
+    # Pre-set stale state not present in 1-driver / 0-stop options
+    st.session_state[radio_key] = "Selected Drivers Head-to-Head"
+
+    data = _build_pit_transit_data("mock_sess_radio", sample_pit_laps)
+    # Driver with no stops
+    _render_pit_loss_section(data, driver1="NON_EXISTENT_DRIVER", compare=False)
+
+    # Key should have been reset to a valid option without exception
+    assert st.session_state[radio_key] == "Full Grid Overview"
+
