@@ -1,7 +1,7 @@
 # Code Review — Issue #189: Fix Full-Field Pit Stop Efficiency Leaderboard Ranking and Rendering
 
 **Bug Issue**: [#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)  
-**Pull Request**: #190  
+**Pull Request**: #191  
 **Reviewer**: Software Development & Maintenance Agent  
 **Date**: 2026-10-15  
 
@@ -18,8 +18,7 @@ This bug fix resolves GitHub Issue #189, where the Full-Field Pit Stop Efficienc
 | `src/charts/plotly.py` (`build_pit_loss_fig`) | Expanded `active_drivers` filtering to recognize driver aliases and used NaN-safe stop sorting. |
 | `app.py` | Passed `fmt_func=_fmt_driver1` to `_render_pit_loss_section` in the Pit Lane Transit rendering block. |
 | `tests/test_pit_transit_loss.py` | Added 4 new automated unit tests (`test_leaderboard_ranking_and_rank_attribute`, `test_driver_meta_alias_lookup_and_stops_mapping`, `test_render_pit_loss_section_leaderboard_rendering`, `test_render_pit_loss_radio_state_sanitization`). Total suite expanded to **127 tests across 19 modules**. |
-| `README.md`, `DOCS.md`, `AGENT.md` | Updated test counts (123 -> 127), removed Issue #189 from open bugs/limitations tables, and logged PR #190 in Resolved Issues indexes and Section 18 changelog. |
-
+| `README.md`, `DOCS.md`, `AGENT.md` | Updated test counts (123 -> 127), removed Issue #189 from open bugs/limitations tables, and logged PR #191 in Resolved Issues indexes and Section 18 changelog. |
 ---
 
 ## Code Review Checklist Verification
@@ -40,7 +39,7 @@ This bug fix resolves GitHub Issue #189, where the Full-Field Pit Stop Efficienc
 
 ### 3. Documentation
 - [x] **`README.md` updated**: Documented 127 tests across 19 modules, updated Known Limitations table, updated Resolved Issues Index with #189, and pruned from active roadmap.
-- [x] **`DOCS.md` updated**: Logged PR #190 / Issue #189 at the top of Section 18 (Solved Issues & Changelog).
+- [x] **`DOCS.md` updated**: Logged PR #191 / Issue #189 at the top of Section 18 (Solved Issues & Changelog).
 - [x] **`AGENT.md` updated**: Updated test counts to 127 in Sections 17 & 18 and marked Issue #189 as resolved in the limitations table.
 
 ### 4. Syntax & Testing

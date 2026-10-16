@@ -357,7 +357,7 @@ git fetch -p
 | **Verify API connectivity or TLS status** | Network firewall or CDN blocking. | Expand **🛠️ Diagnostics & Debug Info** at the bottom of the sidebar and click **Run Connection Test** to verify connectivity. |
 | **Plotly deprecation warning on `use_container_width`** | Running an older codebase version. | The codebase uses `width='stretch'` / `width='content'` throughout. Update to the latest version of the repository. |
 | **Top bar keeps the old theme** | Browser cached stylesheet edge case. | Toggle the dark/light mode button in the sidebar once more — CSS injection re-applies on every rerun. |
-| **Pit Stop Efficiency Leaderboard** | Formerly open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)). | ✅ **Resolved in #189 / PR #190** — Full-field efficiency leaderboard with rank numbering, theme-adaptive styling, and robust driver alias matching. |
+| **Pit Stop Efficiency Leaderboard** | Formerly open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)). | ✅ **Resolved in #189 / PR #191** — Full-field efficiency leaderboard with rank numbering, theme-adaptive styling, and robust driver alias matching. |
 
 ---
 
