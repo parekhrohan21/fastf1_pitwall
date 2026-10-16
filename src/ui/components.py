@@ -2760,10 +2760,12 @@ def _render_pit_loss_section(
     colour2: str = "#FF8700",
     label1: str = "Driver 1",
     label2: str = "Driver 2",
+    fmt_func=None,
 ) -> None:
     """
     Render deep-dive breakdown of pit lane time losses, in-lap push deltas,
-    and out-lap cold tyre warm-up performance.
+    and out-lap cold tyre warm-up performance, along with the full-field
+    ranked efficiency leaderboard.
     """
     st.markdown("<div class='section-title'>Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown</div>", unsafe_allow_html=True)
     st.markdown(
@@ -2782,6 +2784,35 @@ def _render_pit_loss_section(
     summary = transit_data.get("summary", {})
     all_stops = transit_data.get("all_stops", [])
     driver_stops = transit_data.get("driver_stops", {})
+    driver_meta = transit_data.get("driver_meta", {})
+
+    # Helper for robust driver matching between selection state and stop records
+    def _is_match(candidate: str | None, target: str | None) -> bool:
+        if not candidate or not target:
+            return False
+        c_str = str(candidate).strip()
+        t_str = str(target).strip()
+        if c_str == t_str:
+            return True
+        m_c = driver_meta.get(c_str, {})
+        if m_c.get("abbr") == t_str or m_c.get("num") == t_str:
+            return True
+        m_t = driver_meta.get(t_str, {})
+        if m_t.get("abbr") == c_str or m_t.get("num") == c_str:
+            return True
+        return False
+
+    # Helper to resolve display name with format_func
+    def _disp_driver(drv_code: str) -> str:
+        if fmt_func is not None:
+            try:
+                res = fmt_func(drv_code)
+                if res:
+                    return res
+            except Exception:
+                pass
+        m = driver_meta.get(drv_code, {})
+        return m.get("full_name") or drv_code
 
     # ── Summary KPI Cards ─────────────────────────────────────────────────────────
     f_stop = summary.get("fastest_pit_lane")
@@ -2795,7 +2826,7 @@ def _render_pit_loss_section(
     with c1:
         if f_stop:
             t_val = f"{f_stop['time_s']:.2f}s"
-            t_drv = f"{f_stop['driver']} (Lap {f_stop['lap']})"
+            t_drv = f"{_disp_driver(f_stop['driver'])} (Lap {f_stop['lap']})"
             t_col = f_stop.get("team_color") or "#06B6D4"
         else:
             t_val, t_drv, t_col = "—", "N/A", "#888888"
@@ -2810,8 +2841,8 @@ def _render_pit_loss_section(
 
     with c2:
         if b_in:
-            in_val = f"+{b_in['delta_s']:.2f}s"
-            in_drv = f"{b_in['driver']} (Lap {b_in['lap']})"
+            in_val = f"{b_in['delta_s']:+.2f}s"
+            in_drv = f"{_disp_driver(b_in['driver'])} (Lap {b_in['lap']})"
             in_col = b_in.get("team_color") or "#F59E0B"
         else:
             in_val, in_drv, in_col = "—", "N/A", "#888888"
@@ -2826,8 +2857,8 @@ def _render_pit_loss_section(
 
     with c3:
         if b_out:
-            out_val = f"+{b_out['delta_s']:.2f}s"
-            out_drv = f"{b_out['driver']} (Lap {b_out['lap']})"
+            out_val = f"{b_out['delta_s']:+.2f}s"
+            out_drv = f"{_disp_driver(b_out['driver'])} (Lap {b_out['lap']})"
             out_col = b_out.get("team_color") or "#8B5CF6"
         else:
             out_val, out_drv, out_col = "—", "N/A", "#888888"
@@ -2855,13 +2886,21 @@ def _render_pit_loss_section(
     st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
     # ── Display Controls ──────────────────────────────────────────────────────────
-    has_focus_driver = bool(driver1 and driver_stops.get(driver1)) or bool(driver2 and driver_stops.get(driver2))
+    has_d1_stops = bool(driver1 and (driver_stops.get(driver1) or any(_is_match(s.get("driver"), driver1) for s in all_stops)))
+    has_d2_stops = bool(driver2 and (driver_stops.get(driver2) or any(_is_match(s.get("driver"), driver2) for s in all_stops)))
+    has_focus_driver = has_d1_stops or (compare and has_d2_stops)
+
     if compare and driver2:
         mode_options = ["Selected Drivers Head-to-Head", "Full Grid Overview"]
-    elif driver1 and driver_stops.get(driver1):
+    elif has_d1_stops:
         mode_options = ["Selected Driver Deep-Dive", "Full Grid Overview"]
     else:
         mode_options = ["Full Grid Overview"]
+
+    # Defensive session_state sanitization to prevent StreamlitAPIException on driver switch
+    radio_key = "pit_loss_view_mode_selector"
+    if radio_key in st.session_state and st.session_state[radio_key] not in mode_options:
+        st.session_state[radio_key] = mode_options[0]
 
     if len(mode_options) > 1:
         view_mode = st.radio(
@@ -2869,7 +2908,7 @@ def _render_pit_loss_section(
             mode_options,
             horizontal=True,
             label_visibility="collapsed",
-            key="pit_loss_view_mode_selector"
+            key=radio_key,
         )
     else:
         view_mode = mode_options[0]
@@ -2894,15 +2933,22 @@ def _render_pit_loss_section(
 
     # ── Head-to-Head Sector Warm-up Cards ─────────────────────────────────────────
     if is_compare_view:
-        sel_drivers = [d for d in [driver1, driver2 if compare else None] if d and driver_stops.get(d)]
+        sel_drivers = []
+        for d in [driver1, driver2 if compare else None]:
+            if d:
+                d_stops_list = driver_stops.get(d) or [s for s in all_stops if _is_match(s.get("driver"), d)]
+                if d_stops_list:
+                    sel_drivers.append((d, d_stops_list))
+
         if sel_drivers:
             cols = st.columns(len(sel_drivers))
-            for col, drv in zip(cols, sel_drivers):
+            for col, (drv_key, d_stops) in zip(cols, sel_drivers):
                 with col:
-                    d_stops = driver_stops.get(drv, [])
-                    accent = colour1 if drv == driver1 else colour2
-                    d_label = label1 if drv == driver1 else label2
+                    is_lead = _is_match(drv_key, driver1)
+                    accent = colour1 if is_lead else colour2
+                    d_label = label1 if is_lead else label2
                     team_name = d_stops[0].get("team", "") if d_stops else ""
+                    driver_disp_name = _disp_driver(drv_key)
 
                     stops_detail_html = ""
                     for s in d_stops:
@@ -2914,13 +2960,13 @@ def _render_pit_loss_section(
                         new_badge = _comp_badge_html(new_c)
 
                         t_transit = f"{s['pit_lane_time_s']:.2f}s" if s.get("pit_lane_time_s") is not None else "—"
-                        t_in_d = f"+{s['in_lap_delta_s']:.2f}s" if s.get("in_lap_delta_s") is not None else "—"
-                        t_out_d = f"+{s['out_lap_delta_s']:.2f}s" if s.get("out_lap_delta_s") is not None else "—"
+                        t_in_d = f"{s['in_lap_delta_s']:+.2f}s" if s.get("in_lap_delta_s") is not None else "—"
+                        t_out_d = f"{s['out_lap_delta_s']:+.2f}s" if s.get("out_lap_delta_s") is not None else "—"
                         t_net = f"{s['net_pit_loss_s']:.2f}s" if s.get("net_pit_loss_s") is not None else "—"
 
                         # Sector badges
                         def _s_badge(name, val):
-                            if val is None:
+                            if val is None or pd.isna(val):
                                 return f"<span style='opacity:0.4;'>{name}: —</span>"
                             col_s = "#51cf66" if val <= 0 else "#f59e0b"
                             bg_s = "rgba(81,207,102,0.18)" if val <= 0 else "rgba(245,158,11,0.15)"
@@ -2950,7 +2996,7 @@ def _render_pit_loss_section(
 
                     st.markdown(
                         f"""<div style='background:rgba(255,255,255,0.03); border-left:4px solid {accent}; border-radius:8px; padding:12px 14px; margin-bottom:14px;'>
-                          <div style='font-size:15px; font-weight:700; color:{accent};'>{d_label} ({drv})</div>
+                          <div style='font-size:15px; font-weight:700; color:{accent};'>{d_label} ({driver_disp_name})</div>
                           <div style='font-size:11px; opacity:0.6; margin-bottom:4px;'>{team_name} • {len(d_stops)} Pit Stop(s)</div>
                           {stops_detail_html}
                         </div>""",
@@ -2961,30 +3007,45 @@ def _render_pit_loss_section(
     st.markdown("<div style='font-size:13px; font-weight:600; margin:16px 0 8px;'>Full-Field Pit Stop Efficiency Leaderboard</div>", unsafe_allow_html=True)
 
     table_rows_html = ""
-    for s in all_stops:
+    for idx, s in enumerate(all_stops):
         drv = s.get("driver", "UNK")
         team = s.get("team", "")
         t_col = s.get("team_color") or "#888888"
         s_num = s.get("stop_num", 1)
         in_lap = s.get("in_lap", 0)
+        rank_num = s.get("rank", idx + 1)
 
-        # Highlight if driver1 or driver2
-        is_d1 = (drv == driver1)
-        is_d2 = (compare and drv == driver2)
+        # Highlight if matching driver1 or driver2
+        is_d1 = _is_match(drv, driver1)
+        is_d2 = compare and _is_match(drv, driver2)
         accent = colour1 if is_d1 else (colour2 if is_d2 else "transparent")
         bg_col = f"background:{accent}15;" if (is_d1 or is_d2) else ""
         border_col = f"border-left:3px solid {accent};" if (is_d1 or is_d2) else "border-left:3px solid transparent;"
 
+        # Rank badge with podium styling
+        if rank_num == 1:
+            rank_badge = "<span style='color:#FFD700; font-weight:700;'>1</span>"
+        elif rank_num == 2:
+            rank_badge = "<span style='color:#C0C0C0; font-weight:700;'>2</span>"
+        elif rank_num == 3:
+            rank_badge = "<span style='color:#CD7F32; font-weight:700;'>3</span>"
+        else:
+            rank_badge = f"<span style='opacity:0.75; font-weight:600;'>{rank_num}</span>"
+
+        # Formatted driver display name
+        drv_display = _disp_driver(drv)
+        drv_cell = f"<span style='color:{accent}; font-weight:700;'>{drv_display}</span>" if (is_d1 or is_d2) else f"<span style='font-weight:600;'>{drv_display}</span>"
+
         old_c_badge = _comp_badge_html(s.get("old_compound", "?"))
         new_c_badge = _comp_badge_html(s.get("new_compound", "?"))
 
-        in_delta_str = f"+{s['in_lap_delta_s']:.2f}s" if s.get("in_lap_delta_s") is not None else "—"
+        in_delta_str = f"{s['in_lap_delta_s']:+.2f}s" if s.get("in_lap_delta_s") is not None else "—"
         transit_str = f"{s['pit_lane_time_s']:.2f}s" if s.get("pit_lane_time_s") is not None else "—"
-        out_delta_str = f"+{s['out_lap_delta_s']:.2f}s" if s.get("out_lap_delta_s") is not None else "—"
-        net_loss_str = f"<b>{s['net_pit_loss_s']:.2f}s</b>" if s.get("net_pit_loss_s") is not None else "—"
+        out_delta_str = f"{s['out_lap_delta_s']:+.2f}s" if s.get("out_lap_delta_s") is not None else "—"
+        net_loss_str = f"{s['net_pit_loss_s']:.2f}s" if s.get("net_pit_loss_s") is not None else "—"
 
         def _cell_sec_badge(sec_val):
-            if sec_val is None:
+            if sec_val is None or pd.isna(sec_val):
                 return "<span style='opacity:0.35;'>—</span>"
             scol = "#51cf66" if sec_val <= 0 else "#f59e0b"
             return f"<span style='color:{scol}; font-weight:600;'>{sec_val:+.2f}s</span>"
@@ -2995,7 +3056,8 @@ def _render_pit_loss_section(
 
         table_rows_html += f"""
         <tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {border_col}'>
-          <td style='padding:8px 10px; font-weight:600;'>{drv}</td>
+          <td style='padding:8px 10px; text-align:center;'>{rank_badge}</td>
+          <td style='padding:8px 10px;'>{drv_cell}</td>
           <td style='padding:8px 10px; color:{t_col}; font-size:12px;'>
             <span style='display:inline-block; width:8px; height:8px; border-radius:2px; background:{t_col}; margin-right:4px;'></span>
             {team}
@@ -3006,7 +3068,7 @@ def _render_pit_loss_section(
           <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#06b6d4; font-weight:600;'>{transit_str}</td>
           <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#8b5cf6;'>{out_delta_str}</td>
           <td style='padding:8px 10px; text-align:center; font-family:monospace; font-size:11px;'>{s1_c} / {s2_c} / {s3_c}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#ffffff;'>{net_loss_str}</td>
+          <td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>{net_loss_str}</td>
         </tr>
         """
 
@@ -3016,6 +3078,7 @@ def _render_pit_loss_section(
       <thead>
         <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
                    letter-spacing:1.5px; text-transform:uppercase;'>
+          <th style='padding:8px 10px; text-align:center;'>#</th>
           <th style='padding:8px 10px; text-align:left;'>Driver</th>
           <th style='padding:8px 10px; text-align:left;'>Constructor</th>
           <th style='padding:8px 10px; text-align:center;'>Stop (Lap)</th>

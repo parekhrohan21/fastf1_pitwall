@@ -100,7 +100,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**123 unit/integration tests across 19 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**127 unit/integration tests across 19 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -170,7 +170,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112)): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode.
 - **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105)): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks.
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **123 automated pytest unit and integration tests** across 19 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **127 automated pytest unit and integration tests** across 19 dedicated modules.
 
 ---
 
@@ -227,7 +227,7 @@ fastf1_pitwall/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, teammate matrix,
 │                               # pit loss breakdown, weekend progression, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (123 tests across 19 dedicated modules)
+├── tests/                      # Automated Pytest suite (127 tests across 19 dedicated modules)
 │   ├── test_weekend_progression.py     # Weekend session summaries, deltas, mileage, tyre matrix & progression chart
 │   ├── test_traction_exit.py           # Corner exit traction, throttle ramp rate, flat-out corners & aggression score
 │   ├── test_track_evolution.py         # Theil-Sen ramp rate, grip gain, flyer filtering & knockout bias removal
@@ -303,7 +303,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **123 unit and integration tests** across 19 test modules must pass cleanly.
+All **127 unit and integration tests** across 19 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -357,7 +357,7 @@ git fetch -p
 | **Verify API connectivity or TLS status** | Network firewall or CDN blocking. | Expand **🛠️ Diagnostics & Debug Info** at the bottom of the sidebar and click **Run Connection Test** to verify connectivity. |
 | **Plotly deprecation warning on `use_container_width`** | Running an older codebase version. | The codebase uses `width='stretch'` / `width='content'` throughout. Update to the latest version of the repository. |
 | **Top bar keeps the old theme** | Browser cached stylesheet edge case. | Toggle the dark/light mode button in the sidebar once more — CSS injection re-applies on every rerun. |
-| **Pit Stop Efficiency Leaderboard not working** | Known open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)) in the full-field leaderboard of the Pit Lane Transit Loss section. | The rest of the section (KPI cards, stacked bar chart) is unaffected; follow the issue for a fix. |
+| **Pit Stop Efficiency Leaderboard** | Formerly open bug ([#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)). | ✅ **Resolved in #189 / PR #190** — Full-field efficiency leaderboard with rank numbering, theme-adaptive styling, and robust driver alias matching. |
 
 ---
 
@@ -372,7 +372,6 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `docs: add DECISIONS.md to document Architectural choices and AI implementation decisions` | Architecture & Governance | Standardised Architecture Decision Records (ADRs) cataloguing key algorithmic choices, mathematical rationale, engineering trade-offs, and rejected alternatives. | Open |
 | **[#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)** | `feat: Automated Session Brag Video Generation via Latent Space Telemetry Embeddings` | Telemetry & Video | Dimensionality reduction (PCA / manifold embedding) projecting 9D telemetry into fluid camera tracking reels, HUD telemetry overlays, and exportable MP4 brag videos. | Open |
 | **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `feat: Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Telemetry & Strategy | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. | Open |
-| **[#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)** | `bug: Full-Field Pit Stop Efficiency Leaderboard is not working` | Bug · Pit Strategy | Leaderboard in the Pit Lane Transit Loss section does not render correctly; under investigation. | 🐛 Open |
 
 ---
 
@@ -380,6 +379,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)** | `bug: Full-Field Pit Stop Efficiency Leaderboard is not working` | Bug · Pit Strategy | Fixed full-field pit stop efficiency leaderboard rendering: added Rank (#) column with podium styling, theme-adaptive text color for Net Pit Loss, format_func driver labeling, session state sanitization for view mode selector, and bidirectional driver alias matching. |
 | **[#187](https://github.com/parekhrohan21/fastf1_pitwall/issues/187)** | `docs: sync DOCS.md and documentation with recent updates (#185, PR #186, flat-out traction fix)` | Documentation | Synchronised `DOCS.md` Section 18 changelog and Section 35 architecture with PR #186, commit `a37295d`, and Decision #41 (`FLAT_OUT_THROTTLE_PCT`). |
 | **[#186](https://github.com/parekhrohan21/fastf1_pitwall/pull/186)** / **[#185](https://github.com/parekhrohan21/fastf1_pitwall/issues/185)** | `docs: sync README with recent updates (#184, README restructure, #155 flat-out fix)` | Documentation | Synchronised project tree (PWA icons, cache dir, review artifacts) in `README.md` & `AGENT.md` and updated the Resolved Issues Index with PR #184 and onboarding restructure commits. |
 | **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `feat: Full Grand Prix Weekend Multi-Session Progression Tracker` | Weekend Analytics | Multi-session driver progression: `_build_weekend_progression_data`, `build_weekend_progression_fig`, `_render_weekend_progression_section`; mileage, practice-to-qualifying improvement and tyre allocation matrix. |

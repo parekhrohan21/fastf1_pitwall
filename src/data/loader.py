@@ -3519,18 +3519,28 @@ def _build_pit_transit_data(
     try:
         df = laps_df.copy()
 
-        # Build driver and constructor metadata lookup
+        # Build driver and constructor metadata lookup (mapping both abbreviation and driver number)
         driver_meta = {}
         if _sess_obj is not None and hasattr(_sess_obj, "results") and _sess_obj.results is not None:
             for _, r in _sess_obj.results.iterrows():
-                d_code = str(r.get("Abbreviation") or r.get("DriverNumber") or r.get("BroadcastName", ""))
+                abbr = str(r.get("Abbreviation") or "").strip()
+                num = str(r.get("DriverNumber") or "").strip()
+                bcast = str(r.get("BroadcastName") or "").strip()
                 t_name = str(r.get("TeamName") or "Unknown")
-                driver_meta[d_code] = {
+                meta_item = {
                     "team": t_name,
                     "team_colour": TEAM_COLOURS.get(t_name, "#ffffff"),
-                    "full_name": str(r.get("FullName") or d_code),
+                    "full_name": str(r.get("FullName") or abbr or num or bcast),
                     "pos": int(r["Position"]) if pd.notna(r.get("Position")) else None,
+                    "abbr": abbr,
+                    "num": num,
                 }
+                if abbr:
+                    driver_meta[abbr] = meta_item
+                if num:
+                    driver_meta[num] = meta_item
+                if bcast:
+                    driver_meta[bcast] = meta_item
 
         unique_drivers = df["Driver"].dropna().unique()
 
@@ -3704,7 +3714,12 @@ def _build_pit_transit_data(
                 all_stops.append(stop_record)
 
             if d_stops:
-                driver_stops[d] = d_stops
+                driver_stops[str(d)] = d_stops
+                meta = driver_meta.get(str(d), {})
+                if meta.get("abbr") and meta["abbr"] != str(d):
+                    driver_stops[meta["abbr"]] = d_stops
+                if meta.get("num") and meta["num"] != str(d):
+                    driver_stops[meta["num"]] = d_stops
 
         if not all_stops:
             return fallback
@@ -3764,14 +3779,21 @@ def _build_pit_transit_data(
         } if lowest_net_pit_loss else None
 
         # Sort all stops by net pit loss (or pit lane duration if net loss missing)
-        all_stops.sort(key=lambda s: (
-            s["net_pit_loss_s"] if s["net_pit_loss_s"] is not None else 999.0,
-            s["pit_lane_time_s"] if s["pit_lane_time_s"] is not None else 999.0
-        ))
+        def _stop_sort_key(s):
+            loss = s.get("net_pit_loss_s")
+            lane = s.get("pit_lane_time_s")
+            v_loss = float(loss) if (loss is not None and not pd.isna(loss)) else 9999.0
+            v_lane = float(lane) if (lane is not None and not pd.isna(lane)) else 9999.0
+            return (v_loss, v_lane, s.get("in_lap", 0))
+
+        all_stops.sort(key=_stop_sort_key)
+        for r_idx, s in enumerate(all_stops, start=1):
+            s["rank"] = r_idx
 
         return {
             "all_stops": all_stops,
             "driver_stops": driver_stops,
+            "driver_meta": driver_meta,
             "summary": {
                 "fastest_pit_lane": summary_fastest,
                 "best_in_lap": summary_best_in,

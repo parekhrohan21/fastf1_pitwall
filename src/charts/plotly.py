@@ -2545,8 +2545,15 @@ def build_pit_loss_fig(
         return None
 
     if compare and (driver1 or driver2):
-        active_drivers = {d for d in [driver1, driver2] if d}
-        stops = [s for s in all_stops if s.get("driver") in active_drivers]
+        active_drivers = {str(d).strip() for d in [driver1, driver2] if d}
+        driver_meta = transit_data.get("driver_meta", {})
+        for d in list(active_drivers):
+            m = driver_meta.get(d, {})
+            if m.get("abbr"):
+                active_drivers.add(m["abbr"])
+            if m.get("num"):
+                active_drivers.add(m["num"])
+        stops = [s for s in all_stops if str(s.get("driver", "")).strip() in active_drivers]
         if not stops:
             stops = all_stops
     else:
@@ -2556,13 +2563,14 @@ def build_pit_loss_fig(
         return None
 
     # Sort stops so the most efficient / lowest net pit loss is at the top
-    sorted_stops = sorted(
-        stops,
-        key=lambda s: (
-            s["net_pit_loss_s"] if s.get("net_pit_loss_s") is not None else 999.0,
-            s["pit_lane_time_s"] if s.get("pit_lane_time_s") is not None else 999.0,
-        )
-    )
+    def _chart_stop_sort_key(s):
+        loss = s.get("net_pit_loss_s")
+        lane = s.get("pit_lane_time_s")
+        v_loss = float(loss) if (loss is not None and not pd.isna(loss)) else 9999.0
+        v_lane = float(lane) if (lane is not None and not pd.isna(lane)) else 9999.0
+        return (v_loss, v_lane, s.get("in_lap", 0))
+
+    sorted_stops = sorted(stops, key=_chart_stop_sort_key)
 
     labels = []
     in_deltas = []

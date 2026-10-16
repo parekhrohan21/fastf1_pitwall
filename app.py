@@ -901,6 +901,7 @@ try:
             colour2=colour2,
             label1=label1,
             label2=label2,
+            fmt_func=_fmt_driver1,
         )
 except Exception:
     pass
