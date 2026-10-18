@@ -259,7 +259,7 @@ fastf1_pitwall/
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
 ├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
-└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #177, #183, #185, #187)
+└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #177, #183, #185)
 ```
 
 ---
@@ -380,7 +380,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
 | **[#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)** | `bug: Full-Field Pit Stop Efficiency Leaderboard is not working` | Bug · Pit Strategy | Fixed full-field pit stop efficiency leaderboard rendering: added Rank (#) column with podium styling, theme-adaptive text color for Net Pit Loss, format_func driver labeling, session state sanitization for view mode selector, and bidirectional driver alias matching. |
-| **[#187](https://github.com/parekhrohan21/fastf1_pitwall/issues/187)** | `docs: sync DOCS.md and documentation with recent updates (#185, PR #186, flat-out traction fix)` | Documentation | Synchronised `DOCS.md` Section 18 changelog and Section 35 architecture with PR #186, commit `a37295d`, and Decision #41 (`FLAT_OUT_THROTTLE_PCT`). |
+| **[#187](https://github.com/parekhrohan21/fastf1_pitwall/issues/187)** | `docs: sync DOCS.md and documentation with recent updates (#185, PR #186, flat-out traction fix)` | Documentation | Synchronised `DOCS.md` Section 18 changelog and Section 35 architecture with PR #186, commit `a37295d`, and Decision #41 (`FLAT_OUT_THROTTLE_PCT`). Documentation-only (no runtime code changes); kept British English and reverse-chronological ordering. Verified: 116 tests passed across 18 modules and `py_compile` clean on `app.py` and `src/`. |
 | **[#186](https://github.com/parekhrohan21/fastf1_pitwall/pull/186)** / **[#185](https://github.com/parekhrohan21/fastf1_pitwall/issues/185)** | `docs: sync README with recent updates (#184, README restructure, #155 flat-out fix)` | Documentation | Synchronised project tree (PWA icons, cache dir, review artifacts) in `README.md` & `AGENT.md` and updated the Resolved Issues Index with PR #184 and onboarding restructure commits. |
 | **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `feat: Full Grand Prix Weekend Multi-Session Progression Tracker` | Weekend Analytics | Multi-session driver progression: `_build_weekend_progression_data`, `build_weekend_progression_fig`, `_render_weekend_progression_section`; mileage, practice-to-qualifying improvement and tyre allocation matrix. |
 | **[#184](https://github.com/parekhrohan21/fastf1_pitwall/pull/184)** / **[#183](https://github.com/parekhrohan21/fastf1_pitwall/issues/183)** | `docs: update README with recent features, architecture updates, and full resolved issues index` | Documentation | Comprehensive synchronization of README documentation covering all recent features (#148–#155, #164, #177), 116 tests across 18 modules, and Docker setup. |
