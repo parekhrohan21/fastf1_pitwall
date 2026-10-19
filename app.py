@@ -69,7 +69,7 @@ st.set_page_config(
 # Modular imports
 from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
-    load_schedule, load_session, clear_session_cache, format_laptime, driver_colour, hex_to_rgb,
+    load_schedule, load_session, clear_session_cache, livetiming_rejects_requests, format_laptime, driver_colour, hex_to_rgb,
     _build_driver_labels, get_telemetry_cached, _format_classification_time,
     _map_driver_id_to_number, _get_session_winner, _get_default_gp_index,
     get_constructor_colour, is_same_team, _build_constructor_standings,
@@ -326,11 +326,20 @@ if load_btn:
                 st.session_state["session"] = None
                 st.session_state["sess_key"] = None
                 err_msg = str(e).rstrip(".") + "."
-                st.error(
-                    f"**Session Loading Error**\n\n"
-                    f"FastF1 could not load the lap data: {err_msg}\n\n"
-                    "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
-                )
+                if livetiming_rejects_requests():
+                    st.error(
+                        "**F1 data server is rejecting requests**\n\n"
+                        "F1's livetiming server (livetiming.formula1.com) is returning HTTP 401/403, "
+                        "so no session data can be downloaded right now. This is an upstream change, "
+                        "not a problem with your selection, and retrying will not help. "
+                        "Check for a newer FastF1 release that supports it."
+                    )
+                else:
+                    st.error(
+                        f"**Session Loading Error**\n\n"
+                        f"FastF1 could not load the lap data: {err_msg}\n\n"
+                        "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+                    )
                 _render_footer()
                 st.stop()
 
@@ -348,11 +357,20 @@ if load_btn:
                 st.session_state["session2"] = None
                 st.session_state["sess_key2"] = None
                 err_msg2 = str(e).rstrip(".") + "."
-                st.error(
-                    f"**Session Loading Error (Session 2)**\n\n"
-                    f"FastF1 could not load the lap data: {err_msg2}\n\n"
-                    "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
-                )
+                if livetiming_rejects_requests():
+                    st.error(
+                        "**F1 data server is rejecting requests**\n\n"
+                        "F1's livetiming server (livetiming.formula1.com) is returning HTTP 401/403, "
+                        "so no session data can be downloaded right now. This is an upstream change, "
+                        "not a problem with your selection, and retrying will not help. "
+                        "Check for a newer FastF1 release that supports it."
+                    )
+                else:
+                    st.error(
+                        f"**Session Loading Error (Session 2)**\n\n"
+                        f"FastF1 could not load the lap data: {err_msg2}\n\n"
+                        "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+                    )
                 _render_footer()
                 st.stop()
     else:

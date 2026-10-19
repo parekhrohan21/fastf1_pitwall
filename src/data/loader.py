@@ -437,6 +437,22 @@ def load_live_session(year: int, gp: str, session_type: str, live_filename: str 
         return None, f"Failed to load live session data: {e}"
 
 
+def livetiming_rejects_requests() -> bool:
+    """True if F1's livetiming server answers 401/403 (auth required or blocked).
+
+    FastF1 swallows these responses and only reports "no lap data", so probe the
+    server directly to tell an upstream outage apart from a bad session.
+    """
+    try:
+        resp = curl_requests.get(
+            "https://livetiming.formula1.com/static/2024/Index.json",
+            impersonate="chrome124", timeout=10,
+        )
+        return resp.status_code in (401, 403)
+    except Exception:
+        return False
+
+
 def clear_session_cache(year: int, gp: str):
     """Clear local FastF1 cache directories and Streamlit cache resource for a GP."""
     try:
