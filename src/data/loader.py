@@ -4007,3 +4007,147 @@ def _build_weekend_progression_data(
     if result is not None:
         result["skipped"] = skipped
     return result
+
+
+# ── Clean Air vs Dirty Air Pace Impact & Overtaking Analysis (Issue #157) ─────
+# CHANGE (#157): everything below is new. For each race lap it works out the gap to
+# the car ahead, files the lap into a traffic zone, and measures how much slower
+# the driver was when following than when running free.
+# Split in two so the maths is testable without FastF1:
+#   _classify_traffic_zone   — pure: gap (s) → zone name
+#   _build_dirty_air_analysis — cached: laps DataFrame → per-driver results
+
+# Zone thresholds (seconds to the car ahead), as specified in the issue.
+CLEAN_AIR_GAP_S = 2.5   # above this: clean air
+BATTLE_GAP_S = 0.8      # below this: within DRS range / battle zone
+_ZONE_CLEAN, _ZONE_DIRTY, _ZONE_BATTLE = "Clean Air", "Dirty Air", "DRS / Battle"
+
+
+def _classify_traffic_zone(gap_s: float | None) -> str:
+    """Map the gap to the car ahead (seconds) to Clean Air, Dirty Air or DRS / Battle.
+
+    ``None`` / NaN means there is no car ahead (race leader), which is clean air.
+    """
+    if gap_s is None or pd.isna(gap_s) or gap_s > CLEAN_AIR_GAP_S:
+        return _ZONE_CLEAN
+    return _ZONE_BATTLE if gap_s < BATTLE_GAP_S else _ZONE_DIRTY
+
+
+def _lap_gaps_to_car_ahead(laps: pd.DataFrame) -> pd.Series:
+    """Gap (s) to the car one position ahead at the end of every lap, indexed like ``laps``.
+
+    Uses the session clock at lap completion (``Time``) so missing lap times do not
+    accumulate error. The gap is NaN for the leader or when the car ahead has no
+    record for that lap (we only trust the car *immediately* ahead).
+    """
+    d = laps[["Driver", "LapNumber", "Position", "Time"]].dropna().copy()
+    d["t"] = d["Time"].dt.total_seconds()
+    gaps = pd.Series(np.nan, index=laps.index, dtype=float)
+    for _, grp in d.groupby("LapNumber"):
+        g = grp.sort_values("Position")
+        contiguous = g["Position"].diff() == 1  # car ahead must be exactly P-1
+        gaps.loc[g.index] = np.where(contiguous, g["t"].diff(), np.nan)
+    return gaps
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_dirty_air_analysis(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    drivers: list[str] | None = None,
+) -> dict | None:
+    """Quantify the pace lost following other cars and the overtakes made from within DRS range.
+
+    Per driver returns: clean-air share of the race, dirty-air pace deficit
+    (``median(dirty) - median(clean)``, positive = slower), total time lost in traffic,
+    and an overtaking success rate. Lap times are detrended against lap number (fuel burn
+    and tyre wear) before the medians are compared, so late-race clean laps are not
+    flattered. Only green-flag, accurate, non-pit laps within 107% of the driver's median
+    enter the pace comparison.
+    """
+    try:
+        needed = {"Driver", "LapNumber", "LapTime", "Position", "Time"}
+        if laps_df is None or laps_df.empty or not needed.issubset(laps_df.columns):
+            return None
+
+        laps = laps_df.copy()
+        laps["Gap"] = _lap_gaps_to_car_ahead(laps)
+        # Traffic during a lap is better approximated by the gap at its start *and* end.
+        laps = laps.sort_values(["Driver", "LapNumber"])
+        laps["GapStart"] = laps.groupby("Driver")["Gap"].shift(1)
+        laps["GapUsed"] = laps[["GapStart", "Gap"]].mean(axis=1, skipna=True)
+        laps["Zone"] = laps["GapUsed"].map(_classify_traffic_zone)
+
+        pit = pd.Series(False, index=laps.index)
+        for col in ("PitInTime", "PitOutTime"):
+            if col in laps.columns:
+                pit |= laps[col].notna()
+        laps["IsPit"] = pit
+
+        wanted = drivers or sorted(laps["Driver"].dropna().unique())
+        out: dict[str, dict] = {}
+        for drv in wanted:
+            d = laps[laps["Driver"] == drv].dropna(subset=["LapTime", "LapNumber"]).copy()
+            if d.empty:
+                continue
+            d["t"] = d["LapTime"].dt.total_seconds()
+
+            # Pace-eligible laps: green flag, accurate, not a pit lap.
+            ok = ~d["IsPit"]
+            if "IsAccurate" in d.columns:
+                ok &= d["IsAccurate"] == True  # noqa: E712 (NaN-safe comparison)
+            if "TrackStatus" in d.columns:
+                ok &= ~d["TrackStatus"].astype(str).str.contains("4|5|6|7")
+            d = d[ok]
+            if len(d) < 5:
+                continue
+            d = d[d["t"] <= d["t"].median() * 1.07].copy()
+            if len(d) < 5:
+                continue
+
+            # Remove the fuel / tyre trend so zones are compared on equal footing.
+            slope, icpt = np.polyfit(d["LapNumber"], d["t"], 1)
+            d["adj"] = d["t"] - (slope * d["LapNumber"] + icpt) + d["t"].median()
+
+            clean = d[d["Zone"] == _ZONE_CLEAN]
+            dirty = d[d["Zone"] == _ZONE_DIRTY]
+            battle = d[d["Zone"] == _ZONE_BATTLE]
+            clean_med = float(clean["adj"].median()) if not clean.empty else None
+            dirty_med = float(dirty["adj"].median()) if not dirty.empty else None
+            battle_med = float(battle["adj"].median()) if not battle.empty else None
+
+            followed = pd.concat([dirty, battle])
+            time_lost = float((followed["adj"] - clean_med).sum()) if clean_med is not None and not followed.empty else None
+
+            # Overtakes: runs of consecutive laps spent within battle range; a run
+            # succeeds if the driver gained a place (not via their own pit stop) during it.
+            full = laps[laps["Driver"] == drv].sort_values("LapNumber").copy()
+            full["PosGain"] = (full["Position"].shift(1) - full["Position"]) > 0
+            full["PosGain"] &= ~(full["IsPit"] | full["IsPit"].shift(1, fill_value=False))
+            in_battle = (full["Zone"] == _ZONE_BATTLE) & full["GapStart"].notna()
+            run_id = (in_battle != in_battle.shift(fill_value=False)).cumsum()[in_battle]
+            attempts = successes = 0
+            for _, run in full[in_battle].groupby(run_id):
+                attempts += 1
+                # Include the lap after the run ends: the pass often completes on the line.
+                last = run["LapNumber"].max()
+                window = full[(full["LapNumber"] >= run["LapNumber"].min()) & (full["LapNumber"] <= last + 1)]
+                successes += int(window["PosGain"].any())
+
+            out[str(drv)] = {
+                "laps": d[["LapNumber", "t", "adj", "Zone", "GapUsed"]].reset_index(drop=True),
+                "zone_counts": {z: int((d["Zone"] == z).sum()) for z in (_ZONE_CLEAN, _ZONE_DIRTY, _ZONE_BATTLE)},
+                "clean_pct": float((d["Zone"] == _ZONE_CLEAN).mean() * 100.0),
+                "clean_median_s": clean_med,
+                "dirty_median_s": dirty_med,
+                "battle_median_s": battle_med,
+                "dirty_deficit_s": (dirty_med - clean_med) if clean_med is not None and dirty_med is not None else None,
+                "battle_deficit_s": (battle_med - clean_med) if clean_med is not None and battle_med is not None else None,
+                "time_lost_s": time_lost,
+                "overtake_attempts": attempts,
+                "overtakes": successes,
+                "overtake_rate_pct": (successes / attempts * 100.0) if attempts else None,
+            }
+        return {"drivers": out} if out else None
+    except Exception:
+        return None
