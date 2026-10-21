@@ -100,7 +100,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`pyarrow`** | `≥ 14.0.0` | High-throughput columnar Apache Parquet (`.parquet`) telemetry file exporter. |
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**127 unit/integration tests across 19 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**135 unit/integration tests across 20 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -143,6 +143,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 ### ⏱ Pace, Tyres & Race Strategy
 
 - **Weekend Multi-Session Progression Tracker** ([Issue #156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)): Traces a driver through every session of a Grand Prix (FP1 → FP2 → FP3 → Qualifying / Sprint → Race). Shows a fastest-lap evolution chart with compound-coloured markers and a session-to-session delta step chart, total weekend mileage (laps and km), a practice-to-qualifying improvement card with a gap-to-field change that removes track evolution, and a tyre allocation matrix (laps per compound per session). Sessions load on demand, laps-only, so the extra load stays cheap.
+- **Clean Air vs Dirty Air Pace Impact & Overtaking Analysis** ([Issue #157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)): Race and Sprint only. Files every lap by the gap to the car ahead — Clean Air (> 2.5 s), Dirty Air (0.8–2.5 s) and DRS / Battle (< 0.8 s) — using the session clock at lap completion. Pace is corrected for fuel burn and tyre wear (trend fitted on clean-air laps only, so traffic is not absorbed into it) and limited to green-flag, accurate, non-pit laps. Shows Clean Air % of Race, Time Lost in Traffic, the Dirty Air Deficit (s/lap, positive = slower) and an Overtaking Success rate, with a lap-pace chart coloured by zone and diamond markers for DRS / Battle laps.
 - **Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown** ([Issue #153](https://github.com/parekhrohan21/fastf1_pitwall/issues/153)): Deep-dive telemetry breakdown of pit lane time losses isolating pit lane speed-limiter transit duration ($t_{\text{pit\_lane}} = \text{PitOutTime} - \text{PitInTime}$), in-lap push delta against clean-air baseline flyer pace ($\Delta t_{\text{in}} = t_{\text{in}} - t_{\text{baseline}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}} = t_{\text{out}} - t_{\text{baseline}}$), net pit loss, and sector-by-sector warm-up deltas ($S_1, S_2, S_3$). Visualised via an interactive stacked horizontal bar chart (`build_pit_loss_fig`), 4 summary KPI cards (*Fastest Pit Lane Transit*, *Best In-Lap Push Delta*, *Best Out-Lap Warm-up*, *Grid Median Pit Loss*), Head-to-Head sector warm-up cards, and a full-field classified efficiency leaderboard table.
 - **Intra-Team Teammate Battle & Qualifying Delta Matrix** ([Issue #152](https://github.com/parekhrohan21/fastf1_pitwall/issues/152)): Automated teammate head-to-head comparison analytics across all constructors for Qualifying and Race sessions. Renders a grid-wide horizontal diverging bar chart of teammate gaps, sector split advantages (S1, S2, S3), clean-air median race pace deltas, and an interactive classified matrix with top KPI cards for closest battle, largest delta, and grid median gap.
 - **Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler** ([Issue #81](https://github.com/parekhrohan21/fastf1_pitwall/issues/81), [Issue #137](https://github.com/parekhrohan21/fastf1_pitwall/issues/137), [Issue #151](https://github.com/parekhrohan21/fastf1_pitwall/issues/151)): Calculates OLS linear and quadratic regressions on valid flyer laps per stint. Features an interactive **Fuel Burn Decoupler** that removes artificial lap time gains from fuel mass reduction (~0.035 s/lap) to compute True Mechanical Tyre Wear ($t_{\text{corrected}} = t_{\text{lap}} - \alpha \cdot (\text{TotalLaps} - \text{LapNumber})$). Plots scatter points of tyre age vs lap time with regression trendlines and dashed quadratic thermal curves. Automatically estimates a **Cliff Lap** (pace degrades ≥ 1.5 s above baseline) and a **Pit Window** (cliff ± 3 laps), displayed in a full-field **Tyre Life & Crossover Prediction Matrix** table with urgency badges (🟢 Safe / 🟡 Soon / 🔴 Critical / ✅ Past Cliff).
@@ -170,7 +171,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112)): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode.
 - **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Includes automated upstream server health probing (`livetiming_rejects_requests`) to detect and distinguish F1 live timing HTTP 401/403 authorization rejections from session loading errors.
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **127 automated pytest unit and integration tests** across 19 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **135 automated pytest unit and integration tests** across 20 dedicated modules.
 
 ---
 
@@ -203,10 +204,11 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 23. **Intra-Team Teammate Battle & Qualifying Delta Matrix**: Toggle between Qualifying Lap Delta and Race Pace Delta to review diverging teammate gap bars, sector dominance tallies, and classified matrix tables.
 24. **Multi-Driver Grid Analysis & Heatmaps**: Select 3 to 20 drivers across the field to render colour-coded heatmaps for Sector Split Deltas, Lap-by-Lap Pace, and Top Speed.
 25. **Track Maps, Corner Analysis & Animated Race Replay**: Switch between speed heat-maps, AWS-style mini-sector dominance maps, driver input pedal traces, 4-subplot corner analysis, or run the multi-car animated race replay.
-26. **Weekend Progression Tracker**: Below the Speed Trap section, click **Load weekend progression** to load every session of the loaded Grand Prix for Driver 1 and review pace evolution, mileage, practice-to-qualifying improvement and tyre usage.
-27. **Official Classification & Championship Standings**: Review complete official session classifications and seasonal drivers' and constructors' championship standings.
-28. **Real-Time Live Timing Mode**: Toggle live timing in the sidebar during active race weekends to record WebSocket packets and stream live timing.
-29. **Post-Race Debrief PDF Exporter**: Click **Generate PDF Report** in the sidebar to export a broadcast-quality printable PDF debrief.
+26. **Clean Air vs Dirty Air Impact**: In Race and Sprint sessions, review the traffic section for your selected driver(s): Clean Air %, Time Lost in Traffic, Dirty Air Deficit, Overtaking Success rate and the zone-coloured pace chart.
+27. **Weekend Progression Tracker**: Below the Speed Trap section, click **Load weekend progression** to load every session of the loaded Grand Prix for Driver 1 and review pace evolution, mileage, practice-to-qualifying improvement and tyre usage.
+28. **Official Classification & Championship Standings**: Review complete official session classifications and seasonal drivers' and constructors' championship standings.
+29. **Real-Time Live Timing Mode**: Toggle live timing in the sidebar during active race weekends to record WebSocket packets and stream live timing.
+30. **Post-Race Debrief PDF Exporter**: Click **Generate PDF Report** in the sidebar to export a broadcast-quality printable PDF debrief.
 
 ---
 
@@ -221,13 +223,14 @@ fastf1_pitwall/
 │   │                           # robust regression, metric extractors & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
 │   │   ├── plotly.py           # Interactive Plotly figures (History, stints, maps, replays, corners, braking,
-│   │   │                       # traction exits, track evolution, gears, radars, teammate matrix, pit loss, weekend progression)
+│   │   │                       # traction exits, track evolution, gears, radars, teammate matrix, pit loss, weekend progression, dirty air)
 │   │   └── matplotlib.py       # Static Matplotlib telemetry charts & dynamic channel filtering
 │   └── ui/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, teammate matrix,
-│                               # pit loss breakdown, weekend progression, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (127 tests across 19 dedicated modules)
+│                               # pit loss breakdown, weekend progression, dirty air, traction sections & telemetry export panels
+├── tests/                      # Automated Pytest suite (135 tests across 20 dedicated modules)
+│   ├── test_dirty_air.py               # Traffic zones, dirty air deficit, time lost & overtaking success rate
 │   ├── test_weekend_progression.py     # Weekend session summaries, deltas, mileage, tyre matrix & progression chart
 │   ├── test_traction_exit.py           # Corner exit traction, throttle ramp rate, flat-out corners & aggression score
 │   ├── test_track_evolution.py         # Theil-Sen ramp rate, grip gain, flyer filtering & knockout bias removal
@@ -259,7 +262,7 @@ fastf1_pitwall/
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
 ├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
-└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #177, #183, #185, #189)
+└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #157, #177, #183, #185, #189)
 ```
 
 ---
@@ -303,7 +306,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **127 unit and integration tests** across 19 test modules must pass cleanly.
+All **135 unit and integration tests** across 20 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -372,7 +375,6 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 |:---:|---|---|---|:---:|
 | **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `docs: add DECISIONS.md to document Architectural choices and AI implementation decisions` | Architecture & Governance | Standardised Architecture Decision Records (ADRs) cataloguing key algorithmic choices, mathematical rationale, engineering trade-offs, and rejected alternatives. | Open |
 | **[#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)** | `feat: Automated Session Brag Video Generation via Latent Space Telemetry Embeddings` | Telemetry & Video | Dimensionality reduction (PCA / manifold embedding) projecting 9D telemetry into fluid camera tracking reels, HUD telemetry overlays, and exportable MP4 brag videos. | Open |
-| **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `feat: Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Telemetry & Strategy | Aerodynamic wake analysis quantifying lap time penalty and tyre degradation rate when following within 1.5s vs clean air. | Open |
 
 ---
 
@@ -384,6 +386,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | **[#191](https://github.com/parekhrohan21/fastf1_pitwall/pull/191)** / **[#189](https://github.com/parekhrohan21/fastf1_pitwall/issues/189)** | `bug: Full-Field Pit Stop Efficiency Leaderboard is not working` | Bug · Pit Strategy | Fixed full-field pit stop efficiency leaderboard rendering: added Rank (#) column with podium styling, theme-adaptive text color for Net Pit Loss, format_func driver labeling, session state sanitization for view mode selector, and bidirectional driver alias matching. |
 | **[#187](https://github.com/parekhrohan21/fastf1_pitwall/issues/187)** | `docs: sync DOCS.md and documentation with recent updates (#185, PR #186, flat-out traction fix)` | Documentation | Synchronised `DOCS.md` Section 18 changelog and Section 35 architecture with PR #186, commit `a37295d`, and Decision #41 (`FLAT_OUT_THROTTLE_PCT`). Documentation-only (no runtime code changes); kept British English and reverse-chronological ordering. Verified: 116 tests passed across 18 modules and `py_compile` clean on `app.py` and `src/`. |
 | **[#186](https://github.com/parekhrohan21/fastf1_pitwall/pull/186)** / **[#185](https://github.com/parekhrohan21/fastf1_pitwall/issues/185)** | `docs: sync README with recent updates (#184, README restructure, #155 flat-out fix)` | Documentation | Synchronised project tree (PWA icons, cache dir, review artifacts) in `README.md` & `AGENT.md` and updated the Resolved Issues Index with PR #184 and onboarding restructure commits. |
+| **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `feat: Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Race Strategy | Traffic-zone pace analysis: `_build_dirty_air_analysis`, `build_dirty_air_fig`, `_render_dirty_air_section`; Clean Air %, time lost in traffic, dirty air deficit and overtaking success rate. |
 | **[#156](https://github.com/parekhrohan21/fastf1_pitwall/issues/156)** | `feat: Full Grand Prix Weekend Multi-Session Progression Tracker` | Weekend Analytics | Multi-session driver progression: `_build_weekend_progression_data`, `build_weekend_progression_fig`, `_render_weekend_progression_section`; mileage, practice-to-qualifying improvement and tyre allocation matrix. |
 | **[#184](https://github.com/parekhrohan21/fastf1_pitwall/pull/184)** / **[#183](https://github.com/parekhrohan21/fastf1_pitwall/issues/183)** | `docs: update README with recent features, architecture updates, and full resolved issues index` | Documentation | Comprehensive synchronization of README documentation covering all recent features (#148–#155, #164, #177), 116 tests across 18 modules, and Docker setup. |
 | **[#155 Follow-up](https://github.com/parekhrohan21/fastf1_pitwall/commit/3a0b5f3)** | `fix: flat-out corners and snap pick-ups in traction analysis` | Corner Dynamics | Added `FLAT_OUT_THROTTLE_PCT` (85%) within $\pm 10$m of apex to identify flat-out corners without computing spurious traction scores; measured snap pick-up ramps from preceding sample (Decision #41). |
