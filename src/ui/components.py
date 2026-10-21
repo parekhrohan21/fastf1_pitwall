@@ -11,7 +11,7 @@ from src.data.loader import (
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_track_evolution_data,
-    _build_multi_year_comparison, _build_weekend_progression_data,
+    _build_multi_year_comparison, _build_weekend_progression_data, _build_dirty_air_analysis,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data
@@ -23,7 +23,7 @@ from src.charts.plotly import (
     build_track_evolution_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
-    build_pit_loss_fig, build_weekend_progression_fig
+    build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig
 )
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
@@ -3182,3 +3182,71 @@ def _render_weekend_progression_section(
         st.markdown("<div style='font-size:12px; opacity:0.7; margin:6px 0;'>Tyre allocation — laps per compound</div>"
                     f"<table style='font-size:13px; border-collapse:collapse;'><tr><th></th>{heads}</tr>{rows}</table>",
                     unsafe_allow_html=True)
+
+
+# ── Clean Air vs Dirty Air Pace Impact & Overtaking (Issue #157) ──────────────
+# CHANGE (#157): new section, Race / Sprint only (traffic is meaningless in Practice
+# and Qualifying). One block of metric cards + pace chart per selected driver.
+
+def _render_dirty_air_section(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    session_type: str = "",
+    highlight_drivers: list[str] | None = None,
+    highlight_colours: list[str] | None = None,
+    fmt_func=None,
+) -> None:
+    """Render clean-air share, time lost in traffic, overtaking success and the zone pace chart."""
+    if laps_df is None or laps_df.empty:
+        return
+    # Codes come from app.py's _session_code_map: "R" (Race) and "S" (Sprint).
+    code = str(session_type).upper()
+    if code not in {"R", "S", "RACE", "SPRINT"}:
+        return
+
+    st.markdown("<div class='section-title'>💨 Clean Air vs Dirty Air Pace Impact & Overtaking</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px;'>"
+        "Laps are filed by the gap to the car ahead: Clean Air (&gt; 2.5 s), Dirty Air (0.8–2.5 s) and "
+        "DRS / Battle (&lt; 0.8 s). Pace is corrected for fuel burn and tyre wear before zones are compared.</div>",
+        unsafe_allow_html=True,
+    )
+
+    drivers = highlight_drivers or []
+    colours = highlight_colours or []
+    data = _build_dirty_air_analysis(sess_k, laps_df, drivers or None)
+    if not data:
+        st.info("ℹ️ Not enough green-flag race laps with position and timing data to analyse traffic for this session.")
+        return
+
+    for i, drv in enumerate(drivers):
+        res = data["drivers"].get(str(drv))
+        if res is None:
+            continue
+        colour = colours[i] if i < len(colours) else "#E8002D"
+        label = fmt_func(drv) if fmt_func else drv
+        st.markdown(f"**{label}**")
+
+        def _card(col, title, value, sub=""):
+            sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub}</div>" if sub else ""
+            col.markdown(
+                f"<div class='metric-card' style='--accent:{colour}; margin-bottom:14px;'>"
+                f"<div class='metric-label'>{title}</div>"
+                f"<div class='metric-value' style='font-size: clamp(16px, 2vw, 22px);'>{value}</div>{sub_html}</div>",
+                unsafe_allow_html=True,
+            )
+
+        c1, c2, c3, c4 = st.columns(4)
+        zc = res["zone_counts"]
+        _card(c1, "Clean Air % of Race", f"{res['clean_pct']:.0f}%", f"{zc['Clean Air']} of {sum(zc.values())} laps")
+        tl = res["time_lost_s"]
+        _card(c2, "Time Lost in Traffic", f"{tl:+.1f} s" if tl is not None else "—", "dirty air + battle laps vs clean pace")
+        dd = res["dirty_deficit_s"]
+        _card(c3, "Dirty Air Deficit", f"{dd:+.3f} s/lap" if dd is not None else "—", "positive = slower than clean air")
+        rate = res["overtake_rate_pct"]
+        _card(c4, "Overtaking Success", f"{rate:.0f}%" if rate is not None else "—",
+              f"{res['overtakes']} of {res['overtake_attempts']} battles" if res["overtake_attempts"] else "no battles in DRS range")
+
+        fig = build_dirty_air_fig(res, f"{label} — lap pace by traffic zone")
+        if fig is not None:
+            st.plotly_chart(fig, width="stretch", key=f"dirty_air_{sess_k}_{drv}")

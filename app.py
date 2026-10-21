@@ -95,7 +95,8 @@ from src.ui.components import (
     _render_multi_year_comparison_section, render_tyre_crossover_matrix, render_fuel_decoupled_deg_metrics,
     _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
-    _render_pit_loss_section, _render_weekend_progression_section
+    _render_pit_loss_section, _render_weekend_progression_section,
+    _render_dirty_air_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1255,6 +1256,19 @@ _render_speed_trap_section(
     sess_key, _all_laps1, driver1, driver2 if compare else None,
     colour1, colour2 if compare else None, compare,
     fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+)
+
+# ── Clean Air vs Dirty Air Pace Impact & Overtaking (Issue #157) ───────────
+# Race / Sprint only — the renderer gates on session_type and draws nothing otherwise.
+# Reuses the highlighted drivers, colours and label formatter from the sections above.
+# The session type comes from the loaded session (not the sidebar, which may have changed
+# since loading); a Driver 2 taken from a second session is skipped inside the renderer.
+try:
+    _da_session_type = str(sess.name)
+except Exception:
+    _da_session_type = session_type
+_render_dirty_air_section(
+    sess_key, _all_laps1, _da_session_type, _hl_drivers, _hl_colours, _fmt_driver1
 )
 
 # ── Weekend Multi-Session Progression Tracker (Issue #156) ─────────────────
