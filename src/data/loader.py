@@ -4061,8 +4061,8 @@ def _build_dirty_air_analysis(
     Per driver returns: clean-air share of the race, dirty-air pace deficit
     (``median(dirty) - median(clean)``, positive = slower), total time lost in traffic,
     and an overtaking success rate. Lap times are detrended against lap number (fuel burn
-    and tyre wear) before the medians are compared, so late-race clean laps are not
-    flattered. Only green-flag, accurate, non-pit laps within 107% of the driver's median
+    and tyre wear, slope fitted on clean-air laps only) before the medians are compared,
+    so late-race clean laps are not flattered. Only green-flag, accurate, non-pit laps within 107% of the driver's median
     enter the pace comparison.
     """
     try:
@@ -4105,9 +4105,15 @@ def _build_dirty_air_analysis(
             if len(d) < 5:
                 continue
 
-            # Remove the fuel / tyre trend so zones are compared on equal footing.
-            slope, icpt = np.polyfit(d["LapNumber"], d["t"], 1)
-            d["adj"] = d["t"] - (slope * d["LapNumber"] + icpt) + d["t"].median()
+            # Remove the fuel / tyre trend so zones are compared on equal footing. The
+            # slope is fitted on CLEAN-air laps only: traffic is often concentrated early
+            # or late in a race, so fitting all laps would soak up the very traffic effect
+            # being measured. With too few clean laps no trend is removed (slope 0).
+            clean_fit = d[d["Zone"] == _ZONE_CLEAN]
+            slope = 0.0
+            if len(clean_fit) >= 5 and clean_fit["LapNumber"].nunique() >= 3:
+                slope = float(np.polyfit(clean_fit["LapNumber"], clean_fit["t"], 1)[0])
+            d["adj"] = d["t"] - slope * (d["LapNumber"] - d["LapNumber"].mean())
 
             clean = d[d["Zone"] == _ZONE_CLEAN]
             dirty = d[d["Zone"] == _ZONE_DIRTY]
