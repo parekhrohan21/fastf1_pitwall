@@ -2780,3 +2780,48 @@ def build_weekend_progression_fig(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig
+
+
+# ── Clean Air vs Dirty Air Pace Chart (Issue #157) ────────────────────────────
+# CHANGE (#157): new figure builder. One trace per traffic zone so the legend doubles as
+# a zone key; DRS / Battle laps use diamonds as the "DRS zone" markers, and a dotted
+# line marks the driver's clean-air median pace.
+
+_TRAFFIC_ZONE_STYLE = {
+    "Clean Air":    dict(colour="#00E676", symbol="circle"),
+    "Dirty Air":    dict(colour="#FFB300", symbol="circle"),
+    "DRS / Battle": dict(colour="#FF5252", symbol="diamond"),
+}
+
+
+def build_dirty_air_fig(driver_result: dict, title: str = "") -> go.Figure | None:
+    """Scatter lap pace (trend-corrected) by lap number, coloured by traffic zone."""
+    if not driver_result or driver_result.get("laps") is None or driver_result["laps"].empty:
+        return None
+    laps = driver_result["laps"]
+
+    fig = go.Figure()
+    for zone, style in _TRAFFIC_ZONE_STYLE.items():
+        z = laps[laps["Zone"] == zone]
+        if z.empty:
+            continue
+        fig.add_trace(go.Scatter(
+            x=z["LapNumber"], y=z["adj"], mode="markers", name=zone,
+            marker=dict(size=10 if zone == "DRS / Battle" else 8, color=style["colour"], symbol=style["symbol"]),
+            customdata=np.column_stack([z["t"], z["GapUsed"].fillna(-1)]),
+            hovertemplate=(f"Lap %{{x}}<br>{zone}<br>Adj. pace %{{y:.3f}} s<br>"
+                           "Raw %{customdata[0]:.3f} s<br>Gap ahead %{customdata[1]:.2f} s<extra></extra>"),
+        ))
+
+    clean_med = driver_result.get("clean_median_s")
+    if clean_med is not None:
+        fig.add_hline(y=clean_med, line=dict(color="#00E676", dash="dot", width=1),
+                      annotation_text="Clean-air median", annotation_position="top left")
+
+    fig.update_layout(
+        title=title, height=380, margin=dict(l=50, r=20, t=50, b=40),
+        xaxis_title="Lap", yaxis_title="Trend-corrected lap time (s)",
+        legend=dict(orientation="h", y=-0.2),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
