@@ -261,8 +261,7 @@ fastf1_pitwall/
 ├── .gitignore                  # Git repository exclusions (cache, bytecode, test artifacts)
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
-├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
-└── code_review_issue_<n>.md    # Per-issue code review artifacts (e.g. #154, #155, #156, #157, #177, #183, #185, #189)
+└── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
 ```
 
 ---
@@ -314,7 +313,7 @@ python3 -m py_compile app.py src/data/loader.py src/ui/styles.py src/ui/componen
 ```
 
 ### Step 5 — Perform Code Review
-Before committing, document a formal code review evaluating the changes against the `AGENT.md` Code Review Checklist. Create a markdown artifact named `code_review_issue_<number>.md` summarising the verification of correctness, code quality, documentation updates, and testing results.
+Before committing, document a formal code review evaluating the changes against the `AGENT.md` Code Review Checklist. Summarise the verification of correctness, code quality, documentation updates, and testing results. Record the findings as a `# ── Review notes (#<number>) ──` comment block directly above the code they cover (the function, constant or section header): defects found and how they were fixed, the reasoning behind non-obvious choices, known limitations, and what was and was not verified. Do **not** create separate `code_review_issue_<n>.md` files; existing notes live in `src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py` and the `app.py` module docstring.
 
 ### Step 6 — Commit, Push and Open a PR
 1. Stage and commit your changes referencing the issue number:

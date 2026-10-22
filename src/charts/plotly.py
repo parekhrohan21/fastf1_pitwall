@@ -1510,6 +1510,12 @@ def build_weather_correlation_fig(
     return fig
 
 
+# Review notes (#154), merged from the former code_review_issue_154.md:
+#  - The horizontal legend (5 entries once drivers are highlighted) used to draw over the chart
+#    title when rendered to PNG; it now sits centred below the plot with a larger bottom margin.
+#    build_weather_correlation_fig uses the same placement with fewer entries and was left as is.
+#  - The scatter plots PaceAdjusted_s (falling back to LapTime_s) on a "Pace-Adjusted Lap Time
+#    (s)" axis so points and trend curve share one scale; the raw lap time stays in the hover.
 def build_track_evolution_fig(
     evolution_data: dict,
     driver_colors: dict[str, str] = None,
@@ -2523,6 +2529,9 @@ def build_teammate_matrix_fig(
     return fig
 
 
+# Review notes (#189), merged from the former code_review_issue_189.md: active_drivers
+# filtering recognises driver aliases (abbreviation or car number) and stops are sorted
+# NaN-safely, matching the ranking in _build_pit_transit_data.
 def build_pit_loss_fig(
     transit_data: dict,
     driver1: str | None = None,

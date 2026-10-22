@@ -1531,6 +1531,11 @@ def _render_weather_correlation_section(
         st.plotly_chart(fig, width="stretch")
 
 
+# Review notes (#154), merged from the former code_review_issue_154.md:
+#  - Session gating lives here: FP1-FP3, Q, SQ and SS (with raw-label fallbacks) render, Race
+#    and Sprint do not. Driver identifiers go through fmt_func into labels_map; driver colours
+#    come from the caller (nothing here colours by compound).
+#  - The section caption explains the driver-fixed-effects adjustment behind the plotted pace.
 def _render_track_evolution_section(
     sess_k: str,
     laps_df: pd.DataFrame,
@@ -2070,6 +2075,13 @@ def _render_braking_analysis_section(
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
+# Review notes (#155), merged from the former code_review_issue_155.md:
+#  - This section renders twice (page section "main" and the map tab "maptab_<suffix>"), so
+#    widget keys must stay suffix-specific or Streamlit raises duplicate-key errors.
+#  - The original full-throttle comparison only runs when BOTH drivers have a pick-up; flat-out
+#    corners get their own "Flat out" cards, comparison summary and single-driver note.
+#  - Verified with AppTest on real 2024 Bahrain data (compare and single mode, flat corners
+#    T3/T5/T15 and normal T4): no exceptions, "Flat out" shown only for flat corners.
 def _render_traction_exit_section(
     sess_k: str, session_obj, l1, l2, driver1: str, driver2: str | None,
     colour1: str, colour2: str | None, compare: bool,
@@ -2751,6 +2763,16 @@ def _render_teammate_battle_section(
     st.markdown(tbl_html, unsafe_allow_html=True)
 
 
+# Review notes (#189), merged from the former code_review_issue_189.md (PR #191). Leaderboard fixes:
+#  - Added a Rank (#) column with podium colours (gold #FFD700, silver #C0C0C0, bronze #CD7F32).
+#  - Net Pit Loss no longer uses hardcoded white text; #51cf66 monospace reads on dark and light.
+#  - Driver labels go through fmt_func (_fmt_driver1), e.g. "NOR · Norris" (AGENT.md decision #3).
+#  - The pit_loss_view_mode_selector value in st.session_state is sanitised before st.radio is
+#    built; a stale value after switching drivers or toggling compare used to raise
+#    StreamlitAPIException.
+#  - _is_match() compares abbreviation and car number via driver_meta so row highlighting and
+#    head-to-head deep dives work with either identifier.
+#  - Deltas use f"{delta:+.2f}s" (the old f"+{delta:.2f}s" printed "+-X.XXs" for negatives).
 def _render_pit_loss_section(
     transit_data: dict,
     driver1: str | None = None,

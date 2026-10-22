@@ -53,7 +53,6 @@ fastf1_pitwall/
 ├── .dockerignore
 ├── .gitignore
 ├── icon-192.png, icon-512.png ← PWA icons
-├── code_review_issue_<n>.md ← per-issue code review artifacts
 ├── README.md           ← user-facing documentation (keep in sync)
 ├── AGENT.md            ← this file
 ├── DOCS.md             ← technical developer documentation
@@ -246,6 +245,7 @@ To resolve technical debt and maintainability issues:
 - **Decision #41**: *Flat-out corners & snap pick-ups in traction analysis (`FLAT_OUT_THROTTLE_PCT`)* — Real-data validation (2024 Bahrain) showed corners taken at full throttle (T3, T5, T12, T15) were scored as traction events with a 0.00 %/m ramp and a fabricated score of ~75. `_calculate_traction_metrics` now sets `flat_out` when throttle within ±10 m of the apex (or the nearest sample) stays ≥ 85%, leaving pick-up metrics and the score `None`; the window is deliberately tight so a lift for the next corner is not attributed to this one. When throttle goes closed-to-full between two samples, the ramp is measured from the preceding sample instead of collapsing to 0 %/m. Exit speed, peak exit G and oversteer corrections no longer depend on a pick-up being found. `_render_traction_exit_section` shows "Flat out" on the cards and a flat-out comparison summary.
 - **Decision #42**: *Weekend Multi-Session Progression Tracker (`_build_weekend_progression_data`, `build_weekend_progression_fig`, `_render_weekend_progression_section`)* — Traces one driver across every session of the loaded Grand Prix. The summary and aggregation maths are pure functions (`_summarise_weekend_session`, `_aggregate_weekend_progression`) so they are testable offline; only `_build_weekend_progression_data` does I/O. Sessions are loaded laps-only (`telemetry=False`) and a failing session is listed under `skipped` instead of aborting. The section sits behind a button because a cold-cache batch load is slow. Improvement is reported both as raw practice → qualifying delta and as a gap-to-session-best change, the latter removing track evolution. Event name comes from the loaded session (`sess.event`), not the sidebar.
 - **Decision #43**: *Clean Air vs Dirty Air Pace Impact & Overtaking Analysis (`_build_dirty_air_analysis`, `build_dirty_air_fig`, `_render_dirty_air_section`)* — Laps are filed into Clean Air (> 2.5 s), Dirty Air (0.8–2.5 s) and DRS / Battle (< 0.8 s) by the gap to the car immediately ahead, taken from the session clock (`Time`) at lap completion and averaged with the lap-start gap; non-adjacent positions yield no gap. The fuel / tyre trend slope is fitted on **clean-air laps only** — fitting every lap lets the model absorb the traffic effect it is trying to measure (traffic clusters early/late). Deficit is `dirty − clean` (positive = slower). Overtaking success = share of battle runs (consecutive DRS-range laps, plus the following lap) in which the driver gained a place without pitting. The section is Race / Sprint only and reads the session type from the loaded session (`sess.name`), not the sidebar.
+- **Decision #44**: *Code review notes live in the code, not in separate files* — Supersedes Decision #24. The per-issue `code_review_issue_<n>.md` artifacts (#154, #155, #156, #157, #177, #183, #185, #187, #189) were merged into `# ── Review notes (#<n>) ──` comment blocks beside the code they describe, and the files were deleted. Review findings now travel with the code and cannot drift out of sync with it. Docs-only reviews (#183, #185, #187) had no code to attach to and were dropped; their substance is in the `DOCS.md` changelog.
 
 ---
 
@@ -600,7 +600,9 @@ Closes #[issue number]
 
 ### Code Review
 
-Before merging any PR or pushing a significant change directly to `main`, you **MUST** perform a formal code review and generate a markdown artifact named `code_review_issue_<number>.md` summarising the verification of the following checklist:
+Before merging any PR or pushing a significant change directly to `main`, you **MUST** perform a formal code review against the checklist below. Record the findings as a `# ── Review notes (#<number>) ──` comment block directly above the code they cover (the function, constant or section header): defects found and how they were fixed, the reasoning behind non-obvious choices, known limitations, and what was and was not verified. Do **not** create separate `code_review_issue_<n>.md` files; existing notes live in `src/data/loader.py`, `src/charts/plotly.py`, `src/ui/components.py` and the `app.py` module docstring.
+
+Checklist:
 
 **Correctness**
 

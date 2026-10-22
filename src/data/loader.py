@@ -1451,6 +1451,42 @@ def _build_weather_correlation_data(sess_k: str, laps_df: pd.DataFrame, _session
         return None
 
 
+# ── Review notes (#154): Track Evolution & Grip Improvement Ramp Index ────────
+# Merged from the former code_review_issue_154.md. Covers _theil_sen_estimate,
+# _robust_linear_fit and _build_track_evolution_data, and why they look the way they do.
+#
+# Defects found by tests / real-data validation (all silent failures, not crashes):
+#  1. Trim-band collapse in _robust_linear_fit. Once gross outliers went, the surviving
+#     near-linear points had residuals ~0, so MAD collapsed and the next pass rejected
+#     almost everything (30 points -> 3). Fix: scale_floor of 1 ms (F1 timing resolution,
+#     so the band cannot shrink below measurement precision) plus a min_inlier_frac (0.5)
+#     backstop.
+#  2. An OLS seed gave a ~2x wrong slope (-0.0405 vs true -0.02): the reference line was
+#     tilted by the very outliers being rejected, so the band discarded the clean laps at
+#     both ends. Fix: seed with Theil-Sen (median of pairwise slopes, ~29% breakdown point).
+#  3. Qualifying knockout bias inflated the ramp ~2-3x. Slow cars stop running after Q1/Q2,
+#     so late-session flyers come only from fast cars and the field "improves" with no
+#     change in grip. Fix: driver fixed effects - subtract each driver's median flyer and add
+#     back the field median (PaceAdjusted_s); single-flyer drivers are plotted but not fitted,
+#     and the minimum-sample check (10) counts fittable laps. Real sessions, before -> after:
+#       2024 Bahrain Q  -28.5 ms/min, -1.639 s, R2 0.822  ->  -10.0 ms/min, -0.578 s, R2 0.351
+#       2024 China Q   -23.9 ms/min, -1.657 s, R2 0.683  ->  -13.2 ms/min, -0.915 s, R2 0.629
+#     The lower Bahrain R2 is expected: the old fit was explaining car-to-car pace, not grip.
+#     Regression test: test_build_track_evolution_data_removes_qualifying_knockout_bias
+#     (-17.7 ms/min against the pre-fix loader, -10 +/- 1 with the fix).
+#  4. weather_data access sat OUTSIDE the inner try. FastF1 exposes it as a property that
+#     raises when the session was loaded with weather=False; a non-AttributeError escaped to
+#     the outer handler and discarded the whole model over a missing temperature trace. Now
+#     getattr(..., None) inside the try (test_build_track_evolution_data_survives_broken_weather_object).
+#
+# Notes and limits:
+#  - Gated to Practice / Qualifying by the renderer; Race and Sprint pace is dominated by
+#    fuel burn and stint phases, which would swamp the evolution signal.
+#  - Minimum sample: 10 fittable flyers (within 107% of the session best, from drivers with
+#    2+ flyers); below that the builder returns None and the UI explains why.
+#  - Theil-Sen pair enumeration is O(n^2); above 200,000 pairs a deterministic seeded
+#    subsample is used so large lap sets stay bounded.
+#  - Never validated in the browser for dark/light mode or compare mode (static render only).
 def _theil_sen_estimate(
     x: np.ndarray,
     y: np.ndarray,
@@ -2469,6 +2505,26 @@ def _calculate_braking_metrics(df: pd.DataFrame | None, apex_dist: float) -> dic
         return metrics
 
 
+# ── Review notes (#155): Corner Exit Traction & Throttle Pick-Up Aggression ──
+# Merged from the former code_review_issue_155.md. The feature (PR #182) shipped without a
+# review; validating it on the 2024 Bahrain Race fastest laps of VER and LEC found two defects.
+#  1. Flat-out corners were scored as traction events. At T3/T12/T15 throttle stays 88-100%
+#     through the apex, so the first sample above 5% was also the full-throttle sample: ramp
+#     0.00 %/m and a fabricated score of ~75 (50 base + capped distance bonus).
+#  2. Same-sample pick-ups. VER T5 showed init = full = -1.3 m (flat out, with a lift only at
+#     +12 m for the T6 kink - a +/-35 m window wrongly picked that lift up, hence the tight
+#     +/-10 m window, or the nearest sample since samples are ~13 m apart at 240 km/h). A
+#     genuine closed-to-full pick-up between two samples would also give 0 %/m, so the ramp is
+#     now measured from the preceding sample (0->100% over one 5 m sample = 20 %/m, unit-tested).
+# After the fix T3, T5 (VER), T12 and T15 report flat_out with no pick-up metrics or score and
+# no corner reports a 0 %/m ramp. LEC's T5 is still scored (lift, 0.08 %/m, 1 hesitation,
+# score 29) - a real difference from VER being flat.
+#  - Threshold: 85% within +/-10 m of the apex. Bahrain T12 (88% minimum) is a breath; real
+#    lifts sit well below (T2 72-77%, T7 55-70%). Boundary unit-tested at 90% (flat) and 60%.
+#  - The score is computed last (it needs the final oversteer count) and only when a pick-up
+#    was observed. Exit speed, peak exit G and oversteer no longer depend on a pick-up.
+#  - FastF1 car data has no Steering channel, so oversteer_corrections_count is None on real
+#    data; the UI never renders it and the score only penalises truthy counts.
 # Minimum throttle (%) within 10m of the apex for a corner to count as taken flat out.
 # Lifts to ~88% (e.g. Bahrain T12) are a breath, not a traction pick-up.
 FLAT_OUT_THROTTLE_PCT = 85.0
@@ -3460,6 +3516,16 @@ def _build_teammate_battle_data(
 
 # ── Pit Lane Transit Loss & In-Lap / Out-Lap Performance Breakdown ────────────
 
+# ── Review notes (#189): pit stop leaderboard data contract ───────────────────
+# Merged from the former code_review_issue_189.md (PR #191). The full-field leaderboard failed
+# to render, crashed on driver selection changes, or showed incomplete data. Data-layer fixes:
+#  - driver_meta maps BOTH abbreviation and car number to the session-results row, and
+#    driver_stops is keyed under both, so UI matching works whichever identifier the caller has.
+#  - Stops are sorted NaN-safely on (net_loss, pit_lane_time, in_lap) and every stop gets a
+#    sequential s["rank"]; driver_meta is part of the returned payload.
+#  - Cache hygiene (also fixed earlier, see #177 notes in app.py): laps arrive as a plain
+#    DataFrame (_all_laps1) and the session as _sess_obj, so Streamlit never hashes
+#    fastf1.core.Laps / Session objects.
 @st.cache_data(show_spinner=False, ttl=3600)
 def _build_pit_transit_data(
     sess_k: str,
@@ -3836,6 +3902,13 @@ def _build_pit_transit_data(
 #   2. _aggregate_weekend_progression — pure: summaries          → deltas / matrix / cards
 #   3. _build_weekend_progression_data — I/O: loads the sessions, calls 1 and 2
 
+# Review notes (#156): merged from the former code_review_issue_156.md.
+#  - _build_weekend_progression_data is @st.cache_data and loads sessions laps-only; a failing
+#    or empty session is listed under "skipped" instead of aborting the build.
+#  - Driver filtering uses laps_df[laps_df["Driver"] == driver]; laps are cast with
+#    pd.DataFrame(sess.laps.copy()); no st.session_state access inside cached functions.
+#  - Verified: pytest and py_compile only. NOT verified: browser rendering or a real
+#    multi-session network load.
 # Short code → display label, in running order. Used to order sessions and to
 # classify which ones count as "practice" or "qualifying" for the improvement card.
 _WEEKEND_SESSION_LABELS: dict[str, str] = {
@@ -4017,6 +4090,16 @@ def _build_weekend_progression_data(
 #   _classify_traffic_zone   — pure: gap (s) → zone name
 #   _build_dirty_air_analysis — cached: laps DataFrame → per-driver results
 
+# Review notes (#157): merged from the former code_review_issue_157.md.
+#  - Zone thresholds are module constants and their boundaries are tested (2.5 s and 0.8 s
+#    both count as Dirty Air). Only the car exactly one position ahead gives a gap; the
+#    leader, or a gap across a missing record, is NaN and treated as clean air.
+#  - A failing test exposed a real bias: fitting the fuel/tyre trend on ALL laps absorbed the
+#    traffic effect (traffic clusters early or late). The slope is fitted on clean-air laps only.
+#  - Deviation from the issue text: deficit is dirty - clean (positive = slower).
+#  - Known limitation: an overtake caused by the car ahead pitting or retiring is not
+#    filtered out, so the success rate can read slightly high.
+#  - NOT verified: browser rendering and results on real FastF1 race data.
 # Zone thresholds (seconds to the car ahead), as specified in the issue.
 CLEAN_AIR_GAP_S = 2.5   # above this: clean air
 BATTLE_GAP_S = 0.8      # below this: within DRS range / battle zone

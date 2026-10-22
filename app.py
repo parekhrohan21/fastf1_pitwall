@@ -41,6 +41,29 @@ Render flow
                             ideal lap, teammates, heatmaps, gap, race control, positions, map, standings.
 11. PDF export & footer     sidebar debrief export of figures collected above.
 
+Review notes (#177)
+-------------------
+Merged from the former code_review_issue_177.md. The 46 section notes in this file were
+written after reading the code they describe, and the change was comment-only: the AST of
+this module was identical to ``main`` apart from the docstring. Streamlit "magic" can render
+a bare top-level string, so ``AppTest`` was used to confirm this docstring never appears on
+the page and ``set_page_config`` still runs first.
+
+Four defects were found while reading every section. None was introduced by #177; all four
+have since been fixed in later work:
+
+1. ``lap1`` / ``lap2`` were overwritten by the undercut simulator's pairing loop (integer lap
+   numbers replacing the selected lap objects, breaking six downstream sections). The loop now
+   uses ``_u_lap1`` / ``_u_lap2``.
+2. The Pit Lane Transit Loss section never rendered: ``_build_pit_transit_data`` received raw
+   ``fastf1.core.Laps`` and an un-prefixed session (``UnhashableParamError``) while a bare
+   ``except Exception: pass`` hid it. It now receives ``_all_laps1`` and ``_sess_obj`` (#189).
+3. The undercut gap read ``_all_laps1[LapNumber == w_start]["Time"].iloc[0]`` with no driver
+   filter. It now reads from the per-driver frames ``_laps_driver1`` / ``_laps_driver2``.
+4. ``dark_mode`` was initialised only at module import time, which runs once per Python
+   process rather than once per browser session; ``inject_styles()`` and ``_toggle_theme()``
+   now also guard it on every run.
+
 Comparison modes
 ----------------
 - Driver compare: two drivers from one session. ``sess2`` is ``None``.
