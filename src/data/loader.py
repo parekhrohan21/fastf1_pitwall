@@ -4417,14 +4417,38 @@ def _extract_brag_worthy_moments(
         return moments
 
 
-def _interpolate_latent_trajectory(latent_data: dict, target_fps: int = 30, speed: float = 1.0) -> np.ndarray:
-    """Cubic-spline the latent trajectory onto a fixed frame clock.
+def _latent_frame_times(
+    latent_data: dict,
+    target_fps: int = 30,
+    speed: float = 1.0,
+    clips: list[tuple[float, float]] | None = None,
+) -> np.ndarray:
+    """Lap-time (s) of every video frame.
 
-    ``speed`` is the playback multiplier (2.0 plays the lap twice as fast), so the result has
-    ``round(duration / speed * target_fps)`` rows of k latent coordinates (minimum 2).
+    The whole lap by default; with ``clips`` (``[(t0, t1), ...]``) only those windows, back to
+    back - used by the Peak Moments Reel. ``speed`` is the playback multiplier.
+    """
+    end = float(latent_data["t"][-1])
+    windows = clips or [(0.0, end)]
+    parts = []
+    for t0, t1 in windows:
+        t0, t1 = max(0.0, float(t0)), min(end, float(t1))
+        if t1 <= t0:
+            continue
+        parts.append(np.linspace(t0, t1, max(2, int(round((t1 - t0) / max(speed, 1e-6) * target_fps)))))
+    return np.concatenate(parts) if parts else np.linspace(0.0, end, 2)
+
+
+def _interpolate_latent_trajectory(
+    latent_data: dict,
+    target_fps: int = 30,
+    speed: float = 1.0,
+    clips: list[tuple[float, float]] | None = None,
+) -> np.ndarray:
+    """Cubic-spline the latent trajectory onto a fixed frame clock (see ``_latent_frame_times``).
+
+    Returns an ``(n_frames, k)`` array: smooth coordinates for camera tracking and HUD needles.
     """
     from scipy.interpolate import CubicSpline
-    t, z = latent_data["t"], latent_data["z"]
-    n_frames = max(2, int(round(float(t[-1]) / max(speed, 1e-6) * target_fps)))
-    frame_t = np.linspace(0.0, float(t[-1]), n_frames)
-    return CubicSpline(t, z, axis=0)(frame_t)
+    frame_t = _latent_frame_times(latent_data, target_fps, speed, clips)
+    return CubicSpline(latent_data["t"], latent_data["z"], axis=0)(frame_t)
