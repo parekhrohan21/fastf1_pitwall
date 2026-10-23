@@ -4240,3 +4240,191 @@ def _build_dirty_air_analysis(
         return {"drivers": out} if out else None
     except Exception:
         return None
+
+
+# ── Automated Session Brag Video: Telemetry Latent Space (Issue #171) ─────────
+# CHANGE (#171): everything below is new. A lap's multi-channel telemetry is standardised
+# and projected onto its top principal components (a PCA "latent manifold" z(t)), highlight
+# moments are detected on it, and a cubic spline turns it into a smooth per-frame trajectory
+# for the video renderer in src/charts/video.py.
+#   _build_telemetry_latent_manifold — cached: telemetry DataFrame → latent dict (or None)
+#   _extract_brag_worthy_moments     — pure: latent dict + laps → highlight moments
+#   _interpolate_latent_trajectory   — pure: latent dict → (n_frames, k) spline array
+# PCA is done with numpy SVD, so no scikit-learn dependency is added.
+
+# Latent channels fed to PCA (those missing from the telemetry are skipped, not faked).
+_LATENT_CHANNELS = ["Speed", "Throttle", "Brake", "RPM", "Gear", "DRS", "a_lon", "a_lat"]
+
+
+def _smooth(x: np.ndarray, window: int = 5) -> np.ndarray:
+    """Centred moving average that keeps the array length (edges use a shrinking window)."""
+    if window <= 1 or len(x) < window:
+        return x
+    k = np.ones(window) / window
+    pad = window // 2
+    padded = np.pad(x, (pad, window - 1 - pad), mode="edge")
+    return np.convolve(padded, k, mode="valid")
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_telemetry_latent_manifold(
+    sess_k: str,
+    driver: str,
+    lap_num: int,
+    tel_df: pd.DataFrame,
+    k: int = 3,
+) -> dict | None:
+    """Standardise a lap's telemetry channels and project them onto a k-dim PCA latent manifold.
+
+    Returns the latent trajectory ``z`` (n × k), explained-variance ratios, the derived
+    longitudinal / lateral acceleration (G) and the raw channels the renderer needs; ``None``
+    when the telemetry is too incomplete (no Speed/Distance/Time or fewer than 20 samples).
+    """
+    try:
+        if tel_df is None or tel_df.empty or not {"Speed", "Distance", "Time"}.issubset(tel_df.columns):
+            return None
+        df = tel_df.sort_values("Distance").dropna(subset=["Speed", "Distance", "Time"]).copy()
+        df = df.drop_duplicates(subset="Time")
+        if len(df) < 20:
+            return None
+
+        t = df["Time"].dt.total_seconds().to_numpy(dtype=float)
+        t = t - t[0]
+        v_ms = df["Speed"].to_numpy(dtype=float) / 3.6
+        dt = np.maximum(np.gradient(t), 1e-3)
+        # Longitudinal G from the speed derivative (negative = braking), lightly smoothed.
+        a_lon = _smooth(np.gradient(v_ms) / dt / 9.81, 5)
+
+        # Lateral G from path curvature: a_lat = v² · κ. FastF1 X/Y are in 1/10 m.
+        a_lat = np.zeros(len(df))
+        has_xy = {"X", "Y"}.issubset(df.columns) and df[["X", "Y"]].notna().all().all()
+        if has_xy:
+            x = _smooth(df["X"].to_numpy(dtype=float) / 10.0, 5)
+            y = _smooth(df["Y"].to_numpy(dtype=float) / 10.0, 5)
+            heading = np.unwrap(np.arctan2(np.gradient(y), np.gradient(x)))
+            ds = np.maximum(np.gradient(df["Distance"].to_numpy(dtype=float)), 1e-3)
+            a_lat = _smooth(v_ms ** 2 * np.gradient(heading) / ds / 9.81, 5)
+
+        cols: dict[str, np.ndarray] = {"Speed": df["Speed"].to_numpy(dtype=float), "a_lon": a_lon, "a_lat": a_lat}
+        for name, src in (("Throttle", "Throttle"), ("RPM", "RPM"), ("Gear", "nGear"), ("Gear", "Gear")):
+            if src in df.columns and name not in cols:
+                cols[name] = pd.to_numeric(df[src], errors="coerce").ffill().bfill().fillna(0).to_numpy(dtype=float)
+        if "Brake" in df.columns:
+            cols["Brake"] = df["Brake"].astype(float).fillna(0).to_numpy()
+        if "DRS" in df.columns:
+            # FastF1 DRS codes >= 10 mean the flap is open.
+            cols["DRS"] = (pd.to_numeric(df["DRS"], errors="coerce").fillna(0) >= 10).astype(float).to_numpy()
+
+        used = [c for c in _LATENT_CHANNELS if c in cols]
+        if len(used) < 3:
+            return None
+        mat = np.column_stack([cols[c] for c in used])
+        std = mat.std(axis=0)
+        std[std < 1e-9] = 1.0                       # constant channel: avoid dividing by zero
+        zs = (mat - mat.mean(axis=0)) / std
+        # PCA by SVD: rows of vt are principal axes; singular values give variance shares.
+        _, s, vt = np.linalg.svd(zs, full_matrices=False)
+        k_eff = int(max(1, min(k, len(used))))
+        z = _smooth_cols(zs @ vt[:k_eff].T)
+        var = (s ** 2) / max(float((s ** 2).sum()), 1e-12)
+
+        return {
+            "driver": driver, "lap_num": lap_num, "k": k_eff, "channels": used,
+            "t": t, "distance": df["Distance"].to_numpy(dtype=float),
+            "z": z, "explained_variance": var[:k_eff],
+            "speed": cols["Speed"], "a_lon": a_lon, "a_lat": a_lat,
+            "throttle": cols.get("Throttle", np.zeros(len(df))),
+            "brake": cols.get("Brake", np.zeros(len(df))),
+            "rpm": cols.get("RPM", np.zeros(len(df))),
+            "gear": cols.get("Gear", np.zeros(len(df))),
+            "drs": cols.get("DRS", np.zeros(len(df))),
+            # Without position data the renderer falls back to a progress line on distance.
+            "x": df["X"].to_numpy(dtype=float) if has_xy else df["Distance"].to_numpy(dtype=float),
+            "y": df["Y"].to_numpy(dtype=float) if has_xy else np.zeros(len(df)),
+            "has_xy": bool(has_xy),
+        }
+    except Exception:
+        return None
+
+
+def _smooth_cols(m: np.ndarray, window: int = 5) -> np.ndarray:
+    """Apply ``_smooth`` to every column of a 2-D array."""
+    return np.column_stack([_smooth(m[:, i], window) for i in range(m.shape[1])])
+
+
+def _extract_brag_worthy_moments(
+    sess_k: str,
+    driver: str,
+    laps_df: pd.DataFrame,
+    latent_data: dict,
+) -> list[dict]:
+    """Find the lap's highlight moments: top speed, peak braking, best apex, purple / PB sectors.
+
+    Each moment is ``{"type", "label", "t_s", "distance_m", "value"}`` (time since lap start,
+    sorted by time). Sector moments need ``laps_df`` (session-wide best sector times) and
+    are placed where the sector ends. Returns ``[]`` for missing data.
+    """
+    moments: list[dict] = []
+    try:
+        if not latent_data:
+            return moments
+        t, dist = latent_data["t"], latent_data["distance"]
+        speed, a_lon = latent_data["speed"], latent_data["a_lon"]
+
+        i = int(np.argmax(speed))
+        drs = " + DRS" if latent_data["drs"][i] > 0.5 else ""
+        moments.append({"type": "top_speed", "label": f"{speed[i]:.1f} km/h TOP SPEED{drs}",
+                        "t_s": float(t[i]), "distance_m": float(dist[i]), "value": float(speed[i])})
+
+        j = int(np.argmin(a_lon))
+        if a_lon[j] < -0.5:     # ignore laps with no real braking event
+            moments.append({"type": "peak_braking", "label": f"{abs(a_lon[j]):.2f} G PEAK BRAKING",
+                            "t_s": float(t[j]), "distance_m": float(dist[j]), "value": float(abs(a_lon[j]))})
+
+        # Apex velocity: the HIGHEST minimum speed among genuine corners (local minima that
+        # are at least 20 km/h below the speed around them) - the quickest corner on the lap.
+        mins = [n for n in range(5, len(speed) - 5)
+                if speed[n] == speed[n - 5:n + 6].min()
+                and speed[n - 5:n + 6].max() - speed[n] >= 20]
+        if mins:
+            n = max(mins, key=lambda idx: speed[idx])
+            moments.append({"type": "apex_speed", "label": f"{speed[n]:.0f} km/h APEX SPEED",
+                            "t_s": float(t[n]), "distance_m": float(dist[n]), "value": float(speed[n])})
+
+        # Sectors: purple = session best, PB = the driver's own best (only if not purple).
+        if laps_df is not None and not laps_df.empty and "LapNumber" in laps_df.columns:
+            mine = laps_df[laps_df["Driver"] == driver]
+            row = mine[mine["LapNumber"] == latent_data["lap_num"]]
+            if not row.empty:
+                row = row.iloc[0]
+                elapsed = 0.0
+                for n in (1, 2, 3):
+                    col = f"Sector{n}Time"
+                    if col not in laps_df.columns or pd.isna(row.get(col)):
+                        break
+                    sec = row[col].total_seconds()
+                    elapsed += sec
+                    best_all = laps_df[col].dropna().dt.total_seconds().min()
+                    best_own = mine[col].dropna().dt.total_seconds().min()
+                    kind = "PURPLE" if sec <= best_all + 1e-6 else ("PERSONAL BEST" if sec <= best_own + 1e-6 else None)
+                    if kind:
+                        at = min(elapsed, float(t[-1]))
+                        moments.append({"type": "purple_sector" if kind == "PURPLE" else "pb_sector",
+                                        "label": f"{kind} SECTOR {n}", "t_s": float(at),
+                                        "distance_m": float(np.interp(at, t, dist)), "value": sec})
+        return sorted(moments, key=lambda m: m["t_s"])
+    except Exception:
+        return moments
+
+
+def _interpolate_latent_trajectory(latent_data: dict, target_fps: int = 30, speed: float = 1.0) -> np.ndarray:
+    """Cubic-spline the latent trajectory onto a fixed frame clock.
+
+    ``speed`` is the playback multiplier (2.0 plays the lap twice as fast), so the result has
+    ``round(duration / speed * target_fps)`` rows of k latent coordinates (minimum 2).
+    """
+    from scipy.interpolate import CubicSpline
+    t, z = latent_data["t"], latent_data["z"]
+    n_frames = max(2, int(round(float(t[-1]) / max(speed, 1e-6) * target_fps)))
+    frame_t = np.linspace(0.0, float(t[-1]), n_frames)
+    return CubicSpline(t, z, axis=0)(frame_t)
