@@ -4252,6 +4252,21 @@ def _build_dirty_air_analysis(
 #   _interpolate_latent_trajectory   — pure: latent dict → (n_frames, k) spline array
 # PCA is done with numpy SVD, so no scikit-learn dependency is added.
 
+# Review notes (#171): kept here instead of a separate review file.
+#  - No scikit-learn: PCA is numpy SVD on standardised channels (constant channels get std 1
+#    so they cannot divide by zero); only channels present in the telemetry are used (>= 3).
+#  - Lateral G is v² · curvature from X/Y (FastF1 units are 1/10 m); without position data
+#    a_lat is 0 and the renderer draws a progress line instead of a circuit.
+#  - A failing test showed the first apex detector (a +/-5-sample window) never fired on
+#    shallow corners; it is now scipy find_peaks on -speed with 20 km/h prominence.
+#  - Deviations from the issue text: _build_telemetry_latent_manifold takes the lap's telemetry
+#    DataFrame (laps_df cannot supply it); generate_brag_video_frames returns (bytes, mime)
+#    because the encoder may fall back from MP4 to GIF.
+#  - Verified: pytest (16 tests, incl. GIF fallback and MP4-failure fallback) and a visual check
+#    of a rendered frame. NOT verified: the imageio MP4 path (ffmpeg is not installed here),
+#    real FastF1 telemetry, and in-browser playback.
+#  - Cost: pure-Pillow frames run ~2-3 ms per 360p frame; MAX_FRAMES / GIF_MAX_FRAMES and the
+#    playback-speed control keep a request bounded.
 # Latent channels fed to PCA (those missing from the telemetry are skipped, not faked).
 _LATENT_CHANNELS = ["Speed", "Throttle", "Brake", "RPM", "Gear", "DRS", "a_lon", "a_lat"]
 
@@ -4381,13 +4396,13 @@ def _extract_brag_worthy_moments(
             moments.append({"type": "peak_braking", "label": f"{abs(a_lon[j]):.2f} G PEAK BRAKING",
                             "t_s": float(t[j]), "distance_m": float(dist[j]), "value": float(abs(a_lon[j]))})
 
-        # Apex velocity: the HIGHEST minimum speed among genuine corners (local minima that
-        # are at least 20 km/h below the speed around them) - the quickest corner on the lap.
-        mins = [n for n in range(5, len(speed) - 5)
-                if speed[n] == speed[n - 5:n + 6].min()
-                and speed[n - 5:n + 6].max() - speed[n] >= 20]
-        if mins:
-            n = max(mins, key=lambda idx: speed[idx])
+        # Apex velocity: the HIGHEST minimum speed among genuine corners, i.e. speed minima with
+        # at least 20 km/h of prominence (so straight-line wobble is ignored) - the quickest
+        # corner on the lap. find_peaks on -speed is independent of the sampling rate.
+        from scipy.signal import find_peaks
+        mins, _ = find_peaks(-speed, prominence=20)
+        if len(mins):
+            n = int(max(mins, key=lambda idx: speed[idx]))
             moments.append({"type": "apex_speed", "label": f"{speed[n]:.0f} km/h APEX SPEED",
                             "t_s": float(t[n]), "distance_m": float(dist[n]), "value": float(speed[n])})
 
