@@ -2834,3 +2834,41 @@ def build_dirty_air_fig(driver_result: dict, title: str = "") -> go.Figure | Non
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig
+
+
+# ── Telemetry Latent Space 3D Projection (Issue #171) ─────────────────────────
+# CHANGE (#171): new figure builder for the Brag Video section's "Latent Space Manifold
+# inspector". The lap's latent trajectory z(t) is drawn in 3-D, coloured by speed, with the
+# highlight moments as labelled markers, so the PCA structure behind the video can be inspected.
+
+def build_latent_space_projection_fig(latent_data: dict, moments: list[dict] | None = None) -> go.Figure | None:
+    """3-D Plotly view of the PCA latent trajectory (z1, z2, z3), coloured by speed."""
+    if not latent_data or latent_data.get("z") is None:
+        return None
+    z = latent_data["z"]
+    # With fewer than 3 components pad with zeros so the 3-D scene still renders.
+    z3 = np.column_stack([z, np.zeros((len(z), max(0, 3 - z.shape[1])))])[:, :3]
+    var = latent_data.get("explained_variance", [])
+    axis_names = [f"z{i + 1} ({v * 100:.0f}%)" for i, v in enumerate(var[:3])] + ["z", "z", "z"]
+
+    fig = go.Figure(go.Scatter3d(
+        x=z3[:, 0], y=z3[:, 1], z=z3[:, 2], mode="lines+markers", name="Latent trajectory",
+        line=dict(color=latent_data["speed"], colorscale="Turbo", width=5),
+        marker=dict(size=2, color=latent_data["speed"], colorscale="Turbo",
+                    colorbar=dict(title="km/h", thickness=12)),
+        customdata=np.column_stack([latent_data["distance"], latent_data["speed"]]),
+        hovertemplate="%{customdata[0]:.0f} m<br>%{customdata[1]:.0f} km/h<extra></extra>",
+    ))
+    if moments:
+        idx = [int(np.clip(np.searchsorted(latent_data["t"], m["t_s"]), 0, len(z3) - 1)) for m in moments]
+        fig.add_trace(go.Scatter3d(
+            x=z3[idx, 0], y=z3[idx, 1], z=z3[idx, 2], mode="markers+text", name="Brag moments",
+            text=[m["label"] for m in moments], textposition="top center",
+            marker=dict(size=7, color="#FFD700", symbol="diamond"),
+        ))
+    fig.update_layout(
+        height=480, margin=dict(l=0, r=0, t=30, b=0), showlegend=False,
+        scene=dict(xaxis_title=axis_names[0], yaxis_title=axis_names[1], zaxis_title=axis_names[2]),
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
