@@ -119,7 +119,7 @@ from src.ui.components import (
     _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section, _render_weekend_progression_section,
-    _render_dirty_air_section
+    _render_dirty_air_section, _render_brag_video_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1292,6 +1292,18 @@ except Exception:
     _da_session_type = session_type
 _render_dirty_air_section(
     sess_key, _all_laps1, _da_session_type, _hl_drivers, _hl_colours, _fmt_driver1
+)
+
+# ── Automated Session Brag Video (Issue #171) ──────────────────────────────
+# Highlight clip for Driver 1 built from telemetry latent-space moments. Driver 2 is only
+# offered for the Pole Position Duel when it comes from the same session (sess2 is None).
+try:
+    _brag_lap_no = int(lap1["LapNumber"]) if lap1 is not None else None
+except Exception:
+    _brag_lap_no = None
+_render_brag_video_section(
+    sess, _all_laps1, driver1, _brag_lap_no, sess_key, colour1, _fmt_driver1,
+    driver2 if compare and sess2 is None else None, colour2, _fmt_driver2
 )
 
 # ── Weekend Multi-Session Progression Tracker (Issue #156) ─────────────────

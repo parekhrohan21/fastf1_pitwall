@@ -12,6 +12,7 @@ from src.data.loader import (
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_track_evolution_data,
     _build_multi_year_comparison, _build_weekend_progression_data, _build_dirty_air_analysis,
+    _build_telemetry_latent_manifold, _extract_brag_worthy_moments,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data
@@ -23,8 +24,10 @@ from src.charts.plotly import (
     build_track_evolution_fig,
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
-    build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig
+    build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
+    build_latent_space_projection_fig
 )
+from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
     """Render constructor standings as a styled HTML table."""
@@ -3272,3 +3275,149 @@ def _render_dirty_air_section(
         fig = build_dirty_air_fig(res, f"{label} — lap pace by traffic zone")
         if fig is not None:
             st.plotly_chart(fig, width="stretch", key=f"dirty_air_{sess_k}_{drv}")
+
+
+# ── Automated Session Brag Video (Issue #171) ─────────────────────────────────
+# CHANGE (#171): new section. Rendering a clip takes seconds to a minute, so it runs only
+# when the user presses Generate; the result is kept in st.session_state so the video,
+# download button and latent-space inspector survive Streamlit reruns.
+
+_BRAG_MODES = ["Fastest Lap", "Peak Moments Reel", "Pole Position Duel", "Full Lap Replay"]
+
+
+def _brag_lap_latent(sess_obj, driver: str, lap_row, sess_k: str):
+    """Latent manifold for one lap: position-merged telemetry when available, else car data only."""
+    tel = None
+    for getter in (lambda: lap_row.get_telemetry(), lambda: lap_row.get_car_data().add_distance()):
+        try:
+            tel = getter()
+            if tel is not None and not tel.empty:
+                break
+        except Exception:
+            tel = None
+    if tel is None:
+        return None
+    return _build_telemetry_latent_manifold(sess_k, driver, int(lap_row["LapNumber"]), pd.DataFrame(tel))
+
+
+def _reel_clips(moments: list[dict], pad: float = 2.5) -> list[tuple[float, float]]:
+    """Merge ±``pad`` s windows around each moment into non-overlapping clips."""
+    clips: list[list[float]] = []
+    for m in sorted(moments, key=lambda m: m["t_s"]):
+        a, b = m["t_s"] - pad, m["t_s"] + pad
+        if clips and a <= clips[-1][1]:
+            clips[-1][1] = max(clips[-1][1], b)
+        else:
+            clips.append([a, b])
+    return [(a, b) for a, b in clips]
+
+
+def _render_brag_video_section(
+    sess_obj,
+    laps_df: pd.DataFrame,
+    driver: str,
+    lap_num: int | None,
+    sess_k: str,
+    colour: str = "#E8002D",
+    fmt_func=None,
+    driver2: str | None = None,
+    colour2: str = "#FF8700",
+    fmt_func2=None,
+) -> None:
+    """Render the Brag Video controls, generated clip, download button and latent-space inspector."""
+    st.markdown("<div class='section-title'>🎬 Brag Video — Telemetry Latent Space Highlights</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px;'>"
+        "Projects the lap's telemetry onto a PCA latent manifold, finds the standout moments "
+        "(top speed, peak braking, fastest apex, purple / personal-best sectors) and renders a "
+        "shareable clip with a live HUD.</div>",
+        unsafe_allow_html=True,
+    )
+    label = fmt_func(driver) if fmt_func else driver
+    label2 = (fmt_func2 or fmt_func)(driver2) if driver2 and (fmt_func2 or fmt_func) else (driver2 or "")
+
+    c1, c2, c3, c4 = st.columns(4)
+    mode = c1.selectbox("Highlight mode", _BRAG_MODES, key=f"brag_mode_{sess_k}")
+    aspect = c2.radio("Aspect ratio", ["16:9", "9:16"], horizontal=True, key=f"brag_ar_{sess_k}",
+                      help="16:9 broadcast landscape, 9:16 social reel / mobile")
+    res = c3.selectbox("Resolution", list(RESOLUTIONS), index=1, key=f"brag_res_{sess_k}")
+    fps = c4.radio("Frame rate", [30, 60], horizontal=True, key=f"brag_fps_{sess_k}")
+    speed = st.select_slider("Playback speed (full-lap modes)", [1, 2, 4, 8], value=4, key=f"brag_speed_{sess_k}",
+                             help="Higher = shorter, faster to render. The reel always plays at 1×.")
+
+    if mode == "Pole Position Duel" and not driver2:
+        st.info("ℹ️ Tick **Compare with Driver 2** (same session) to use the Pole Position Duel.")
+        return
+
+    state_key = f"brag_{sess_k}_{driver}_{driver2}_{lap_num}_{mode}_{aspect}_{res}_{fps}_{speed}"
+    if st.button("🎬 Generate Brag Video", key=f"brag_btn_{sess_k}"):
+        with st.spinner("Building latent manifold and rendering frames…"):
+            result = _generate_brag_result(sess_obj, laps_df, driver, lap_num, sess_k, mode, aspect, res, fps,
+                                           speed, colour, colour2, label, label2, driver2)
+        st.session_state[state_key] = result
+
+    result = st.session_state.get(state_key)
+    if not result:
+        return
+    if result.get("error"):
+        st.warning(f"⚠️ {result['error']}")
+        return
+
+    data, mime = result["video"], result["mime"]
+    if mime == "video/mp4":
+        st.video(data, format="video/mp4")
+    else:
+        st.image(data)
+        st.caption("imageio-ffmpeg is not installed, so this is an animated GIF (360p, ≤ 15 FPS). "
+                   "`pip install imageio imageio-ffmpeg` for full-quality MP4.")
+    ext = "mp4" if mime == "video/mp4" else "gif"
+    st.download_button(f"⬇️ Download {ext.upper()}", data, file_name=f"brag_{driver}_{sess_k}.{ext}", mime=mime,
+                       key=f"brag_dl_{state_key}")
+
+    if result["moments"]:
+        st.markdown("**Highlights detected:** " + " · ".join(m["label"] for m in result["moments"]))
+    with st.expander("🧬 Latent Space Manifold inspector"):
+        fig = build_latent_space_projection_fig(result["latent"], result["moments"])
+        if fig is not None:
+            st.plotly_chart(fig, width="stretch", key=f"brag_latent_{state_key}")
+        ev = result["latent"]["explained_variance"]
+        st.caption(f"Channels: {', '.join(result['latent']['channels'])} · "
+                   + " · ".join(f"z{i + 1}: {v * 100:.1f}%" for i, v in enumerate(ev)) + " of variance")
+
+
+def _generate_brag_result(sess_obj, laps_df, driver, lap_num, sess_k, mode, aspect, res, fps, speed,
+                          colour, colour2, label, label2, driver2) -> dict:
+    """Pick the lap(s) for ``mode``, build latent data + moments and render the clip."""
+    try:
+        all_laps = sess_obj.laps
+        def fastest(drv):
+            return all_laps.pick_drivers(drv).pick_fastest()
+        def selected(drv):
+            rows = all_laps[(all_laps["Driver"] == drv) & (all_laps["LapNumber"] == lap_num)]
+            return rows.iloc[0] if not rows.empty else fastest(drv)
+
+        use_fastest = mode in ("Fastest Lap", "Pole Position Duel")
+        lap1 = fastest(driver) if use_fastest else selected(driver)
+        latent = _brag_lap_latent(sess_obj, driver, lap1, sess_k)
+        if latent is None:
+            return {"error": "Telemetry for this lap is too incomplete to build a latent manifold."}
+        moments = _extract_brag_worthy_moments(sess_k, driver, laps_df, latent)
+
+        latent2, clips, play = None, None, float(speed)
+        if mode == "Pole Position Duel":
+            latent2 = _brag_lap_latent(sess_obj, driver2, fastest(driver2), sess_k)
+            if latent2 is None:
+                return {"error": f"No usable telemetry for {label2 or driver2}."}
+        if mode == "Peak Moments Reel":
+            clips, play = _reel_clips(moments), 1.0
+            if not clips:
+                return {"error": "No highlight moments were detected on this lap."}
+
+        data, mime = generate_brag_video_frames(
+            latent, moments, fps=fps, aspect_ratio=aspect, resolution=res, speed=play, clips=clips,
+            latent_data2=latent2, colour=colour, colour2=colour2, label=label, label2=label2 if latent2 else "")
+        if not data:
+            return {"error": "The video could not be rendered."}
+        return {"video": data, "mime": mime, "latent": latent, "moments": moments}
+    except Exception as exc:
+        return {"error": f"Brag video generation failed: {exc}"}
