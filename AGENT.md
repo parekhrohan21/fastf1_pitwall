@@ -57,7 +57,7 @@ fastf1_pitwall/
 ├── README.md           ← user-facing documentation (keep in sync)
 ├── AGENT.md            ← this file
 ├── DOCS.md             ← technical developer documentation
-├── DECISIONS.md        ← architecture decision records & AI choices (planned, Issue #172)
+├── DECISIONS.md        ← Architecture Decision Records: rationale, maths, rejected alternatives (Issue #172)
 └── cache/              ← FastF1 disk cache (gitignored, never commit)
 ```
 
@@ -249,6 +249,7 @@ To resolve technical debt and maintainability issues:
 - **Decision #43**: *Clean Air vs Dirty Air Pace Impact & Overtaking Analysis (`_build_dirty_air_analysis`, `build_dirty_air_fig`, `_render_dirty_air_section`)* — Laps are filed into Clean Air (> 2.5 s), Dirty Air (0.8–2.5 s) and DRS / Battle (< 0.8 s) by the gap to the car immediately ahead, taken from the session clock (`Time`) at lap completion and averaged with the lap-start gap; non-adjacent positions yield no gap. The fuel / tyre trend slope is fitted on **clean-air laps only** — fitting every lap lets the model absorb the traffic effect it is trying to measure (traffic clusters early/late). Deficit is `dirty − clean` (positive = slower). Overtaking success = share of battle runs (consecutive DRS-range laps, plus the following lap) in which the driver gained a place without pitting. The section is Race / Sprint only and reads the session type from the loaded session (`sess.name`), not the sidebar.
 - **Decision #44**: *Code review notes live in the code, not in separate files* — Supersedes Decision #24. The per-issue `code_review_issue_<n>.md` artifacts (#154, #155, #156, #157, #177, #183, #185, #187, #189) were merged into `# ── Review notes (#<n>) ──` comment blocks beside the code they describe, and the files were deleted. Review findings now travel with the code and cannot drift out of sync with it. Docs-only reviews (#183, #185, #187) had no code to attach to and were dropped; their substance is in the `DOCS.md` changelog.
 - **Decision #45**: *Brag Video via PCA latent space, Pillow frames and optional MP4 (`_build_telemetry_latent_manifold`, `src/charts/video.py`)* — The latent manifold is a numpy-SVD PCA over standardised telemetry channels (no scikit-learn). Frames are drawn with Pillow (already a dependency) and streamed into the encoder one at a time. MP4 needs `imageio` + `imageio-ffmpeg`; when they are missing, or encoding fails, the clip falls back to a 360p ≤ 15 FPS animated GIF so the feature never hard-fails. Cost is bounded by `MAX_FRAMES` / `GIF_MAX_FRAMES` and a playback-speed control, and generation only runs on button press with the result kept in `st.session_state`. `generate_brag_video_frames` returns `(bytes, mime)` rather than bytes because the container can change. Review findings for this feature live as comments in `loader.py` (Decision #44).
+- **Decision #46**: *Dedicated `DECISIONS.md`* — Long-form Architecture Decision Records (context, decision, maths, rejected alternatives, consequences) live in `DECISIONS.md`; this file keeps only the short rule. Append the next `ADR-0nn` and update its index when a change involves an architectural choice or algorithmic trade-off (Code Review checklist). Older ADRs are marked *(reconstructed)* because their rationale was inferred from code and history.
 
 ---
 

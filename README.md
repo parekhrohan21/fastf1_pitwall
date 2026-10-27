@@ -122,7 +122,7 @@ FastF1 session telemetry is automatically cached in `./cache`, which is created 
 
 ## ✨ Key Features
 
-Issue numbers link directly to the corresponding GitHub issue and Pull Request. Technical implementation details are documented in [DOCS.md](DOCS.md).
+Issue numbers link directly to the corresponding GitHub issue and Pull Request. Technical implementation details are documented in [DOCS.md](DOCS.md); the reasoning behind each design choice is in [DECISIONS.md](DECISIONS.md).
 
 ### 🏎 Lap Telemetry & Head-to-Head Dynamics
 
@@ -266,7 +266,8 @@ fastf1_pitwall/
 ├── .gitignore                  # Git repository exclusions (cache, bytecode, test artifacts)
 ├── README.md                   # User documentation, feature guide & architecture index
 ├── AGENT.md                    # AI developer guidelines, architectural decisions & review checklist
-└── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
+├── DOCS.md                     # Comprehensive technical developer manual & pipeline architecture
+└── DECISIONS.md                # Architecture Decision Records: rationale, maths and rejected alternatives
 ```
 
 ---
@@ -382,7 +383,6 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | **[#198](https://github.com/parekhrohan21/fastf1_pitwall/issues/198)** | `feat: Corner Geometry & Minimum Radius Apex Trajectory Curvature Analysis` | Corner Dynamics | High-resolution trajectory analysis calculating instantaneous curvature radius ($R = 1/\kappa$), geometric apex clipping precision, entry width, and exit track-out run-off usage. | Open |
 | **[#197](https://github.com/parekhrohan21/fastf1_pitwall/issues/197)** | `feat: Driver Driving Style DNA & Apex Aggression Spider Radar` | Driver Analytics | 6-axis polar spider radar profiling driving DNA: trail-braking modulation, throttle ramp aggression, steering smoothness, gear shift RPM exploitation, apex commitment, and high-speed aero confidence. | Open |
 | **[#196](https://github.com/parekhrohan21/fastf1_pitwall/issues/196)** | `feat: Tire Stint Pace Degradation Matrix & Pit Window Re-optimisation Simulator` | Strategy Simulation | Dynamic race strategy re-optimisation solver calculating optimal pit windows for 1-stop vs 2-stop strategies based on live degradation rates, pit loss duration, and undercut risk. | Open |
-| **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `docs: add DECISIONS.md to document Architectural choices and AI implementation decisions` | Architecture & Governance | Standardised Architecture Decision Records (ADRs) cataloguing key algorithmic choices, mathematical rationale, engineering trade-offs, and rejected alternatives. | Open |
 
 ---
 
@@ -392,6 +392,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 |:---:|---|---|---|
 | **[#201](https://github.com/parekhrohan21/fastf1_pitwall/issues/201)** | `docs: sync README and DOCS.md active roadmap with newly created feature issues (#196-#200)` | Documentation | Synchronised Active Roadmap in `README.md` and Future Roadmap in `DOCS.md` with newly defined feature issues spanning strategy simulation, driving style DNA, corner curvature, streamgraphs, and start launch analysis. |
 | **[#195](https://github.com/parekhrohan21/fastf1_pitwall/pull/195)** / **[#194](https://github.com/parekhrohan21/fastf1_pitwall/issues/194)** | `docs: sync README with PR #193 and Issue #192` | Documentation | Synchronised README Resolved Issues Index with PR #193 and Issue #192 entries in reverse-chronological order. |
+| **[#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)** | `docs: add DECISIONS.md to document Architecture Decision Records (ADRs) and AI problem-solving rationales` | Architecture & Governance | New `DECISIONS.md`: 28 ADRs with context, decision, maths, rejected alternatives and consequences; cross-referenced from README, AGENT.md and DOCS.md. |
 | **[#171](https://github.com/parekhrohan21/fastf1_pitwall/issues/171)** | `feat: Automated Session Brag Video Generation via Telemetry Latent Spaces` | Telemetry & Video | Standardised 9D telemetry projected onto 3D PCA manifold via SVD; detected highlight moments (peak G, top speed with DRS, apexes via `scipy.signal.find_peaks`); spline frame clock, Pillow renderer (`src/charts/video.py`) with H.264 MP4 / fallback GIF encoding and `_render_brag_video_section`. |
 | **[40a7b15](https://github.com/parekhrohan21/fastf1_pitwall/commit/40a7b15)** | `docs: merge code review files into code comments` | Code Hygiene & Docs | Consolidated standalone `code_review_issue_<n>.md` review artifacts into inline `# ── Review notes (#n) ──` comment blocks directly above their respective source code across `loader.py`, `plotly.py`, `components.py`, and `app.py` (Decision #44). |
 | **[#157](https://github.com/parekhrohan21/fastf1_pitwall/issues/157)** | `feat: Clean Air vs Dirty Air Pace Impact & Overtaking Analysis` | Race Strategy | Traffic-zone pace analysis: `_build_dirty_air_analysis`, `build_dirty_air_fig`, `_render_dirty_air_section`; Clean Air %, time lost in traffic, dirty air deficit and overtaking success rate. |
