@@ -919,6 +919,7 @@ section.main > div.block-container {
 background-color: #0d0d0d !important;
 color: #e8e8e8 !important;
 }
+html { color-scheme: dark !important; }
 [data-testid="stSidebar"] {
 background-color: #111111 !important;
 }
@@ -1020,6 +1021,39 @@ color: #111111 !important;
 [data-testid="stSidebar"] [data-baseweb="select"] [data-testid="stMarkdownContainer"],
 [data-testid="stSidebar"] [data-baseweb="select"] span,
 [data-testid="stSidebar"] [data-baseweb="select"] div[class*="ValueContainer"] {
+color: #111111 !important;
+}
+/* CHANGE: light-mode selectbox / input boxes rendered black when the OS or
+   Streamlit theme is dark, because Streamlit's own dark styles reach the nested
+   baseweb elements (value container, input, icons) that the rules above miss.
+   Force every descendant to the light palette and declare a light colour-scheme. */
+html { color-scheme: light !important; }
+[data-baseweb="select"] > div,
+[data-baseweb="select"] > div > div,
+[data-baseweb="select"] [role="combobox"],
+[data-baseweb="select"] input,
+[data-baseweb="input"],
+[data-baseweb="input"] > div,
+[data-baseweb="base-input"],
+[data-baseweb="base-input"] input,
+[data-baseweb="textarea"],
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {
+background-color: #f0f0f0 !important;
+color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
+border-color: rgba(0,0,0,0.15) !important;
+}
+[data-baseweb="select"] svg { fill: #111111 !important; color: #111111 !important; }
+[data-baseweb="select"] [data-testid="stMarkdownContainer"],
+[data-baseweb="select"] span,
+[data-baseweb="select"] div[class*="ValueContainer"],
+[data-baseweb="select"] div[class*="singleValue"] {
+color: #111111 !important;
+}
+/* Radio / segmented / toggle option labels */
+[data-testid="stRadio"] label, [data-testid="stRadio"] label p,
+[data-testid="stSegmentedControl"] button, [data-testid="stSegmentedControl"] p {
 color: #111111 !important;
 }
 /* ── Dropdown popup list ── */
