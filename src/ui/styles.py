@@ -1023,10 +1023,12 @@ color: #111111 !important;
 [data-testid="stSidebar"] [data-baseweb="select"] div[class*="ValueContainer"] {
 color: #111111 !important;
 }
-/* CHANGE: light-mode selectbox / input boxes rendered black when the OS or
-   Streamlit theme is dark, because Streamlit's own dark styles reach the nested
-   baseweb elements (value container, input, icons) that the rules above miss.
-   Force every descendant to the light palette and declare a light colour-scheme. */
+/* CHANGE: light-mode selectbox / input boxes rendered black or showed
+   white-on-light text when the OS or Streamlit base theme is dark, because
+   BaseWeb's atomic Styletron classes set explicit dark-theme text colours
+   (#fafafa) on deeply nested value containers (e.g. StyledSingleValue at
+   [data-baseweb="select"] > div > div > div). Force every descendant inside
+   [data-baseweb="select"] to #111111 and declare a light colour-scheme. */
 html { color-scheme: light !important; }
 [data-baseweb="select"] > div,
 [data-baseweb="select"] > div > div,
@@ -1044,12 +1046,24 @@ color: #111111 !important;
 -webkit-text-fill-color: #111111 !important;
 border-color: rgba(0,0,0,0.15) !important;
 }
+[data-baseweb="select"],
+[data-baseweb="select"] *,
+[data-testid="stSelectbox"] [data-baseweb="select"] *,
+[data-testid="stMultiSelect"] [data-baseweb="select"] * {
+color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
+}
+[data-baseweb="select"] [data-baseweb="tag"] {
+background-color: rgba(255, 135, 0, 0.18) !important;
+border: 1px solid rgba(255, 135, 0, 0.35) !important;
+}
 [data-baseweb="select"] svg { fill: #111111 !important; color: #111111 !important; }
 [data-baseweb="select"] [data-testid="stMarkdownContainer"],
 [data-baseweb="select"] span,
 [data-baseweb="select"] div[class*="ValueContainer"],
 [data-baseweb="select"] div[class*="singleValue"] {
 color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
 }
 /* CHANGE: checkbox squares rendered dark grey and the live-timing toggle track
    near-white on the light page. Give both an explicit light-mode look, with the
@@ -1083,21 +1097,69 @@ color: #111111 !important;
 color: #111111 !important;
 }
 /* ── Dropdown popup list ── */
+/* CHANGE: BaseWeb mounts dropdown menus in a portal at the root of <body>
+   (outside stAppViewContainer and stSidebar) and styles nested containers
+   (Inner, StyledDropdownContainer, stTooltipHoverTarget, StyledEllipsizedDiv)
+   with dark-theme white text (#fafafa) and dark surfaces. Force a light
+   background (#ffffff) and high-contrast dark text (#111111) across all
+   popover/listbox containers, option rows, and nested descendants. */
+[data-baseweb="popover"],
+[data-baseweb="popover"] > div,
+[data-baseweb="popover"] > div > div,
 [data-baseweb="popover"] [data-baseweb="menu"],
-ul[data-testid="stSelectboxVirtualDropdown"] {
+[data-baseweb="menu"],
+[role="listbox"],
+ul[data-testid="stSelectboxVirtualDropdown"],
+ul[data-testid="stSelectboxVirtualDropdown"] > div,
+ul[data-testid="stSelectboxVirtualDropdown"] > div > div {
 background-color: #ffffff !important;
-border: 1px solid rgba(0,0,0,0.12) !important;
+color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
+border-color: rgba(0,0,0,0.12) !important;
+}
+[data-baseweb="popover"] *,
+[data-baseweb="menu"] *,
+[role="listbox"] *,
+ul[data-testid="stSelectboxVirtualDropdown"] *,
+[role="option"],
+[role="option"] * {
+color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
 }
 [data-baseweb="popover"] li,
 [data-baseweb="menu"] li,
-ul[data-testid="stSelectboxVirtualDropdown"] li {
+ul[data-testid="stSelectboxVirtualDropdown"] li,
+[role="option"] {
+background: #ffffff !important;
 background-color: #ffffff !important;
 color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
+}
+[data-baseweb="popover"] li > div,
+[data-baseweb="menu"] li > div,
+ul[data-testid="stSelectboxVirtualDropdown"] li > div,
+[role="option"] > div {
+background: transparent !important;
+background-color: transparent !important;
 }
 [data-baseweb="popover"] li:hover,
+[data-baseweb="popover"] li:hover > div,
+[data-baseweb="popover"] li[aria-selected="true"],
+[data-baseweb="popover"] li[aria-selected="true"] > div,
 [data-baseweb="menu"] li:hover,
-ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
+[data-baseweb="menu"] li:hover > div,
+ul[data-testid="stSelectboxVirtualDropdown"] li:hover,
+ul[data-testid="stSelectboxVirtualDropdown"] li:hover > div,
+ul[data-testid="stSelectboxVirtualDropdown"] li[aria-selected="true"],
+ul[data-testid="stSelectboxVirtualDropdown"] li[aria-selected="true"] > div,
+[role="option"]:hover,
+[role="option"]:hover > div,
+[role="option"][aria-selected="true"],
+[role="option"][aria-selected="true"] > div {
+background: #f0f0f0 !important;
 background-color: #f0f0f0 !important;
+color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;
 }
 /* ── Radio buttons ── */
 [data-testid="stSidebar"] [data-testid="stRadio"] label,
