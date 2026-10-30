@@ -1051,6 +1051,32 @@ border-color: rgba(0,0,0,0.15) !important;
 [data-baseweb="select"] div[class*="singleValue"] {
 color: #111111 !important;
 }
+/* CHANGE: checkbox squares rendered dark grey and the live-timing toggle track
+   near-white on the light page. Give both an explicit light-mode look, with the
+   brand orange when switched on (selected via :has on the hidden input). */
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > span {
+background-color: #ffffff !important;
+border: 2px solid #6b6b73 !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"]:has(input:checked) > span {
+background-color: #FF8700 !important;
+border-color: #FF8700 !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > div:first-of-type:not(:last-child) {
+background-color: #c4c4ca !important;
+}
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"]:has(input:checked) > div:first-of-type:not(:last-child) {
+background-color: #FF8700 !important;
+}
+/* CHANGE: expander headers (e.g. Live Streamer Controls) kept Streamlit's dark
+   summary background in light mode, hiding their dark text. */
+[data-testid="stExpander"] details,
+[data-testid="stExpander"] summary {
+background-color: #ffffff !important;
+color: #111111 !important;
+}
+[data-testid="stExpander"] summary:hover { background-color: #f0f0f0 !important; }
+[data-testid="stExpander"] summary svg { fill: #111111 !important; color: #111111 !important; }
 /* Radio / segmented / toggle option labels */
 [data-testid="stRadio"] label, [data-testid="stRadio"] label p,
 [data-testid="stSegmentedControl"] button, [data-testid="stSegmentedControl"] p {
