@@ -4467,3 +4467,585 @@ def _interpolate_latent_trajectory(
     from scipy.interpolate import CubicSpline
     frame_t = _latent_frame_times(latent_data, target_fps, speed, clips)
     return CubicSpline(latent_data["t"], latent_data["z"], axis=0)(frame_t)
+
+
+# ── Tyre Stint Pace Degradation Matrix & Pit Window Re-optimisation (#196) ────
+# CHANGE (#196): everything below is new. Simulates alternative race strategies from
+# the observed, fuel-decoupled tyre degradation of the whole field.
+# Split so the maths is testable without FastF1:
+#   _build_compound_deg_models  — pure: laps → per-compound zero-fuel pace model
+#   _compound_lap_time          — pure: model + tyre age → lap time
+#   _optimise_strategies        — pure: exhaustive 0/1/2-stop solver (prefix sums)
+#   _simulate_strategy          — pure: stint plan → lap-by-lap race trace
+#   _extract_actual_strategy    — pure: the driver's real stint plan
+#   _analyse_undercut_risk      — pure: ±3-lap undercut / rejoin-traffic window
+#   _build_strategy_simulation  — cached: wires the above together for the UI
+
+# ── Review notes (#196): strategy simulator ───────────────────────────────────
+#  - Pace model per dry compound, in zero-fuel seconds:
+#        t(age) = base + lin·age + quad·age² + CLIFF_K·max(0, age − cliff)²
+#    base / lin / quad are medians over every qualifying stint in the field
+#    (_build_fuel_decoupled_tyre_deg), so one outlier stint cannot skew a compound.
+#    lin is floored at STRAT_MIN_DEG_S (track evolution can make raw slopes negative,
+#    which would make the solver run one set to the flag) and quad is clipped to
+#    [0, STRAT_MAX_QUAD] because quadratic fits on short stints are noisy.
+#  - The cliff term is an extrapolation guard: past the fitted cliff lap (or, with no
+#    cliff estimate, 1.25 × the longest observed stint) pace falls away quadratically.
+#    Without it the solver happily proposes 45-lap soft stints the data never saw.
+#  - A compound nobody ran is estimated from a reference compound with typical
+#    Pirelli step offsets (STRAT_COMPOUND_OFFSETS) and flagged source="estimated".
+#  - Fuel burn is identical for every strategy over the same laps, so it is added as
+#    a constant; it shifts absolute race time but never changes the ranking.
+#  - The solver is exhaustive, not heuristic: stint costs are O(1) prefix-sum lookups,
+#    so every compound sequence × pit lap combination for 0–2 stops is evaluated
+#    (≈ 40k candidates for a 57-lap race, well under 100 ms). Starting fresh, the
+#    two-dry-compound rule is enforced; re-optimising mid-race it counts compounds
+#    already used.
+#  - Pit loss is the circuit's net pit loss (in-lap + out-lap − 2 × racing lap) from
+#    _build_pit_transit_data, which is exactly the race-time cost of one stop.
+#  - Undercut threat: a car behind by g seconds can undercut if the fresh-tyre gain over
+#    the next STRAT_UNDERCUT_LAPS laps exceeds g. Rejoin position counts cars whose
+#    session clock at that lap is below ours + pit loss. Known limitation: after the
+#    driver's real stop the timing already contains that stop, so those rows are
+#    flagged after_actual_stop and should be read as indicative only.
+#  - Risk scores are documented heuristics (0–100), not probabilities.
+#  - NOT verified: browser rendering and results on every real FastF1 race.
+STRAT_DRY_COMPOUNDS = ("SOFT", "MEDIUM", "HARD")
+STRAT_MIN_DEG_S = 0.005          # floor on linear degradation (s/lap per lap of age)
+STRAT_MAX_QUAD = 0.004           # ceiling on the quadratic wear term
+STRAT_CLIFF_K = 0.05             # s/lap² penalty past the cliff
+STRAT_CLIFF_EXTRAP = 1.25        # cliff fallback = 1.25 × longest observed stint
+STRAT_MIN_STINT_LAPS = 5         # shortest planned stint the solver considers
+STRAT_WINDOW_TOL_S = 1.0         # pit window = laps within 1 s of the sequence optimum
+STRAT_UNDERCUT_LAPS = 3          # laps over which the fresh-tyre gain is counted
+STRAT_TRAFFIC_GAP_S = 1.0        # cars within ±1 s of the rejoin point = traffic
+STRAT_DEFAULT_PIT_LOSS_S = 22.0  # used when the circuit has no measured pit loss
+# Typical step from MEDIUM: base pace offset (s) and degradation multiplier.
+STRAT_COMPOUND_OFFSETS = {
+    "SOFT":   {"base": -0.35, "deg": 1.6},
+    "MEDIUM": {"base": 0.0,   "deg": 1.0},
+    "HARD":   {"base": 0.35,  "deg": 0.6},
+}
+
+
+def _build_compound_deg_models(
+    laps_df: pd.DataFrame,
+    fuel_effect: float = 0.035,
+    drivers: list[str] | None = None,
+) -> dict | None:
+    """Pool every driver's fuel-decoupled stint fits into one pace model per dry compound."""
+    if laps_df is None or laps_df.empty or "Driver" not in laps_df.columns:
+        return None
+    try:
+        total_laps = int(laps_df["LapNumber"].max())
+    except Exception:
+        total_laps = None
+
+    per_cmp: dict[str, list[dict]] = {c: [] for c in STRAT_DRY_COMPOUNDS}
+    for drv in (drivers or list(laps_df["Driver"].dropna().unique())):
+        stints = _build_fuel_decoupled_tyre_deg(str(drv), laps_df, fuel_effect=fuel_effect, total_laps=total_laps)
+        for s in stints or []:
+            cmp = str(s.get("compound", "")).upper()
+            if cmp in per_cmp:
+                per_cmp[cmp].append(s)
+
+    models: dict[str, dict] = {}
+    for cmp, stints in per_cmp.items():
+        if not stints:
+            continue
+        lin = float(np.median([s["fuel_corrected_slope"] if fuel_effect > 0 else s["raw_slope"] for s in stints]))
+        base = float(np.median([s["fuel_corrected_base_pace"] if fuel_effect > 0 else s["raw_base_pace"] for s in stints]))
+        quads = [s["quad_coeffs"][0] for s in stints if s.get("quad_coeffs")]
+        quad = float(np.clip(np.median(quads), 0.0, STRAT_MAX_QUAD)) if quads else 0.0
+        cliffs = [s["cliff_lap"] for s in stints if s.get("cliff_lap")]
+        max_life = int(max(s["last_tyre_life"] for s in stints))
+        cliff = int(np.median(cliffs)) if cliffs else int(round(max_life * STRAT_CLIFF_EXTRAP))
+        models[cmp] = {
+            "compound": cmp,
+            "base": base,
+            "lin": max(lin, STRAT_MIN_DEG_S),
+            "raw_lin": lin,
+            "quad": quad,
+            "cliff": max(cliff, STRAT_MIN_STINT_LAPS),
+            "max_observed_life": max_life,
+            "n_stints": len(stints),
+            "source": "observed",
+        }
+
+    if not models:
+        return None
+
+    # Estimate any dry compound nobody ran from the closest observed reference.
+    ref_cmp = "MEDIUM" if "MEDIUM" in models else next(iter(models))
+    ref = models[ref_cmp]
+    ref_off = STRAT_COMPOUND_OFFSETS[ref_cmp]
+    for cmp in STRAT_DRY_COMPOUNDS:
+        if cmp in models:
+            continue
+        off = STRAT_COMPOUND_OFFSETS[cmp]
+        deg_ratio = off["deg"] / ref_off["deg"]
+        models[cmp] = {
+            "compound": cmp,
+            "base": ref["base"] + (off["base"] - ref_off["base"]),
+            "lin": max(ref["lin"] * deg_ratio, STRAT_MIN_DEG_S),
+            "raw_lin": ref["raw_lin"] * deg_ratio,
+            "quad": min(ref["quad"] * deg_ratio, STRAT_MAX_QUAD),
+            "cliff": max(int(round(ref["cliff"] / deg_ratio)), STRAT_MIN_STINT_LAPS),
+            "max_observed_life": 0,
+            "n_stints": 0,
+            "source": "estimated",
+        }
+    return models
+
+
+def _compound_lap_time(model: dict, age: np.ndarray | float) -> np.ndarray | float:
+    """Zero-fuel lap time (s) on ``model``'s compound at tyre age ``age`` (laps, 1 = first lap)."""
+    a = np.asarray(age, dtype=float)
+    over = np.maximum(a - model["cliff"], 0.0)
+    return model["base"] + model["lin"] * a + model["quad"] * a**2 + STRAT_CLIFF_K * over**2
+
+
+def _stint_prefix_sums(models: dict, max_age: int) -> dict[str, np.ndarray]:
+    """Cumulative stint time per compound: ``P[c][n]`` = time of ages 1..n (``P[c][0]`` = 0)."""
+    ages = np.arange(1, max_age + 1, dtype=float)
+    return {c: np.concatenate([[0.0], np.cumsum(_compound_lap_time(m, ages))]) for c, m in models.items()}
+
+
+def _fuel_constant(total_laps: int, start_lap: int, fuel_effect: float) -> float:
+    """Fuel-mass time over laps start_lap+1..total_laps (identical for every strategy)."""
+    laps = np.arange(start_lap + 1, total_laps + 1)
+    return float(fuel_effect * np.clip(total_laps - laps, 0, None).sum())
+
+
+def _strategy_risk(compounds: list[str], lengths: list[int], start_ages: list[int], models: dict) -> dict:
+    """Heuristic 0–100 risk: 12/stop, 6/lap past the cliff, 2/lap inside the 3-lap cliff margin."""
+    over = margin = 0
+    for cmp, n, a0 in zip(compounds, lengths, start_ages):
+        cliff = models[cmp]["cliff"]
+        end_age = a0 + n
+        over += max(0, end_age - cliff)
+        margin += max(0, min(end_age, cliff) - max(a0, cliff - 3))
+    stops = len(compounds) - 1
+    score = int(min(100, 12 * stops + 6 * over + 2 * margin))
+    level = "Low" if score < 30 else ("Medium" if score < 60 else "High")
+    return {"score": score, "level": level, "laps_over_cliff": int(over), "laps_in_cliff_margin": int(margin)}
+
+
+def _optimise_strategies(
+    models: dict,
+    total_laps: int,
+    pit_loss_s: float,
+    fuel_effect: float = 0.0,
+    start_lap: int = 0,
+    current_compound: str | None = None,
+    current_tyre_age: int = 0,
+    used_compounds: tuple | list = (),
+    max_stops: int = 2,
+    min_stint_laps: int = STRAT_MIN_STINT_LAPS,
+    top_n: int = 10,
+) -> dict | None:
+    """Exhaustively rank 0/1/2-stop plans for laps start_lap+1..total_laps and find pit windows."""
+    if not models or total_laps is None or total_laps <= start_lap:
+        return None
+    remaining = int(total_laps - start_lap)
+    cmps = [c for c in STRAT_DRY_COMPOUNDS if c in models]
+    mid_race = current_compound is not None
+    if mid_race and current_compound not in models:
+        return None
+    a0 = int(max(current_tyre_age, 0)) if mid_race else 0
+    used = {str(c).upper() for c in used_compounds} | ({current_compound} if mid_race else set())
+
+    P = _stint_prefix_sums(models, remaining + a0 + 2)
+    fuel_c = _fuel_constant(total_laps, start_lap, fuel_effect)
+
+    def cost(c: str, start_age: int, n: int) -> float:
+        return float(P[c][start_age + n] - P[c][start_age])
+
+    def legal(seq: tuple) -> bool:
+        return len(used | set(seq)) >= 2
+
+    first_opts = [current_compound] if mid_race else cmps
+    first_min = 1 if mid_race else min_stint_laps
+    cands: list[dict] = []
+
+    def add(seq: tuple, pits: list[int], lengths: list[int], total: float) -> None:
+        starts = [a0 if mid_race else 0] + [0] * (len(seq) - 1)
+        cands.append({
+            "stops": len(seq) - 1,
+            "compounds": list(seq),
+            "pit_laps": pits,
+            "stint_lengths": lengths,
+            "start_ages": starts,
+            "total_time_s": total + fuel_c,
+        })
+
+    # 0 stops (only legal mid-race once a second compound has been used).
+    if mid_race and legal((current_compound,)):
+        add((current_compound,), [], [remaining], cost(current_compound, a0, remaining))
+
+    # 1 stop.
+    if max_stops >= 1:
+        for c1 in first_opts:
+            s1 = a0 if mid_race else 0
+            for c2 in cmps:
+                if not legal((c1, c2)):
+                    continue
+                for n1 in range(first_min, remaining - min_stint_laps + 1):
+                    n2 = remaining - n1
+                    add((c1, c2), [start_lap + n1], [n1, n2],
+                        cost(c1, s1, n1) + cost(c2, 0, n2) + pit_loss_s)
+
+    # 2 stops: vectorised over the second pit lap for each (c1, c2, c3, n1).
+    if max_stops >= 2:
+        for c1 in first_opts:
+            s1 = a0 if mid_race else 0
+            for c2 in cmps:
+                for c3 in cmps:
+                    if not legal((c1, c2, c3)):
+                        continue
+                    for n1 in range(first_min, remaining - 2 * min_stint_laps + 1):
+                        n2 = np.arange(min_stint_laps, remaining - n1 - min_stint_laps + 1)
+                        if n2.size == 0:
+                            continue
+                        n3 = remaining - n1 - n2
+                        tot = (cost(c1, s1, n1) + P[c2][n2] + P[c3][n3] + 2 * pit_loss_s)
+                        k = int(np.argmin(tot))
+                        add((c1, c2, c3), [start_lap + n1, start_lap + n1 + int(n2[k])],
+                            [n1, int(n2[k]), int(n3[k])], float(tot[k]))
+
+    if not cands:
+        return None
+
+    # Collapse to the best timing per compound sequence, then rank.
+    best_by_seq: dict[tuple, dict] = {}
+    for c in cands:
+        key = tuple(c["compounds"])
+        if key not in best_by_seq or c["total_time_s"] < best_by_seq[key]["total_time_s"]:
+            best_by_seq[key] = c
+    ranked = sorted(best_by_seq.values(), key=lambda c: c["total_time_s"])
+    best_t = ranked[0]["total_time_s"]
+
+    def windows(plan: dict) -> list[tuple[int, int]]:
+        """For each stop, the pit laps (others fixed) within STRAT_WINDOW_TOL_S of the plan."""
+        out = []
+        seq, pits = plan["compounds"], plan["pit_laps"]
+        for i in range(len(pits)):
+            ok = []
+            lo = (pits[i - 1] + min_stint_laps) if i > 0 else start_lap + first_min
+            hi = (pits[i + 1] - min_stint_laps) if i + 1 < len(pits) else total_laps - min_stint_laps
+            for p in range(lo, hi + 1):
+                trial = list(pits)
+                trial[i] = p
+                bounds = [start_lap] + trial + [total_laps]
+                lens = [bounds[j + 1] - bounds[j] for j in range(len(seq))]
+                t = sum(cost(seq[j], (a0 if (mid_race and j == 0) else 0), lens[j]) for j in range(len(seq)))
+                t += len(pits) * pit_loss_s + fuel_c
+                if t - plan["total_time_s"] <= STRAT_WINDOW_TOL_S:
+                    ok.append(p)
+            out.append((min(ok), max(ok)) if ok else (pits[i], pits[i]))
+        return out
+
+    for plan in ranked:
+        plan["delta_s"] = round(plan["total_time_s"] - best_t, 3)
+        plan["risk"] = _strategy_risk(plan["compounds"], plan["stint_lengths"], plan["start_ages"], models)
+        plan["label"] = " → ".join(c[0] for c in plan["compounds"])
+
+    top = ranked[:top_n]
+    for plan in top:
+        plan["windows"] = windows(plan)
+
+    best_by_stops: dict[int, dict] = {}
+    for plan in ranked:
+        best_by_stops.setdefault(plan["stops"], plan)
+    for plan in best_by_stops.values():
+        if "windows" not in plan:
+            plan["windows"] = windows(plan)
+
+    return {
+        "best": ranked[0],
+        "best_by_stops": best_by_stops,
+        "ranked": top,
+        "n_candidates": len(cands),
+        "start_lap": start_lap,
+        "total_laps": total_laps,
+        "pit_loss_s": pit_loss_s,
+    }
+
+
+def _simulate_strategy(
+    models: dict,
+    compounds: list[str],
+    stint_lengths: list[int],
+    pit_loss_s: float,
+    total_laps: int,
+    fuel_effect: float = 0.0,
+    start_lap: int = 0,
+    start_ages: list[int] | None = None,
+) -> dict | None:
+    """Lap-by-lap trace of a stint plan: lap times, cumulative time, pit laps, tyre ages."""
+    if not models or not compounds or len(compounds) != len(stint_lengths):
+        return None
+    if any(c not in models for c in compounds):
+        return None
+    starts = start_ages or [0] * len(compounds)
+    laps, times, ages, cmp_col, pit_laps = [], [], [], [], []
+    lap = start_lap
+    for i, (cmp, n) in enumerate(zip(compounds, stint_lengths)):
+        age_seq = np.arange(starts[i] + 1, starts[i] + n + 1)
+        lt = _compound_lap_time(models[cmp], age_seq)
+        for j in range(n):
+            lap += 1
+            t = float(lt[j]) + fuel_effect * max(total_laps - lap, 0)
+            if j == n - 1 and i < len(compounds) - 1:
+                t += pit_loss_s
+                pit_laps.append(lap)
+            laps.append(lap)
+            times.append(t)
+            ages.append(int(age_seq[j]))
+            cmp_col.append(cmp)
+    cum = np.cumsum(times)
+    return {
+        "lap_numbers": laps,
+        "lap_times": times,
+        "cumulative": cum.tolist(),
+        "tyre_age": ages,
+        "compound": cmp_col,
+        "pit_laps": pit_laps,
+        "compounds": list(compounds),
+        "stint_lengths": list(stint_lengths),
+        "total_time_s": float(cum[-1]) if len(cum) else 0.0,
+    }
+
+
+def _extract_actual_strategy(driver: str, laps_df: pd.DataFrame) -> dict | None:
+    """The driver's real stint plan: compounds, stint lengths, pit laps and starting tyre ages."""
+    try:
+        laps = laps_df[laps_df["Driver"] == driver].sort_values("LapNumber")
+        if laps.empty or "Stint" not in laps.columns:
+            return None
+        compounds, lengths, starts, pits = [], [], [], []
+        for _, grp in laps.dropna(subset=["Stint"]).groupby("Stint", sort=True):
+            cmp_vals = grp["Compound"].dropna().astype(str).str.upper()
+            cmp = cmp_vals.mode().iloc[0] if not cmp_vals.empty else "UNKNOWN"
+            first_life = grp["TyreLife"].dropna().iloc[0] if "TyreLife" in grp and grp["TyreLife"].notna().any() else 1
+            compounds.append(cmp)
+            lengths.append(int(grp["LapNumber"].max() - grp["LapNumber"].min() + 1))
+            starts.append(int(max(float(first_life) - 1, 0)))
+            pits.append(int(grp["LapNumber"].max()))
+        if not compounds:
+            return None
+        return {
+            "compounds": compounds,
+            "stint_lengths": lengths,
+            "start_ages": starts,
+            "pit_laps": pits[:-1],
+            "first_lap": int(laps["LapNumber"].min()),
+            "last_lap": int(laps["LapNumber"].max()),
+        }
+    except Exception:
+        return None
+
+
+def _splice_reoptimised_sim(actual_sim: dict | None, tail_sim: dict | None, reopt_lap: int,
+                            pit_loss_s: float = 0.0) -> dict | None:
+    """Join the actual trace up to ``reopt_lap`` with a re-optimised trace for the remaining laps."""
+    if not actual_sim or not tail_sim:
+        return None
+    k = sum(1 for l in actual_sim["lap_numbers"] if l <= reopt_lap)
+    if k == 0:
+        return None
+    # Truncate the actual stint plan at reopt_lap; the re-optimised first stint continues it.
+    compounds, lengths, done = [], [], 0
+    for cmp, n in zip(actual_sim["compounds"], actual_sim["stint_lengths"]):
+        take = min(n, k - done)
+        if take <= 0:
+            break
+        compounds.append(cmp)
+        lengths.append(take)
+        done += take
+    if compounds and tail_sim["compounds"] and compounds[-1] == tail_sim["compounds"][0]:
+        lengths[-1] += tail_sim["stint_lengths"][0]
+        compounds += tail_sim["compounds"][1:]
+        lengths += tail_sim["stint_lengths"][1:]
+    else:
+        compounds += tail_sim["compounds"]
+        lengths += tail_sim["stint_lengths"]
+    head = list(actual_sim["lap_times"][:k])
+    # A real stop on reopt_lap itself is replaced by the re-optimised plan (which may stay out).
+    if reopt_lap in actual_sim["pit_laps"]:
+        head[-1] -= pit_loss_s
+    times = head + tail_sim["lap_times"]
+    cum = np.cumsum(times)
+    return {
+        "lap_numbers": actual_sim["lap_numbers"][:k] + tail_sim["lap_numbers"],
+        "lap_times": times,
+        "cumulative": cum.tolist(),
+        "tyre_age": actual_sim["tyre_age"][:k] + tail_sim["tyre_age"],
+        "compound": actual_sim["compound"][:k] + tail_sim["compound"],
+        "pit_laps": [p for p in actual_sim["pit_laps"] if p < reopt_lap] + tail_sim["pit_laps"],
+        "compounds": compounds,
+        "stint_lengths": lengths,
+        "total_time_s": float(cum[-1]),
+    }
+
+
+def _undercut_gain(models: dict, current_compound: str, tyre_age: int, new_compound: str,
+                   n_laps: int = STRAT_UNDERCUT_LAPS) -> float:
+    """Time a fresh set of ``new_compound`` gains over ``n_laps`` versus staying out on worn tyres."""
+    if current_compound not in models or new_compound not in models:
+        return 0.0
+    k = np.arange(1, n_laps + 1)
+    old = _compound_lap_time(models[current_compound], tyre_age + k)
+    new = _compound_lap_time(models[new_compound], k)
+    return float(np.sum(old - new))
+
+
+def _analyse_undercut_risk(
+    driver: str,
+    laps_df: pd.DataFrame,
+    pit_lap: int,
+    pit_loss_s: float,
+    models: dict,
+    new_compound: str,
+    window: int = 3,
+    actual_pit_laps: list[int] | None = None,
+) -> list[dict]:
+    """Per lap in pit_lap ± window: running / rejoin position, rejoin traffic and undercut threats."""
+    rows: list[dict] = []
+    if laps_df is None or laps_df.empty or "Time" not in laps_df.columns:
+        return rows
+    d = laps_df[["Driver", "LapNumber", "Time", "Compound", "TyreLife"]].copy()
+    d["t"] = pd.to_timedelta(d["Time"]).dt.total_seconds()
+    total = int(d["LapNumber"].max())
+    first_actual = min(actual_pit_laps) if actual_pit_laps else None
+
+    for lap in range(max(1, pit_lap - window), min(total - 1, pit_lap + window) + 1):
+        at = d[d["LapNumber"] == lap].dropna(subset=["t"])
+        me = at[at["Driver"] == driver]
+        if me.empty:
+            continue
+        my_t = float(me["t"].iloc[0])
+        others = at[at["Driver"] != driver]["t"].to_numpy(dtype=float)
+        cur_cmp = str(me["Compound"].iloc[0]).upper()
+        age = int(me["TyreLife"].iloc[0]) if pd.notna(me["TyreLife"].iloc[0]) else lap
+        gain = _undercut_gain(models, cur_cmp, age, new_compound)
+        rejoin_t = my_t + pit_loss_s
+        behind = others - my_t
+        threats = int(np.sum((behind > 0) & (behind < gain)))
+        traffic = int(np.sum(np.abs(others - rejoin_t) <= STRAT_TRAFFIC_GAP_S))
+        run_pos = 1 + int(np.sum(others < my_t))
+        rejoin_pos = 1 + int(np.sum(others < rejoin_t))
+        ahead = others[others < rejoin_t]
+        after = others[others > rejoin_t]
+        lost = rejoin_pos - run_pos
+        risk = int(min(100, 30 * threats + 20 * traffic + 5 * max(lost, 0)))
+        rows.append({
+            "lap": lap,
+            "is_plan_lap": lap == pit_lap,
+            "running_pos": run_pos,
+            "rejoin_pos": rejoin_pos,
+            "positions_lost": lost,
+            "gap_ahead_on_rejoin_s": round(float(rejoin_t - ahead.max()), 2) if ahead.size else None,
+            "gap_behind_on_rejoin_s": round(float(after.min() - rejoin_t), 2) if after.size else None,
+            "rejoin_traffic": traffic,
+            "undercut_gain_s": round(gain, 2),
+            "undercut_threats": threats,
+            "risk": risk,
+            "risk_level": "Low" if risk < 30 else ("Medium" if risk < 60 else "High"),
+            "compound": cur_cmp,
+            "tyre_age": age,
+            "after_actual_stop": bool(first_actual is not None and lap > first_actual),
+        })
+    return rows
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_strategy_simulation(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    driver: str,
+    pit_loss_s: float = STRAT_DEFAULT_PIT_LOSS_S,
+    fuel_effect: float = 0.035,
+    reopt_lap: int | None = None,
+) -> dict | None:
+    """Degradation matrix, optimal 1/2-stop plans, actual vs optimal trace, re-optimisation and undercut risk."""
+    try:
+        if laps_df is None or laps_df.empty:
+            return None
+        models = _build_compound_deg_models(laps_df, fuel_effect=fuel_effect)
+        if not models:
+            return None
+        total_laps = int(laps_df["LapNumber"].max())
+        opt = _optimise_strategies(models, total_laps, pit_loss_s, fuel_effect=fuel_effect)
+        if not opt:
+            return None
+
+        sims: dict[str, dict] = {}
+        for stops, plan in sorted(opt["best_by_stops"].items()):
+            sim = _simulate_strategy(models, plan["compounds"], plan["stint_lengths"], pit_loss_s,
+                                     total_laps, fuel_effect, start_ages=plan["start_ages"])
+            if sim:
+                sims[f"Optimal {stops}-stop ({plan['label']})"] = sim
+
+        actual = _extract_actual_strategy(driver, laps_df)
+        actual_sim = None
+        if actual and actual["first_lap"] == 1 and actual["last_lap"] == total_laps:
+            actual_sim = _simulate_strategy(models, actual["compounds"], actual["stint_lengths"], pit_loss_s,
+                                            total_laps, fuel_effect, start_ages=actual["start_ages"])
+            if actual_sim:
+                label = " → ".join(c[0] for c in actual["compounds"])
+                sims[f"Actual ({label})"] = actual_sim
+
+        # Re-optimise the rest of the race from the driver's tyre state at reopt_lap.
+        reopt = None
+        d_laps = laps_df[laps_df["Driver"] == driver].sort_values("LapNumber")
+        if reopt_lap and not d_laps.empty and 0 < reopt_lap < total_laps - 1:
+            row = d_laps[d_laps["LapNumber"] == reopt_lap]
+            if not row.empty:
+                cur_cmp = str(row["Compound"].iloc[0]).upper()
+                age = int(row["TyreLife"].iloc[0]) if pd.notna(row["TyreLife"].iloc[0]) else reopt_lap
+                used = d_laps[d_laps["LapNumber"] <= reopt_lap]["Compound"].dropna().astype(str).str.upper().unique()
+                if cur_cmp in models:
+                    r = _optimise_strategies(models, total_laps, pit_loss_s, fuel_effect=fuel_effect,
+                                             start_lap=reopt_lap, current_compound=cur_cmp,
+                                             current_tyre_age=age, used_compounds=tuple(used))
+                    if r:
+                        reopt = {**r, "current_compound": cur_cmp, "current_tyre_age": age, "lap": reopt_lap}
+                        rb = r["best"]
+                        tail = _simulate_strategy(models, rb["compounds"], rb["stint_lengths"], pit_loss_s,
+                                                  total_laps, fuel_effect, start_lap=reopt_lap,
+                                                  start_ages=rb["start_ages"])
+                        spliced = _splice_reoptimised_sim(actual_sim, tail, reopt_lap, pit_loss_s) if actual_sim else None
+                        if spliced:
+                            reopt["spliced_total_s"] = spliced["total_time_s"]
+                            reopt["gain_vs_actual_s"] = round(actual_sim["total_time_s"] - spliced["total_time_s"], 3)
+                            sims[f"Re-optimised from L{reopt_lap} ({rb['label']})"] = spliced
+
+        # Undercut / rejoin window around the best plan's first stop.
+        undercut = []
+        best = opt["best"]
+        if best["pit_laps"]:
+            undercut = _analyse_undercut_risk(
+                driver, laps_df, best["pit_laps"][0], pit_loss_s, models,
+                new_compound=best["compounds"][1],
+                actual_pit_laps=actual["pit_laps"] if actual else None,
+            )
+
+        actual_delta = None
+        if actual_sim:
+            actual_delta = round(actual_sim["total_time_s"] - best["total_time_s"], 3)
+
+        return {
+            "models": models,
+            "optimisation": opt,
+            "sims": sims,
+            "actual": actual,
+            "actual_delta_s": actual_delta,
+            "reopt": reopt,
+            "undercut": undercut,
+            "total_laps": total_laps,
+            "pit_loss_s": pit_loss_s,
+            "fuel_effect": fuel_effect,
+        }
+    except Exception:
+        return None

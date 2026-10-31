@@ -58,6 +58,7 @@ sequence; the mapping is given in each record where one exists.
 | [026](#adr-026--brag-video-from-a-pca-latent-manifold) | Brag video from a PCA latent manifold | #171 |
 | [027](#adr-027--code-review-findings-live-in-the-code) | Code review findings live in the code | #123 (superseded) |
 | [028](#adr-028--a-dedicated-decisions-log) | A dedicated decisions log | #172 |
+| [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
 
 ---
 
@@ -521,3 +522,24 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 **Decision.** Maintain this file, one ADR per decision, in the format above. It does not replace the other two documents: `AGENT.md` holds the rule, `DOCS.md` the mechanism, `DECISIONS.md` the reasoning.
 
 **Consequences & guardrails.** Adding a record is a Code Review checklist item. Older records are marked *(reconstructed)* so nobody mistakes inferred rationale for a contemporaneous one.
+
+---
+
+## ADR-029 — Exhaustive prefix-sum pit strategy solver with field-pooled degradation
+
+**Issue / PR:** #196 · `AGENT.md` Decision #47 · review notes in `src/data/loader.py`
+
+**Context.** Simulating alternative 1-stop and 2-stop strategies for one driver requires pace models for every dry compound (`SOFT`, `MEDIUM`, `HARD`) across stint lengths up to a full race distance, even when that driver only ran two compounds over limited stint lengths.
+
+**Decision.**
+1. **Field-pooled compound models (`_build_compound_deg_models`):** Pool fuel-decoupled stint regressions (`_build_fuel_decoupled_tyre_deg`) across all drivers and take the median zero-fuel base pace, linear wear slope (floored at `STRAT_MIN_DEG_S = 0.005` s/lap), quadratic wear coefficient (clipped to `[0, 0.004]`), and cliff lap per compound. Any dry compound nobody ran is estimated from a reference compound using typical Pirelli step offsets (`STRAT_COMPOUND_OFFSETS`) and marked `source="estimated"`.
+2. **Extrapolation guard (`_compound_lap_time`):** Beyond the cliff lap $c$, add a quadratic penalty $k \cdot \max(0, a - c)^2$ ($k = 0.05\text{ s/lap}^2$) so the solver does not prescribe unrealistically long stints on soft compounds.
+3. **Exhaustive prefix-sum solver (`_optimise_strategies`):** Precompute cumulative stint times $P_c[n] = \sum_{a=1}^{n} t_c(a)$ so any stint cost is an $O(1)$ difference $P_c[a_0 + n] - P_c[a_0]$. Evaluate every legal 0/1/2-stop compound sequence and pit lap combination (enforcing the two-dry-compound rule from the start or counting compounds already used when re-optimising mid-race). Pit windows are all pit laps within `STRAT_WINDOW_TOL_S = 1.0` s of the sequence optimum.
+4. **Undercut & rejoin window (`_analyse_undercut_risk`):** For $\pm 3$ laps around the optimal first stop, compare the 3-lap fresh-tyre pace gain against cars behind and count cars within $\pm 1.0$ s of the rejoin clock ($t_{\text{now}} + t_{\text{pit\_loss}}$).
+
+**Alternatives & trade-offs.**
+- *Fitting only the selected driver's stints*: lacks data for compounds the driver did not run and is noisy on a single stint.
+- *Unbounded linear/quadratic extrapolation*: without the floor on linear slope (track evolution can make raw slopes negative) and the post-cliff penalty, the solver picks degenerate 1-stop plans with 50-lap soft stints.
+- *Heuristic / gradient search for pit laps*: unnecessary when prefix sums reduce all ~40k 2-stop candidates in a 57-lap race to vectorised NumPy array operations (< 50 ms).
+
+**Consequences & guardrails.** `tests/test_strategy_simulator.py` (18 tests). Known limitation: after the driver's real first pit stop, session clock timestamps already include that stop, so undercut/rejoin rows past that lap are flagged `after_actual_stop` as indicative only. Race and Sprint only.

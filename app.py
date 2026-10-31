@@ -119,7 +119,7 @@ from src.ui.components import (
     _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section, _render_weekend_progression_section,
-    _render_dirty_air_section, _render_brag_video_section
+    _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1078,6 +1078,29 @@ else:
         colour1=colour1,
         colour2=colour2,
     )
+
+# ── Tyre Stint Pace Degradation Matrix & Pit Window Simulator (#196) ────────
+# Race / Sprint only (gate lives in the renderer). Reuses the fuel decoupler
+# setting above and seeds pit loss from the circuit's measured grid median net
+# pit loss computed by the Pit Lane Transit Loss section.
+try:
+    _strat_pit_loss = None
+    try:
+        _strat_pit_loss = (_transit_data or {}).get("summary", {}).get("grid_median_pit_loss")
+    except NameError:
+        _strat_pit_loss = None
+    try:
+        _strat_session_type = str(sess.name)
+    except Exception:
+        _strat_session_type = session_type
+    _render_strategy_simulator_section(
+        sess_key, _all_laps1, _strat_session_type, driver1,
+        colour=colour1, fmt_func=_fmt_driver1,
+        default_pit_loss=_strat_pit_loss,
+        fuel_effect=fuel_burn_rate,
+    )
+except Exception:
+    st.warning("Strategy simulator could not be rendered for this session.")
 
 # ── Driver Consistency & Stint Pace Distribution ───────────────────────────
 # Lap time spread per driver and stint. _hl_drivers / _hl_colours set here are
