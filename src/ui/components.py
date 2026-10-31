@@ -15,7 +15,7 @@ from src.data.loader import (
     _build_telemetry_latent_manifold, _extract_brag_worthy_moments,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
-    _calculate_speed_trap_metrics, _build_teammate_battle_data
+    _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -25,7 +25,7 @@ from src.charts.plotly import (
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
-    build_latent_space_projection_fig
+    build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig
 )
 from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
@@ -3421,3 +3421,238 @@ def _generate_brag_result(sess_obj, laps_df, driver, lap_num, sess_k, mode, aspe
         return {"video": data, "mime": mime, "latent": latent, "moments": moments}
     except Exception as exc:
         return {"error": f"Brag video generation failed: {exc}"}
+
+
+# ── Tyre Stint Pace Degradation Matrix & Pit Window Re-optimisation (#196) ────
+# CHANGE (#196): new section, Race / Sprint only. Builds a field-wide zero-fuel pace
+# model per dry compound, exhaustively solves 1-stop vs 2-stop plans for the circuit's
+# measured pit loss, compares them with the driver's actual race, re-optimises the
+# remainder of the race from any lap, and scores undercut / rejoin risk ±3 laps
+# around the optimal first stop.
+
+def _strategy_cmp_chips(compounds: list[str]) -> str:
+    """Inline compound badges for a stint plan, coloured from COMPOUND_COLOURS."""
+    chips = []
+    for c in compounds:
+        pal = COMPOUND_COLOURS.get(str(c).upper(), COMPOUND_COLOURS["UNKNOWN"])
+        chips.append(
+            f"<span style='display:inline-block; min-width:18px; padding:1px 6px; border-radius:10px; "
+            f"background:{pal['fill']}; color:{pal['text']}; font-weight:700; font-size:11px; "
+            f"text-align:center;'>{pal['letter']}</span>"
+        )
+    return " → ".join(chips)
+
+
+def _fmt_windows(plan: dict) -> str:
+    """Pit windows as 'L18–22, L39–41'."""
+    wins = plan.get("windows") or []
+    return ", ".join(f"L{a}" if a == b else f"L{a}–{b}" for a, b in wins) or "—"
+
+
+def _render_strategy_simulator_section(
+    sess_k: str,
+    laps_df: pd.DataFrame,
+    session_type: str,
+    driver: str,
+    colour: str = "#FF8700",
+    fmt_func=None,
+    default_pit_loss: float | None = None,
+    fuel_effect: float = 0.035,
+) -> None:
+    """Render the degradation matrix, optimal pit windows, strategy timeline, re-optimisation and undercut risk."""
+    if laps_df is None or laps_df.empty or not driver:
+        return
+    code = str(session_type).upper()
+    if code not in {"R", "S", "RACE", "SPRINT"}:
+        return
+
+    label = fmt_func(driver) if fmt_func else driver
+    st.markdown("<div class='section-title'>🧮 Tyre Stint Pace Degradation Matrix & Pit Window Simulator</div>",
+                unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px;'>"
+        "Pools every driver's fuel-decoupled stint fits into one zero-fuel pace model per dry compound "
+        "(linear + quadratic wear, with a cliff penalty), then exhaustively solves every 1-stop and 2-stop plan "
+        "for the circuit's measured pit loss. Two different dry compounds are required. "
+        "Risk scores are heuristics (0–100), not probabilities.</div>",
+        unsafe_allow_html=True,
+    )
+
+    try:
+        total_laps = int(laps_df["LapNumber"].max())
+    except Exception:
+        return
+    if total_laps < 12:
+        st.info("ℹ️ This session is too short to simulate pit strategies.")
+        return
+
+    measured = default_pit_loss is not None and default_pit_loss > 0
+    pit_default = float(np.clip(default_pit_loss if measured else 22.0, 10.0, 40.0))
+    c1, c2 = st.columns(2)
+    with c1:
+        pit_loss = st.slider(
+            "Pit stop time loss (s)", min_value=10.0, max_value=40.0, value=round(pit_default * 2) / 2, step=0.5,
+            key=f"strat_pit_loss_{sess_k}",
+            help=("Defaults to this circuit's grid median net pit loss (in-lap + out-lap − 2 racing laps)."
+                  if measured else "No measured pit loss for this session — using a typical 22 s."),
+        )
+    with c2:
+        reopt_lap = st.slider(
+            f"Re-optimise {label}'s race from lap", min_value=1, max_value=total_laps - 2,
+            value=max(1, min(total_laps - 2, total_laps // 3)), key=f"strat_reopt_{sess_k}_{driver}",
+            help="Takes the driver's compound and tyre age at this lap and re-solves the rest of the race.",
+        )
+
+    with st.spinner("Solving pit strategies…"):
+        data = _build_strategy_simulation(sess_k, laps_df, driver, float(pit_loss), float(fuel_effect), int(reopt_lap))
+    if not data:
+        st.info("ℹ️ Not enough green-flag stints (≥ 4 laps on a dry compound) to model degradation for this race.")
+        return
+
+    opt = data["optimisation"]
+    best = opt["best"]
+    by_stops = opt["best_by_stops"]
+
+    def _card(col, title, value, sub=""):
+        sub_html = f"<div style='font-size:11px; opacity:0.7; margin-top:2px;'>{sub}</div>" if sub else ""
+        col.markdown(
+            f"<div class='metric-card' style='--accent:{colour}; margin-bottom:14px;'>"
+            f"<div class='metric-label'>{title}</div>"
+            f"<div class='metric-value' style='font-size: clamp(15px, 1.8vw, 20px);'>{value}</div>{sub_html}</div>",
+            unsafe_allow_html=True,
+        )
+
+    k1, k2, k3, k4 = st.columns(4)
+    _card(k1, "Optimal Strategy", f"{best['stops']}-stop · {best['label']}",
+          "Pit " + (", ".join(f"L{p}" for p in best["pit_laps"]) or "—"))
+    one, two = by_stops.get(1), by_stops.get(2)
+    _card(k2, "Best 1-Stop Window", _fmt_windows(one) if one else "—",
+          f"{one['label']} · {one['delta_s']:+.1f} s vs optimal" if one else "no legal 1-stop")
+    _card(k3, "Best 2-Stop Windows", _fmt_windows(two) if two else "—",
+          f"{two['label']} · {two['delta_s']:+.1f} s vs optimal" if two else "no legal 2-stop")
+    ad = data.get("actual_delta_s")
+    _card(k4, f"{label} Actual vs Optimal", f"{ad:+.1f} s" if ad is not None else "—",
+          "modelled race time lost to strategy" if ad is not None else "actual plan not simulable (wet / partial race)")
+
+    # Degradation matrix.
+    rows = ""
+    for cmp in ("SOFT", "MEDIUM", "HARD"):
+        m = data["models"].get(cmp)
+        if not m:
+            continue
+        pal = COMPOUND_COLOURS.get(cmp, COMPOUND_COLOURS["UNKNOWN"])
+        src = "observed" if m["source"] == "observed" else "<i>estimated</i>"
+        rows += (
+            f"<tr><td style='padding:6px 10px;'><span style='color:{pal['fill']}; font-weight:700;'>● {cmp.title()}</span></td>"
+            f"<td style='padding:6px 10px;'>{m['base']:.3f} s</td>"
+            f"<td style='padding:6px 10px;'>{m['lin']:+.3f} s/lap</td>"
+            f"<td style='padding:6px 10px;'>{m['quad']:.4f}</td>"
+            f"<td style='padding:6px 10px;'>{m['cliff']} laps</td>"
+            f"<td style='padding:6px 10px;'>{m['n_stints']}</td>"
+            f"<td style='padding:6px 10px;'>{src}</td></tr>"
+        )
+    st.markdown(
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.15); "
+        "border-radius:12px; padding:14px 18px; margin:4px 0 12px;'>"
+        "<div style='font-size:12px; font-weight:600; margin-bottom:8px; opacity:0.8;'>Compound Degradation Matrix (zero-fuel)</div>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='font-size:11px; opacity:0.55; text-transform:uppercase; text-align:left;'>"
+        "<th style='padding:4px 10px;'>Compound</th><th style='padding:4px 10px;'>Base pace</th>"
+        "<th style='padding:4px 10px;'>Linear deg</th><th style='padding:4px 10px;'>Quad term</th>"
+        "<th style='padding:4px 10px;'>Cliff age</th><th style='padding:4px 10px;'>Stints</th>"
+        "<th style='padding:4px 10px;'>Source</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>",
+        unsafe_allow_html=True,
+    )
+    deg_fig = build_deg_matrix_fig(data["models"], max_age=min(total_laps, 50))
+    if deg_fig is not None:
+        st.plotly_chart(deg_fig, width="stretch", key=f"strat_deg_{sess_k}", config={"displayModeBar": False})
+
+    # Multi-strategy timeline.
+    ref_name = next((n for n in data["sims"] if n.startswith(f"Optimal {best['stops']}-stop")), None)
+    tl_fig = build_strategy_timeline_fig(data["sims"], reference=ref_name)
+    if tl_fig is not None:
+        st.plotly_chart(tl_fig, width="stretch", key=f"strat_tl_{sess_k}_{driver}")
+
+    # Re-optimisation.
+    ro = data.get("reopt")
+    if ro:
+        rb = ro["best"]
+        gain = ro.get("gain_vs_actual_s")
+        gain_txt = (f"<b style='color:{'#00E676' if gain > 0 else '#FF5252'};'>{gain:+.1f} s</b> vs what {label} actually did"
+                    if gain is not None else "")
+        st.markdown(
+            f"<div style='border-left:3px solid {colour}; padding:10px 14px; margin:8px 0 14px; "
+            f"background:var(--secondary-background-color); border-radius:8px; font-size:13px;'>"
+            f"<b>Re-optimised from lap {ro['lap']}</b> — on {ro['current_compound'].title()} aged "
+            f"{ro['current_tyre_age']} laps: {_strategy_cmp_chips(rb['compounds'])} "
+            f"· {rb['stops']} more stop(s) at {', '.join(f'L{p}' for p in rb['pit_laps']) or '— (run to the flag)'} "
+            f"· windows {_fmt_windows(rb)}. {gain_txt}</div>",
+            unsafe_allow_html=True,
+        )
+
+    # Ranked strategies.
+    risk_col = {"Low": "#00E676", "Medium": "#FFB300", "High": "#FF5252"}
+    trs = ""
+    for i, plan in enumerate(opt["ranked"][:8], 1):
+        r = plan["risk"]
+        trs += (
+            f"<tr style='background:{'rgba(128,128,128,0.06)' if i % 2 else 'transparent'};'>"
+            f"<td style='padding:6px 10px;'>{i}</td>"
+            f"<td style='padding:6px 10px;'>{_strategy_cmp_chips(plan['compounds'])}</td>"
+            f"<td style='padding:6px 10px;'>{plan['stops']}</td>"
+            f"<td style='padding:6px 10px;'>{', '.join(f'L{p}' for p in plan['pit_laps']) or '—'}</td>"
+            f"<td style='padding:6px 10px;'>{_fmt_windows(plan)}</td>"
+            f"<td style='padding:6px 10px; font-weight:600;'>{plan['delta_s']:+.2f} s</td>"
+            f"<td style='padding:6px 10px; color:{risk_col[r['level']]}; font-weight:600;'>{r['score']} · {r['level']}</td></tr>"
+        )
+    st.markdown(
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.15); "
+        "border-radius:12px; padding:14px 18px; margin:4px 0 12px;'>"
+        f"<div style='font-size:12px; font-weight:600; margin-bottom:8px; opacity:0.8;'>Strategy Ranking "
+        f"(pit loss {pit_loss:.1f} s · {opt['n_candidates']:,} plans evaluated)</div>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='font-size:11px; opacity:0.55; text-transform:uppercase; text-align:left;'>"
+        "<th style='padding:4px 10px;'>#</th><th style='padding:4px 10px;'>Plan</th><th style='padding:4px 10px;'>Stops</th>"
+        "<th style='padding:4px 10px;'>Optimal pit laps</th><th style='padding:4px 10px;'>Window (±1 s)</th>"
+        "<th style='padding:4px 10px;'>Race time Δ</th><th style='padding:4px 10px;'>Risk</th></tr></thead>"
+        f"<tbody>{trs}</tbody></table></div>",
+        unsafe_allow_html=True,
+    )
+
+    # Undercut vulnerability & rejoin position.
+    uc = data.get("undercut") or []
+    if uc:
+        urows = ""
+        for r in uc:
+            ga = f"{r['gap_ahead_on_rejoin_s']:.1f} s" if r["gap_ahead_on_rejoin_s"] is not None else "—"
+            gb = f"{r['gap_behind_on_rejoin_s']:.1f} s" if r["gap_behind_on_rejoin_s"] is not None else "—"
+            flag = " *" if r["after_actual_stop"] else ""
+            bold = "font-weight:700;" if r["is_plan_lap"] else ""
+            urows += (
+                f"<tr style='{bold}'><td style='padding:5px 10px;'>L{r['lap']}{flag}</td>"
+                f"<td style='padding:5px 10px;'>P{r['running_pos']}</td>"
+                f"<td style='padding:5px 10px;'>P{r['rejoin_pos']} ({r['positions_lost']:+d})</td>"
+                f"<td style='padding:5px 10px;'>{ga} / {gb}</td>"
+                f"<td style='padding:5px 10px;'>{r['rejoin_traffic']}</td>"
+                f"<td style='padding:5px 10px;'>{r['undercut_gain_s']:.2f} s</td>"
+                f"<td style='padding:5px 10px;'>{r['undercut_threats']}</td>"
+                f"<td style='padding:5px 10px; color:{risk_col[r['risk_level']]}; font-weight:600;'>{r['risk']} · {r['risk_level']}</td></tr>"
+            )
+        note = ("<div style='font-size:11px; opacity:0.6; margin-top:6px;'>* after the driver's real stop — "
+                "the timing already contains that stop, so read as indicative only.</div>"
+                if any(r["after_actual_stop"] for r in uc) else "")
+        st.markdown(
+            "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.15); "
+            "border-radius:12px; padding:14px 18px; margin:4px 0 12px;'>"
+            f"<div style='font-size:12px; font-weight:600; margin-bottom:8px; opacity:0.8;'>Undercut Vulnerability & "
+            f"Rejoin Position — {label}, optimal first stop ±3 laps</div>"
+            "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+            "<thead><tr style='font-size:11px; opacity:0.55; text-transform:uppercase; text-align:left;'>"
+            "<th style='padding:4px 10px;'>Pit lap</th><th style='padding:4px 10px;'>Running</th>"
+            "<th style='padding:4px 10px;'>Rejoin</th><th style='padding:4px 10px;'>Gap ahead / behind</th>"
+            "<th style='padding:4px 10px;'>Traffic (±1 s)</th><th style='padding:4px 10px;'>Fresh-tyre gain (3 laps)</th>"
+            "<th style='padding:4px 10px;'>Undercut threats</th><th style='padding:4px 10px;'>Risk</th></tr></thead>"
+            f"<tbody>{urows}</tbody></table>{note}</div>",
+            unsafe_allow_html=True,
+        )

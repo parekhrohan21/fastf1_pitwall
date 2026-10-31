@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 from plotly.subplots import make_subplots
 from src.ui.styles import COMPOUND_COLOURS
-from src.data.loader import _get_telemetry_for_map, _team_colour
+from src.data.loader import _get_telemetry_for_map, _team_colour, _compound_lap_time
 
 # ── Flag zone colour map ──────────────────────────────────────────────────────
 _FLAG_COLOURS = {
@@ -2870,5 +2870,99 @@ def build_latent_space_projection_fig(latent_data: dict, moments: list[dict] | N
         height=480, margin=dict(l=0, r=0, t=30, b=0), showlegend=False,
         scene=dict(xaxis_title=axis_names[0], yaxis_title=axis_names[1], zaxis_title=axis_names[2]),
         paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+# ── Multi-Strategy Race Timeline Comparison (Issue #196) ──────────────────────
+# CHANGE (#196): new figure builder for the strategy simulator. Top: cumulative race
+# time delta of every simulated plan against the reference (fastest) plan, with pit
+# markers. Bottom: a stint Gantt per plan in the canonical compound colours.
+
+_STRATEGY_LINE_COLOURS = ["#FF8700", "#00D2BE", "#E8002D", "#9B59B6", "#FFD700", "#64C4FF"]
+
+
+def build_strategy_timeline_fig(sims: dict, reference: str | None = None, title: str = "") -> go.Figure | None:
+    """Cumulative race-time delta vs the reference plan plus a per-plan stint Gantt."""
+    if not sims:
+        return None
+    names = list(sims.keys())
+    ref_name = reference if reference in sims else min(names, key=lambda n: sims[n]["total_time_s"])
+    ref = sims[ref_name]
+    ref_cum = dict(zip(ref["lap_numbers"], ref["cumulative"]))
+
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.12, row_heights=[0.65, 0.35],
+        subplot_titles=(f"Cumulative race time Δ vs {ref_name}  (positive = behind)", "Stint plan"),
+    )
+    for i, name in enumerate(names):
+        sim = sims[name]
+        col = _STRATEGY_LINE_COLOURS[i % len(_STRATEGY_LINE_COLOURS)]
+        xs = [l for l in sim["lap_numbers"] if l in ref_cum]
+        ys = [c - ref_cum[l] for l, c in zip(sim["lap_numbers"], sim["cumulative"]) if l in ref_cum]
+        dash = "dot" if name.startswith("Actual") else ("dash" if name.startswith("Re-opt") else "solid")
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines", name=name, legendgroup=name,
+            line=dict(color=col, width=2.4, dash=dash),
+            customdata=np.column_stack([sim["compound"][:len(xs)], sim["tyre_age"][:len(xs)]]) if xs else None,
+            hovertemplate=(f"{name}<br>Lap %{{x}}<br>Δ %{{y:+.2f}} s"
+                           "<br>%{customdata[0]} · age %{customdata[1]}<extra></extra>"),
+        ), row=1, col=1)
+        pit_y = [y for x, y in zip(xs, ys) if x in sim["pit_laps"]]
+        pit_x = [x for x in xs if x in sim["pit_laps"]]
+        if pit_x:
+            fig.add_trace(go.Scatter(
+                x=pit_x, y=pit_y, mode="markers", showlegend=False, legendgroup=name,
+                marker=dict(symbol="triangle-down", size=11, color=col, line=dict(color="#ffffff", width=1)),
+                hovertemplate=f"{name}<br>Pit lap %{{x}}<extra></extra>",
+            ), row=1, col=1)
+
+        # Gantt row: one bar per stint.
+        lap0 = sim["lap_numbers"][0] - 1 if sim["lap_numbers"] else 0
+        for cmp, n in zip(sim["compounds"], sim["stint_lengths"]):
+            pal = COMPOUND_COLOURS.get(str(cmp).upper(), COMPOUND_COLOURS["UNKNOWN"])
+            fig.add_trace(go.Bar(
+                y=[name], x=[n], base=[lap0 + 0.5], orientation="h", showlegend=False,
+                marker=dict(color=pal["fill"], line=dict(color="rgba(0,0,0,0.35)", width=1)),
+                text=[f"{pal['letter']} {n}"], textposition="inside", insidetextanchor="middle",
+                textfont=dict(color=pal["text"], size=11),
+                hovertemplate=f"{name}<br>{str(cmp).title()}: laps {lap0 + 1}–{lap0 + n}<extra></extra>",
+            ), row=2, col=1)
+            lap0 += n
+
+    fig.add_hline(y=0, line=dict(color="rgba(150,150,150,0.5)", dash="dot"), row=1, col=1)
+    fig.update_yaxes(title_text="Δ race time (s)", row=1, col=1)
+    fig.update_yaxes(autorange="reversed", row=2, col=1)
+    fig.update_xaxes(title_text="Lap", row=2, col=1)
+    fig.update_layout(
+        title=title, height=560 + 18 * max(len(names) - 3, 0), barmode="overlay",
+        margin=dict(l=50, r=20, t=70, b=40),
+        legend=dict(orientation="h", y=1.12, x=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
+def build_deg_matrix_fig(models: dict, max_age: int = 40) -> go.Figure | None:
+    """Modelled zero-fuel lap time vs tyre age for each dry compound (cliff marked)."""
+    if not models:
+        return None
+    fig = go.Figure()
+    ages = np.arange(1, max_age + 1)
+    for cmp, m in models.items():
+        pal = COMPOUND_COLOURS.get(cmp, COMPOUND_COLOURS["UNKNOWN"])
+        y = _compound_lap_time(m, ages)
+        fig.add_trace(go.Scatter(
+            x=ages, y=y, mode="lines", name=f"{cmp.title()}" + (" (est.)" if m["source"] == "estimated" else ""),
+            line=dict(color=pal["fill"], width=2.4, dash="dash" if m["source"] == "estimated" else "solid"),
+            hovertemplate=f"{cmp.title()}<br>Age %{{x}}<br>%{{y:.3f}} s<extra></extra>",
+        ))
+        if m["cliff"] <= max_age:
+            fig.add_vline(x=m["cliff"], line=dict(color=pal["fill"], dash="dot", width=1))
+    fig.update_layout(
+        height=340, margin=dict(l=50, r=20, t=30, b=40),
+        xaxis_title="Tyre age (laps)", yaxis_title="Zero-fuel lap time (s)",
+        legend=dict(orientation="h", y=1.12, x=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig
