@@ -15,7 +15,8 @@ from src.data.loader import (
     _build_telemetry_latent_manifold, _extract_brag_worthy_moments,
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
-    _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation
+    _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation,
+    DNA_AXES, _calculate_driving_style_dna
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -25,7 +26,8 @@ from src.charts.plotly import (
     build_multi_year_comparison_fig, build_braking_efficiency_fig, build_traction_exit_fig, build_gear_shift_fig,
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
-    build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig
+    build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig,
+    build_driving_style_dna_fig
 )
 from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
@@ -3656,3 +3658,198 @@ def _render_strategy_simulator_section(
             f"<tbody>{urows}</tbody></table>{note}</div>",
             unsafe_allow_html=True,
         )
+
+
+# ── Driver Driving Style DNA & Apex Aggression Spider Radar (#197) ───────────
+# ── Review notes (#197) ──
+# Renders the 6-axis polar spider radar, driving style archetype classification badges,
+# and physical telemetry breakdown table (trail-braking depth, throttle ramp rate,
+# steering/trajectory smoothness, redline shift exploitation, apex speed retention,
+# and high-speed aerodynamic confidence).
+
+def _render_driving_style_dna_section(
+    sess_k: str,
+    sess_obj,
+    tel1: pd.DataFrame | None,
+    tel2: pd.DataFrame | None,
+    driver1: str,
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+    compare: bool = False,
+    fmt_func1=None,
+    fmt_func2=None,
+) -> None:
+    """Render the Driver Driving Style DNA & Apex Aggression Spider Radar section."""
+    if tel1 is None or tel1.empty:
+        st.info("ℹ️ Telemetry is required to compute the Driver Driving Style DNA profile.")
+        return
+
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.6; margin:-6px 0 14px;'>"
+        "Multi-dimensional driving style fingerprint extracted from high-frequency lap telemetry across six "
+        "normalised (0–100) axes: Trail-Braking Modulation, Throttle Pick-Up Aggression, Steering/Trajectory Smoothness, "
+        "Gear Shift RPM Exploitation, Apex Speed Commitment, and High-Speed Corner Aerodynamic Confidence.</div>",
+        unsafe_allow_html=True,
+    )
+
+    corner_distances: list[float] | None = None
+    if sess_obj is not None:
+        try:
+            c_info = sess_obj.get_circuit_info()
+            if c_info is not None and hasattr(c_info, "corners") and c_info.corners is not None and "Distance" in c_info.corners.columns:
+                corner_distances = c_info.corners["Distance"].dropna().astype(float).tolist()
+        except Exception:
+            corner_distances = None
+
+    dna1 = _calculate_driving_style_dna(tel1, corner_distances)
+    if not dna1:
+        st.info("ℹ️ Insufficient telemetry channels to compute Driving Style DNA for this lap.")
+        return
+
+    dna2 = _calculate_driving_style_dna(tel2, corner_distances) if (compare and driver2 and tel2 is not None and not tel2.empty) else None
+
+    label1 = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
+    label2 = (
+        fmt_func2(driver2)
+        if (driver2 and callable(fmt_func2))
+        else (fmt_func1(driver2) if (driver2 and callable(fmt_func1)) else str(driver2 or ""))
+    )
+
+    def _archetype_card_html(label: str, col: str, dna: dict) -> str:
+        arch = dna.get("archetype", "Balanced All-Rounder")
+        desc = dna.get("archetype_description", "")
+        overall = dna.get("overall_dna_score", 0.0)
+        raw = dna.get("raw_metrics", {})
+        steer_src = "Direct Steering Sensor" if raw.get("steering_source") == "steering" else "X/Y Yaw Trajectory"
+        corners_n = raw.get("corners_analysed", 0)
+        return (
+            f"<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.18); "
+            f"border-left:4px solid {col}; border-radius:12px; padding:14px 16px; margin-bottom:12px;'>"
+            f"<div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>"
+            f"<div>"
+            f"<span style='font-size:13px; font-weight:700; color:{col};'>{label}</span>"
+            f"<span style='display:inline-block; margin-left:10px; padding:3px 10px; border-radius:999px; "
+            f"font-size:11px; font-weight:700; letter-spacing:0.4px; background:{col}22; color:{col}; "
+            f"border:1px solid {col}55;'>🧬 {arch}</span>"
+            f"</div>"
+            f"<div style='font-size:12px; font-family:monospace; font-weight:700;'>"
+            f"DNA Index: <span style='color:{col}; font-size:15px;'>{overall:.1f}</span> / 100"
+            f"</div>"
+            f"</div>"
+            f"<div style='font-size:12px; opacity:0.82; margin-top:6px;'>{desc}</div>"
+            f"<div style='font-size:10px; opacity:0.55; margin-top:6px;'>"
+            f"{corners_n} corner zones analysed · Smoothness channel: {steer_src}"
+            f"</div>"
+            f"</div>"
+        )
+
+    if dna2 and driver2:
+        c_arch1, c_arch2 = st.columns(2)
+        with c_arch1:
+            st.markdown(_archetype_card_html(label1, colour1, dna1), unsafe_allow_html=True)
+        with c_arch2:
+            st.markdown(_archetype_card_html(label2, colour2, dna2), unsafe_allow_html=True)
+    else:
+        st.markdown(_archetype_card_html(label1, colour1, dna1), unsafe_allow_html=True)
+
+    col_radar, col_table = st.columns([1.05, 1.15])
+    with col_radar:
+        fig = build_driving_style_dna_fig(
+            dna1,
+            dna2=dna2,
+            driver1=driver1,
+            driver2=driver2 if dna2 else None,
+            colour1=colour1,
+            colour2=colour2,
+            fmt_func1=fmt_func1,
+            fmt_func2=fmt_func2,
+        )
+        if fig is not None:
+            st.plotly_chart(fig, width="stretch", key=f"dna_radar_{sess_k}_{driver1}_{driver2}", config={"displayModeBar": False})
+
+    with col_table:
+        r1 = dna1.get("raw_metrics", {})
+        r2 = dna2.get("raw_metrics", {}) if dna2 else {}
+        a1 = dna1.get("axes", {})
+        a2 = dna2.get("axes", {}) if dna2 else {}
+
+        def _raw_summary(axis_key: str, raw: dict) -> str:
+            if not raw:
+                return "—"
+            if axis_key == "trail_braking":
+                return f"{raw.get('mean_trail_brake_dist_m', 0.0):.1f} m depth · {raw.get('decel_decay_smoothness', 0.0):.0f}% smooth"
+            if axis_key == "throttle_aggression":
+                return f"{raw.get('mean_throttle_ramp_pct_m', 0.0):.2f} %/m · +{raw.get('mean_init_throttle_dist_m', 0.0):.0f} m pick-up"
+            if axis_key == "steering_smoothness":
+                return f"σ={raw.get('steering_vel_std', 0.0):.1f} °/s · {raw.get('micro_corrections', 0)} corr."
+            if axis_key == "rpm_exploitation":
+                return f"{raw.get('mean_upshift_rpm', 0.0):.0f} RPM · {raw.get('redline_upshift_pct', 0.0):.0f}% redline"
+            if axis_key == "apex_commitment":
+                return f"{raw.get('mean_apex_retention_pct', 0.0):.1f}% ret. · {raw.get('mean_apex_speed_kmh', 0.0):.0f} km/h"
+            if axis_key == "aero_confidence":
+                return f"{raw.get('high_speed_peak_lat_g', 0.0):.2f} G · {raw.get('high_speed_apex_kmh', 0.0):.0f} km/h"
+            return "—"
+
+        rows_html = ""
+        for idx, (k, lbl) in enumerate(DNA_AXES):
+            s1 = float(a1.get(k, 0.0))
+            raw1_str = _raw_summary(k, r1)
+            bg_row = "rgba(128,128,128,0.05)" if idx % 2 else "transparent"
+            if dna2:
+                s2 = float(a2.get(k, 0.0))
+                raw2_str = _raw_summary(k, r2)
+                delta = s1 - s2
+                if abs(delta) < 1.0:
+                    edge_html = "<span style='opacity:0.55;'>Even</span>"
+                elif delta > 0:
+                    edge_html = f"<span style='color:{colour1}; font-weight:700;'>{label1.split('·')[0].strip()} +{delta:.1f}</span>"
+                else:
+                    edge_html = f"<span style='color:{colour2}; font-weight:700;'>{label2.split('·')[0].strip()} +{abs(delta):.1f}</span>"
+                rows_html += (
+                    f"<tr style='background:{bg_row}; border-bottom:1px solid rgba(128,128,128,0.12);'>"
+                    f"<td style='padding:8px 10px; font-weight:600;'>{lbl}</td>"
+                    f"<td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:{colour1};'>{s1:.1f}</td>"
+                    f"<td style='padding:8px 10px; font-size:11px; opacity:0.8;'>{raw1_str}</td>"
+                    f"<td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:{colour2};'>{s2:.1f}</td>"
+                    f"<td style='padding:8px 10px; font-size:11px; opacity:0.8;'>{raw2_str}</td>"
+                    f"<td style='padding:8px 10px; text-align:center; font-size:11px;'>{edge_html}</td>"
+                    f"</tr>"
+                )
+            else:
+                rows_html += (
+                    f"<tr style='background:{bg_row}; border-bottom:1px solid rgba(128,128,128,0.12);'>"
+                    f"<td style='padding:8px 10px; font-weight:600;'>{lbl}</td>"
+                    f"<td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:{colour1};'>{s1:.1f} / 100</td>"
+                    f"<td style='padding:8px 10px; font-size:12px; opacity:0.85;'>{raw1_str}</td>"
+                    f"</tr>"
+                )
+
+        if dna2:
+            headers_html = (
+                f"<th style='padding:8px 10px; text-align:left;'>DNA Axis</th>"
+                f"<th style='padding:8px 10px; text-align:center;'>{label1.split('·')[0].strip()}</th>"
+                f"<th style='padding:8px 10px; text-align:left;'>Telemetry Signature</th>"
+                f"<th style='padding:8px 10px; text-align:center;'>{label2.split('·')[0].strip()}</th>"
+                f"<th style='padding:8px 10px; text-align:left;'>Telemetry Signature</th>"
+                f"<th style='padding:8px 10px; text-align:center;'>Trait Edge</th>"
+            )
+        else:
+            headers_html = (
+                "<th style='padding:8px 10px; text-align:left;'>DNA Axis</th>"
+                "<th style='padding:8px 10px; text-align:center;'>Score (0–100)</th>"
+                "<th style='padding:8px 10px; text-align:left;'>Physical Telemetry Signature</th>"
+            )
+
+        st.markdown(
+            "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.15); "
+            "border-radius:12px; padding:14px 16px; margin-top:8px; overflow-x:auto;'>"
+            "<div style='font-size:12px; font-weight:600; margin-bottom:8px; opacity:0.82;'>"
+            "6-Axis Driving Style DNA & Physical Telemetry Breakdown</div>"
+            "<table style='width:100%; border-collapse:collapse; font-size:12.5px;'>"
+            "<thead><tr style='font-size:10px; opacity:0.6; text-transform:uppercase; letter-spacing:1px; "
+            f"border-bottom:1px solid rgba(128,128,128,0.2);'>{headers_html}</tr></thead>"
+            f"<tbody>{rows_html}</tbody></table></div>",
+            unsafe_allow_html=True,
+        )
+

@@ -59,6 +59,8 @@ sequence; the mapping is given in each record where one exists.
 | [027](#adr-027--code-review-findings-live-in-the-code) | Code review findings live in the code | #123 (superseded) |
 | [028](#adr-028--a-dedicated-decisions-log) | A dedicated decisions log | #172 |
 | [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
+| [030](#adr-030--six-axis-driving-style-dna-with-trajectory-yaw-fallback) | Six-axis Driving Style DNA with trajectory yaw fallback | #197 |
+| [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
 
 ---
 
@@ -543,3 +545,24 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 - *Heuristic / gradient search for pit laps*: unnecessary when prefix sums reduce all ~40k 2-stop candidates in a 57-lap race to vectorised NumPy array operations (< 50 ms).
 
 **Consequences & guardrails.** `tests/test_strategy_simulator.py` (18 tests). Known limitation: after the driver's real first pit stop, session clock timestamps already include that stop, so undercut/rejoin rows past that lap are flagged `after_actual_stop` as indicative only. Race and Sprint only.
+
+---
+
+## ADR-030 — Six-axis Driving Style DNA with trajectory yaw fallback
+
+**Issue / PR:** #197 · `AGENT.md` Decision #48 · review notes in `src/data/loader.py`
+
+**Context.** Profiling a driver's qualitative driving style across six telemetry dimensions (`Trail-Braking Modulation`, `Throttle Aggression`, `Steering Smoothness`, `RPM Exploitation`, `Apex Speed Commitment`, `High-Speed Aero Confidence`) on a 0–100 spider radar faces two FastF1 data realities: (1) standard FastF1 car telemetry (`lap.get_car_data()`) omits the `Steering` angle channel on broadcast live-timing feeds, and (2) `session.get_circuit_info()` can be unavailable on some historical or cached sessions.
+
+**Decision.**
+1. **Dual-mode Steering Smoothness (Axis 3):** When a valid `Steering` channel is present ($\max|\text{Steering}| > 0.5^\circ$), compute steering rotational velocity $\dot\delta = d\text{Steering}/dt$ ($^\circ/\text{s}$), its standard deviation, and counter-steer sign-reversal count (`steering_source="steering"`). When `Steering` is absent, compute path heading $\theta = \operatorname{unwrap}(\operatorname{atan2}(\Delta Y, \Delta X))$ from `X, Y` positional coordinates, yaw rate $\omega = d\theta/dt$ ($^\circ/\text{s}$), and yaw-acceleration sign reversals (`steering_source="trajectory"`), with a longitudinal jerk backstop if `X, Y` are also absent.
+2. **Self-contained corner apex detection (`_detect_corner_apexes`):** Uses `circuit_info.corners["Distance"]` when passed, and otherwise detects local speed minima with $\ge 14\text{ km/h}$ entry deceleration drop, $\ge 10\text{ km/h}$ exit speed gain, and $\ge 110\text{ m}$ inter-corner separation.
+3. **Brake pedal priority in Trail-Braking Modulation (Axis 1):** Uses actual brake application (`Brake > 5%`) when the `Brake` channel is active, weighting braking span by apex release proximity ($1 - \Delta d_{\text{release}} / 65\text{ m}$) and deceleration decay linearity RMSE, so coasting deceleration does not inflate trail-braking depth.
+4. **Pure archetype classifier (`_classify_driving_style`):** Maps the 6 normalised axis scores to six archetypes (`Aggressive Trail-Braker`, `Early Throttle Committer`, `Smooth Momentum Driver`, `High-Speed Aero Specialist`, `Rev-Band Exploiter`, `Balanced All-Rounder`).
+
+**Alternatives & trade-offs.**
+- *Leaving Axis 3 blank or 0 when `Steering` is missing*: breaks the 6-axis polygon geometry on real FastF1 sessions where `Steering` is never transmitted.
+- *Requiring a live `Session` object inside `_calculate_driving_style_dna`*: couples the maths to FastF1 I/O and prevents fast offline unit testing on synthetic DataFrames.
+
+**Consequences & guardrails.** `tests/test_driving_style_dna.py` (14 tests) verifies all 6 axes with and without `Steering` and `X/Y` channels, style differentiation between aggressive and smooth profiles, all 6 archetype classifications, and `go.Scatterpolar` figure construction.
+
