@@ -4,7 +4,10 @@ import pandas as pd
 import streamlit as st
 from plotly.subplots import make_subplots
 from src.ui.styles import COMPOUND_COLOURS
-from src.data.loader import _get_telemetry_for_map, _team_colour, _compound_lap_time
+from src.data.loader import (
+    _get_telemetry_for_map, _team_colour, _compound_lap_time,
+    DNA_AXES, _build_dna_benchmark_envelope
+)
 
 # ── Flag zone colour map ──────────────────────────────────────────────────────
 _FLAG_COLOURS = {
@@ -2966,3 +2969,121 @@ def build_deg_matrix_fig(models: dict, max_age: int = 40) -> go.Figure | None:
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig
+
+
+# ── Driver Driving Style DNA & Apex Aggression Spider Radar (#197) ───────────
+# ── Review notes (#197) ──
+# 6-axis polar spider radar comparing Driver 1 (and optionally Driver 2) against a
+# session reference benchmark envelope on a 0–100 normalised scale.
+
+def build_driving_style_dna_fig(
+    dna1: dict | None,
+    dna2: dict | None = None,
+    driver1: str = "Driver 1",
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str | None = "#00D2BE",
+    fmt_func1=None,
+    fmt_func2=None,
+    benchmark: list[float] | None = None,
+) -> go.Figure | None:
+    """Construct a 6-axis polar spider radar figure for Driver Driving Style DNA."""
+    if not dna1 or not dna1.get("scores"):
+        return None
+
+    axis_labels = dna1.get("axis_labels") or [lbl for _, lbl in DNA_AXES]
+    if len(axis_labels) != 6:
+        return None
+    categories = list(axis_labels) + [axis_labels[0]]
+
+    fig = go.Figure()
+
+    # Reference benchmark envelope trace
+    bench_vals = benchmark if (benchmark and len(benchmark) == 6) else _build_dna_benchmark_envelope(dna1, dna2)
+    bench_closed = list(bench_vals) + [bench_vals[0]]
+    fig.add_trace(go.Scatterpolar(
+        r=bench_closed,
+        theta=categories,
+        fill="none",
+        name="Reference Benchmark",
+        line=dict(color="rgba(255,215,0,0.55)", width=1.8, dash="dash"),
+        hovertemplate="<b>Reference Benchmark</b><br>%{theta}: %{r:.1f} / 100<extra></extra>",
+    ))
+
+    def _rgba_fill(hex_col: str, alpha: float = 0.22) -> str:
+        if isinstance(hex_col, str) and hex_col.startswith("#") and len(hex_col) == 7:
+            try:
+                r_c = int(hex_col[1:3], 16)
+                g_c = int(hex_col[3:5], 16)
+                b_c = int(hex_col[5:7], 16)
+                return f"rgba({r_c},{g_c},{b_c},{alpha})"
+            except ValueError:
+                pass
+        return f"rgba(255,135,0,{alpha})"
+
+    drv1_label = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
+    scores1 = list(dna1["scores"])[:6]
+    scores1_closed = scores1 + [scores1[0]]
+    col1 = colour1 or "#FF8700"
+    fig.add_trace(go.Scatterpolar(
+        r=scores1_closed,
+        theta=categories,
+        fill="toself",
+        fillcolor=_rgba_fill(col1, 0.24),
+        name=f"{drv1_label} ({dna1.get('archetype', 'DNA')})",
+        line=dict(color=col1, width=2.8),
+        marker=dict(size=7, color=col1),
+        hovertemplate=f"<b>{drv1_label}</b><br>%{{theta}}: <b>%{{r:.1f}}</b> / 100<extra></extra>",
+    ))
+
+    if dna2 and dna2.get("scores") and driver2:
+        drv2_label = fmt_func2(driver2) if callable(fmt_func2) else (fmt_func1(driver2) if callable(fmt_func1) else str(driver2))
+        scores2 = list(dna2["scores"])[:6]
+        if len(scores2) == 6:
+            scores2_closed = scores2 + [scores2[0]]
+            col2 = colour2 or "#00D2BE"
+            fig.add_trace(go.Scatterpolar(
+                r=scores2_closed,
+                theta=categories,
+                fill="toself",
+                fillcolor=_rgba_fill(col2, 0.20),
+                name=f"{drv2_label} ({dna2.get('archetype', 'DNA')})",
+                line=dict(color=col2, width=2.6, dash="solid"),
+                marker=dict(size=7, color=col2, symbol="diamond"),
+                hovertemplate=f"<b>{drv2_label}</b><br>%{{theta}}: <b>%{{r:.1f}}</b> / 100<extra></extra>",
+            ))
+
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                tickvals=[20, 40, 60, 80, 100],
+                gridcolor="rgba(128,128,128,0.22)",
+                linecolor="rgba(128,128,128,0.25)",
+                tickfont=dict(size=10),
+                angle=30,
+            ),
+            angularaxis=dict(
+                gridcolor="rgba(128,128,128,0.22)",
+                linecolor="rgba(128,128,128,0.28)",
+                tickfont=dict(size=12),
+                direction="clockwise",
+            ),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=490,
+        margin=dict(l=55, r=55, t=45, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.06,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11),
+        ),
+    )
+    return fig
+

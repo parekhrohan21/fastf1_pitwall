@@ -119,7 +119,8 @@ from src.ui.components import (
     _render_braking_analysis_section, _render_traction_exit_section, _render_gear_analysis_section,
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section, _render_weekend_progression_section,
-    _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section
+    _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section,
+    _render_driving_style_dna_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1146,6 +1147,15 @@ if tel1 is not None:
     _render_gear_analysis_section(
         sess_key, tel1, tel2 if (compare and driver2) else None,
         driver1, driver2, colour1, colour2, compare,
+        fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+    )
+
+# ── Driver Driving Style DNA & Apex Aggression Spider Radar (#197) ──────────
+st.markdown("<div class='section-title'>🧬 Driver Driving Style DNA & Apex Aggression Spider Radar</div>", unsafe_allow_html=True)
+if tel1 is not None:
+    _render_driving_style_dna_section(
+        sess_key, sess, tel1, tel2 if (compare and driver2) else None,
+        driver1, driver2 if compare else None, colour1, colour2, compare,
         fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
     )
 

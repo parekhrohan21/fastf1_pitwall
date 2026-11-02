@@ -5049,3 +5049,574 @@ def _build_strategy_simulation(
         }
     except Exception:
         return None
+
+
+# ── Driver Driving Style DNA & Apex Aggression Spider Radar (#197) ───────────
+# ── Review notes (#197) ──
+# Multi-dimensional driving style profiling across 6 normalised (0–100) axes:
+#   1. Trail-Braking Modulation  — brake-to-apex overlap depth & deceleration decay smoothness
+#   2. Throttle Aggression       — post-apex throttle ramp rate (%/m) & initial pick-up distance
+#   3. Steering Smoothness       — direct Steering rotational velocity variance when present,
+#                                  with graceful fallback to X/Y trajectory yaw-rate smoothness
+#                                  (FastF1 car data omits Steering on standard live-timing feeds)
+#   4. RPM Exploitation          — upshift RPM vs rev ceiling & redline shift share vs short-shifts
+#   5. Apex Speed Commitment     — apex minimum speed retention (v_apex / v_entry) & carry speed
+#   6. High-Speed Aero Confidence — lateral/combined G-force & speed retention in >180 km/h turns
+# All helpers are pure functions of plain DataFrames and lists so they are fast, deterministic,
+# and directly testable without network access or FastF1 Session objects.
+
+DNA_AXES: list[tuple[str, str]] = [
+    ("trail_braking", "Trail-Braking Modulation"),
+    ("throttle_aggression", "Throttle Aggression"),
+    ("steering_smoothness", "Steering Smoothness"),
+    ("rpm_exploitation", "RPM Exploitation"),
+    ("apex_commitment", "Apex Speed Commitment"),
+    ("aero_confidence", "High-Speed Aero Confidence"),
+]
+
+
+def _detect_corner_apexes(
+    tel_df: pd.DataFrame,
+    corner_distances: list[float] | None = None,
+) -> list[float]:
+    """Return sorted corner apex distances (m), using circuit_info corners or local speed minima."""
+    if tel_df is None or tel_df.empty or "Distance" not in tel_df.columns or "Speed" not in tel_df.columns:
+        return []
+
+    dist = pd.to_numeric(tel_df["Distance"], errors="coerce").to_numpy(dtype=float)
+    speed = pd.to_numeric(tel_df["Speed"], errors="coerce").to_numpy(dtype=float)
+    valid = np.isfinite(dist) & np.isfinite(speed)
+    if valid.sum() < 10:
+        return []
+    dist = dist[valid]
+    speed = speed[valid]
+    d_min, d_max = float(dist.min()), float(dist.max())
+
+    if corner_distances:
+        cleaned = sorted(
+            float(c) for c in corner_distances
+            if c is not None and np.isfinite(c) and (d_min + 20.0) <= float(c) <= (d_max - 20.0)
+        )
+        if cleaned:
+            return cleaned
+
+    # Auto-detect local speed minima when circuit_info corners are unavailable.
+    n = len(speed)
+    candidates: list[tuple[float, float]] = []
+    for i in range(2, n - 2):
+        lo = max(0, i - 12)
+        hi = min(n, i + 13)
+        win_min = float(np.min(speed[lo:hi]))
+        if speed[i] > win_min + 1e-6:
+            continue
+        pre_lo = max(0, i - 45)
+        post_hi = min(n, i + 45)
+        entry_drop = float(np.max(speed[pre_lo:i + 1]) - speed[i])
+        exit_gain = float(np.max(speed[i:post_hi]) - speed[i])
+        if entry_drop >= 14.0 and exit_gain >= 10.0:
+            candidates.append((float(dist[i]), float(speed[i])))
+
+    # Enforce minimum separation of 110 m between distinct corners (keep deeper minimum).
+    merged: list[tuple[float, float]] = []
+    for d_c, v_c in candidates:
+        if not merged or (d_c - merged[-1][0]) >= 110.0:
+            merged.append((d_c, v_c))
+        elif v_c < merged[-1][1]:
+            merged[-1] = (d_c, v_c)
+
+    return [d_c for d_c, _ in merged]
+
+
+def _classify_driving_style(axes: dict[str, float]) -> tuple[str, str]:
+    """Map the 6 normalised DNA axis scores (0–100) to a driving style archetype and description."""
+    if not axes:
+        return ("Balanced All-Rounder", "Consistent multi-phase cornering balance across all six telemetry dimensions.")
+
+    tb = float(axes.get("trail_braking", 50.0))
+    ta = float(axes.get("throttle_aggression", 50.0))
+    ss = float(axes.get("steering_smoothness", 50.0))
+    rpm = float(axes.get("rpm_exploitation", 50.0))
+    ac = float(axes.get("apex_commitment", 50.0))
+    aero = float(axes.get("aero_confidence", 50.0))
+
+    vals = [tb, ta, ss, rpm, ac, aero]
+    spread = max(vals) - min(vals)
+
+    # Check if all axes are tightly clustered with no pronounced outlier
+    if spread < 10.0 and 45.0 <= float(np.mean(vals)) <= 78.0:
+        return (
+            "Balanced All-Rounder",
+            "Well-rounded telemetry signature balancing braking stability, smooth rotation, and measured traction release.",
+        )
+
+    candidates = [
+        (
+            "Aggressive Trail-Braker",
+            tb + 0.25 * ac - 0.10 * ss,
+            tb >= 62.0,
+            "Carries deep braking pressure and progressive deceleration modulation right into the corner apex to rotate the car on entry.",
+        ),
+        (
+            "Early Throttle Committer",
+            ta + 0.20 * rpm - 0.10 * tb,
+            ta >= 62.0,
+            "Prioritises rapid corner rotation to get back to full power early with a steep post-apex throttle ramp rate.",
+        ),
+        (
+            "Smooth Momentum Driver",
+            0.55 * ss + 0.45 * ac,
+            ss >= 62.0 and ac >= 55.0,
+            "Minimises steering micro-corrections and scrub to preserve high minimum apex velocity and rolling momentum.",
+        ),
+        (
+            "High-Speed Aero Specialist",
+            aero + 0.25 * ac,
+            aero >= 64.0,
+            "Extracts high lateral G-load and minimum speed retention through fast aerodynamic corners (>180 km/h).",
+        ),
+        (
+            "Rev-Band Exploiter",
+            rpm + 0.20 * ta,
+            rpm >= 65.0,
+            "Stretches every gear to the upper rev ceiling near redline to maximise power-band deployment on corner exits.",
+        ),
+    ]
+
+    qualifying = [(name, score, desc) for name, score, cond, desc in candidates if cond]
+    if qualifying:
+        best_name, _, best_desc = max(qualifying, key=lambda item: item[1])
+        return (best_name, best_desc)
+
+    # Fallback: pick dominant raw axis if above 58, else Balanced All-Rounder
+    top_axis = max(
+        [
+            ("trail_braking", tb),
+            ("throttle_aggression", ta),
+            ("steering_smoothness", ss),
+            ("rpm_exploitation", rpm),
+            ("apex_commitment", ac),
+            ("aero_confidence", aero),
+        ],
+        key=lambda kv: kv[1],
+    )
+    axis_to_archetype = {
+        "trail_braking": (
+            "Aggressive Trail-Braker",
+            "Carries deep braking pressure and progressive deceleration modulation right into the corner apex.",
+        ),
+        "throttle_aggression": (
+            "Early Throttle Committer",
+            "Commits to throttle early after the apex with an assertive longitudinal traction ramp.",
+        ),
+        "steering_smoothness": (
+            "Smooth Momentum Driver",
+            "Uses low-variance steering inputs and clean trajectory arcs to minimise tyre energy scrub.",
+        ),
+        "rpm_exploitation": (
+            "Rev-Band Exploiter",
+            "Holds gears high into the rev band before upshifting to maximise straight-line acceleration.",
+        ),
+        "apex_commitment": (
+            "Smooth Momentum Driver",
+            "Prioritises high minimum apex speed retention through mid-corner rotation.",
+        ),
+        "aero_confidence": (
+            "High-Speed Aero Specialist",
+            "Demonstrates strong commitment and speed retention through high-speed aerodynamic turns.",
+        ),
+    }
+    if top_axis[1] >= 58.0:
+        return axis_to_archetype[top_axis[0]]
+
+    return (
+        "Balanced All-Rounder",
+        "Consistent multi-phase cornering balance across braking, mid-corner rotation, and exit traction.",
+    )
+
+
+def _build_dna_benchmark_envelope(dna1: dict | None, dna2: dict | None = None) -> list[float]:
+    """Build a 6-axis reference benchmark envelope (0–100) for the radar chart."""
+    base = [72.0, 72.0, 74.0, 75.0, 73.0, 74.0]
+    scores1 = dna1.get("scores", []) if isinstance(dna1, dict) else []
+    scores2 = dna2.get("scores", []) if isinstance(dna2, dict) else []
+    out: list[float] = []
+    for i in range(len(DNA_AXES)):
+        vals = [base[i]]
+        if i < len(scores1) and scores1[i] is not None:
+            vals.append(float(scores1[i]) * 0.92)
+        if i < len(scores2) and scores2[i] is not None:
+            vals.append(float(scores2[i]) * 0.92)
+        out.append(round(float(np.clip(max(vals), 65.0, 88.0)), 1))
+    return out
+
+
+def _calculate_driving_style_dna(
+    tel_df: pd.DataFrame | None,
+    corner_distances: list[float] | None = None,
+) -> dict | None:
+    """Extract the 6-axis Driver Driving Style DNA & Apex Aggression profile from lap telemetry.
+
+    Returns a dictionary containing:
+    - ``axes``: dict mapping the 6 axis keys to normalised 0–100 float scores
+    - ``axis_labels``: list of 6 display labels in radar order
+    - ``scores``: list of 6 float scores (0–100) in radar order
+    - ``raw_metrics``: dict of underlying physical telemetry measurements
+    - ``overall_dna_score``: mean of the 6 normalised axis scores (0–100)
+    - ``archetype``: categorised driving style archetype badge string
+    - ``archetype_description``: engineering summary of the driver's signature
+    """
+    if tel_df is None or not isinstance(tel_df, pd.DataFrame) or tel_df.empty:
+        return None
+    if "Distance" not in tel_df.columns or "Speed" not in tel_df.columns:
+        return None
+
+    try:
+        df = tel_df.copy().sort_values("Distance").reset_index(drop=True)
+        dist = pd.to_numeric(df["Distance"], errors="coerce").to_numpy(dtype=float)
+        speed_kmh = pd.to_numeric(df["Speed"], errors="coerce").to_numpy(dtype=float)
+        valid_mask = np.isfinite(dist) & np.isfinite(speed_kmh)
+        if valid_mask.sum() < 15:
+            return None
+
+        df = df.loc[valid_mask].reset_index(drop=True)
+        dist = pd.to_numeric(df["Distance"], errors="coerce").to_numpy(dtype=float)
+        speed_kmh = pd.to_numeric(df["Speed"], errors="coerce").to_numpy(dtype=float)
+        speed_ms = speed_kmh / 3.6
+        n = len(df)
+
+        # Time vector (seconds) — derive from Time/SessionTime or integrate ds / v
+        t_sec = None
+        for t_col in ("Time", "SessionTime"):
+            if t_col in df.columns:
+                s_col = df[t_col]
+                if hasattr(s_col.dt, "total_seconds"):
+                    t_cand = s_col.dt.total_seconds().to_numpy(dtype=float)
+                else:
+                    t_cand = pd.to_numeric(s_col, errors="coerce").to_numpy(dtype=float)
+                if np.isfinite(t_cand).sum() >= n * 0.8:
+                    t_sec = t_cand - np.nanmin(t_cand)
+                    break
+
+        ds = np.gradient(dist)
+        ds = np.where(np.abs(ds) < 1e-3, 1.0, ds)
+        if t_sec is None or np.any(~np.isfinite(t_sec)):
+            dt_step = np.clip(np.abs(ds) / np.maximum(speed_ms, 5.0), 0.01, 1.0)
+            t_sec = np.concatenate([[0.0], np.cumsum(dt_step[1:])])
+        dt = np.gradient(t_sec)
+        dt = np.where(np.abs(dt) < 1e-3, 0.05, dt)
+
+        # Channels with graceful defaults
+        if "Throttle" in df.columns:
+            throttle = pd.to_numeric(df["Throttle"], errors="coerce").fillna(0.0).clip(0.0, 100.0).to_numpy(dtype=float)
+        else:
+            throttle = np.where(np.gradient(speed_ms) > 0, 80.0, 15.0)
+
+        if "Brake" in df.columns:
+            brake_raw = df["Brake"]
+            if brake_raw.dtype == bool:
+                brake = brake_raw.astype(float).to_numpy() * 100.0
+            else:
+                brake = pd.to_numeric(brake_raw, errors="coerce").fillna(0.0).to_numpy(dtype=float)
+                if np.nanmax(brake) <= 1.05:
+                    brake = brake * 100.0
+        else:
+            brake = np.where((np.gradient(speed_ms) / dt) < -4.0, 100.0, 0.0)
+
+        # Longitudinal acceleration (G)
+        a_long_ms2 = np.gradient(speed_ms) / dt
+        a_long_g = np.clip(a_long_ms2 / 9.80665, -6.5, 4.0)
+
+        # Detect corner apexes
+        apex_dists = _detect_corner_apexes(df, corner_distances)
+        if not apex_dists:
+            # Fallback to 4 quantile-spaced local speed minima across the lap
+            q_edges = np.linspace(0, n - 1, 5, dtype=int)
+            for q_i in range(4):
+                lo, hi = q_edges[q_i], q_edges[q_i + 1]
+                if hi > lo + 2:
+                    idx_min = lo + int(np.argmin(speed_kmh[lo:hi]))
+                    apex_dists.append(float(dist[idx_min]))
+
+        # ── Per-corner analysis for Axes 1, 2, 5, 6 ──────────────────────────────
+        trail_brake_dists: list[float] = []
+        decel_decay_scores: list[float] = []
+        throttle_ramps: list[float] = []
+        init_throttle_dists: list[float] = []
+        apex_retentions: list[float] = []
+        apex_speeds: list[float] = []
+        high_speed_apexes: list[float] = []
+        high_speed_retentions: list[float] = []
+
+        for c_dist in apex_dists:
+            win_idx = np.where((dist >= c_dist - 55.0) & (dist <= c_dist + 55.0))[0]
+            if len(win_idx) < 3:
+                continue
+            apex_idx = int(win_idx[np.argmin(speed_kmh[win_idx])])
+            actual_apex_d = float(dist[apex_idx])
+            v_apex = float(speed_kmh[apex_idx])
+
+            entry_idx = np.where((dist >= actual_apex_d - 150.0) & (dist <= actual_apex_d))[0]
+            exit_idx = np.where((dist >= actual_apex_d) & (dist <= actual_apex_d + 150.0))[0]
+            if len(entry_idx) < 3 or len(exit_idx) < 3:
+                continue
+
+            v_entry = float(np.max(speed_kmh[entry_idx]))
+            if v_entry - v_apex < 8.0:
+                continue
+
+            apex_speeds.append(v_apex)
+            retention_pct = (v_apex / max(v_entry, 1.0)) * 100.0
+            apex_retentions.append(retention_pct)
+
+            if v_entry >= 195.0 and v_apex >= 125.0:
+                high_speed_apexes.append(v_apex)
+                high_speed_retentions.append(retention_pct)
+
+            # Axis 1: Trail-Braking Modulation in entry window
+            entry_brake = brake[entry_idx]
+            entry_dist = dist[entry_idx]
+            entry_decel = -a_long_g[entry_idx]  # positive during braking
+            if np.any(entry_brake > 5.0):
+                braking_mask = entry_brake > 5.0
+            else:
+                braking_mask = entry_decel > 0.65
+            if np.any(braking_mask):
+                b_dists = entry_dist[braking_mask]
+                b_span = float(b_dists[-1] - b_dists[0])
+                # Proximity of last braking sample to the apex (0 m = right at apex, 65 m = early release)
+                release_gap = max(0.0, actual_apex_d - float(b_dists[-1]))
+                proximity_factor = float(np.clip(1.0 - release_gap / 65.0, 0.10, 1.0))
+                # Fractional brake modulation in the final 60 m before apex
+                near_apex_frac = (entry_dist >= actual_apex_d - 60.0) & (entry_brake >= 8.0) & (entry_brake <= 88.0)
+                frac_span = float(entry_dist[near_apex_frac][-1] - entry_dist[near_apex_frac][0]) if np.sum(near_apex_frac) >= 2 else 0.0
+                effective_tb_dist = float(b_span * proximity_factor * 0.65 + 0.35 * frac_span)
+                trail_brake_dists.append(float(np.clip(effective_tb_dist, 0.0, 95.0)))
+
+                # Deceleration decay smoothness from peak decel to apex, weighted by apex proximity
+                pk_rel = int(np.argmax(entry_decel))
+                decay_seg = entry_decel[pk_rel:]
+                if len(decay_seg) >= 3 and decay_seg[0] > 0.4:
+                    ideal_line = np.linspace(decay_seg[0], decay_seg[-1], len(decay_seg))
+                    rmse = float(np.sqrt(np.mean((decay_seg - ideal_line) ** 2)))
+                    norm_smooth = float(np.clip(1.0 - rmse / max(float(decay_seg[0]), 1.0), 0.0, 1.0))
+                    decel_decay_scores.append((0.55 * norm_smooth + 0.45 * proximity_factor) * 100.0)
+                else:
+                    decel_decay_scores.append(55.0 * proximity_factor)
+            else:
+                trail_brake_dists.append(8.0)
+                decel_decay_scores.append(35.0)
+
+            # Axis 2: Throttle Pick-Up Aggression in exit window
+            exit_thr = throttle[exit_idx]
+            exit_dist = dist[exit_idx] - actual_apex_d
+            commit_pts = exit_dist[exit_thr >= 25.0]
+            init_d = float(commit_pts[0]) if len(commit_pts) > 0 else float(exit_dist[-1])
+            init_throttle_dists.append(float(np.clip(init_d, 0.0, 120.0)))
+
+            full_pts = exit_dist[exit_thr >= 95.0]
+            if len(full_pts) > 0 and full_pts[0] > 1.0:
+                ramp = float((95.0 - exit_thr[0]) / max(float(full_pts[0]), 5.0))
+            else:
+                span_d = max(float(exit_dist[-1] - exit_dist[0]), 10.0)
+                ramp = float(max(0.0, float(np.max(exit_thr) - exit_thr[0])) / span_d)
+            throttle_ramps.append(float(np.clip(ramp, 0.05, 4.5)))
+
+        mean_tb_dist = float(np.mean(trail_brake_dists)) if trail_brake_dists else 18.0
+        mean_decel_smooth = float(np.mean(decel_decay_scores)) if decel_decay_scores else 50.0
+        trail_braking_score = float(
+            np.clip(0.65 * (mean_tb_dist / 78.0 * 100.0) + 0.35 * mean_decel_smooth, 5.0, 99.0)
+        )
+
+        mean_ramp = float(np.mean(throttle_ramps)) if throttle_ramps else 0.75
+        mean_init_d = float(np.mean(init_throttle_dists)) if init_throttle_dists else 30.0
+        ramp_norm = float(np.clip((mean_ramp - 0.15) / 1.65 * 100.0, 0.0, 100.0))
+        commit_norm = float(np.clip((1.0 - mean_init_d / 70.0) * 100.0, 0.0, 100.0))
+        throttle_aggression_score = float(np.clip(0.58 * ramp_norm + 0.42 * commit_norm, 5.0, 99.0))
+
+        # ── Axis 3: Steering Smoothness Index (direct Steering or X/Y trajectory fallback) ──
+        steering_source = "trajectory"
+        has_steering_col = False
+        if "Steering" in df.columns:
+            steer_vals = pd.to_numeric(df["Steering"], errors="coerce").to_numpy(dtype=float)
+            if np.isfinite(steer_vals).sum() >= n * 0.7 and np.nanmax(np.abs(steer_vals)) > 0.5:
+                has_steering_col = True
+
+        if has_steering_col:
+            steering_source = "steering"
+            steer_vals = pd.Series(steer_vals).interpolate(limit_direction="both").fillna(0.0).to_numpy(dtype=float)
+            steer_vel = np.gradient(steer_vals) / dt
+            steering_vel_std = float(np.nanstd(steer_vel))
+            # Count counter-steer micro-corrections (sign reversals in steering rate above noise threshold)
+            active_rate = steer_vel[np.abs(steer_vel) > 12.0]
+            if len(active_rate) >= 3:
+                signs = np.sign(active_rate)
+                micro_corrections = int(np.sum(signs[1:] != signs[:-1]))
+            else:
+                micro_corrections = 0
+            lap_km = max((float(dist[-1]) - float(dist[0])) / 1000.0, 1.0)
+            corr_per_km = micro_corrections / lap_km
+            vel_term = float(np.clip(100.0 - (steering_vel_std - 18.0) * 1.15, 5.0, 99.0))
+            corr_term = float(np.clip(100.0 - corr_per_km * 3.8, 5.0, 99.0))
+            steering_smoothness_score = float(np.clip(0.60 * vel_term + 0.40 * corr_term, 5.0, 99.0))
+        elif "X" in df.columns and "Y" in df.columns:
+            x_arr = pd.to_numeric(df["X"], errors="coerce").interpolate(limit_direction="both").to_numpy(dtype=float)
+            y_arr = pd.to_numeric(df["Y"], errors="coerce").interpolate(limit_direction="both").to_numpy(dtype=float)
+            if np.isfinite(x_arr).sum() >= n * 0.7 and np.isfinite(y_arr).sum() >= n * 0.7:
+                dx = np.gradient(x_arr)
+                dy = np.gradient(y_arr)
+                heading = np.unwrap(np.arctan2(dy, dx))
+                yaw_rate_deg = np.degrees(np.gradient(heading) / dt)
+                yaw_rate_deg = np.clip(yaw_rate_deg, -120.0, 120.0)
+                yaw_accel = np.gradient(yaw_rate_deg) / dt
+                steering_vel_std = float(np.nanstd(yaw_rate_deg))
+                active_yaw_acc = yaw_accel[np.abs(yaw_accel) > 25.0]
+                if len(active_yaw_acc) >= 3:
+                    signs = np.sign(active_yaw_acc)
+                    micro_corrections = int(np.sum(signs[1:] != signs[:-1]))
+                else:
+                    micro_corrections = 0
+                lap_km = max((float(dist[-1]) - float(dist[0])) / 1000.0, 1.0)
+                corr_per_km = micro_corrections / lap_km
+                vel_term = float(np.clip(100.0 - (steering_vel_std - 12.0) * 1.6, 10.0, 98.0))
+                corr_term = float(np.clip(100.0 - corr_per_km * 2.5, 10.0, 98.0))
+                steering_smoothness_score = float(np.clip(0.55 * vel_term + 0.45 * corr_term, 8.0, 98.0))
+            else:
+                steering_vel_std = float(np.nanstd(np.gradient(a_long_g) / dt))
+                micro_corrections = int(np.sum(np.abs(np.diff(np.sign(a_long_g))) > 0))
+                steering_smoothness_score = float(np.clip(85.0 - steering_vel_std * 4.5, 15.0, 95.0))
+        else:
+            jerk = np.gradient(a_long_g) / dt
+            steering_vel_std = float(np.nanstd(jerk))
+            micro_corrections = int(np.sum(np.abs(np.diff(np.sign(jerk))) > 0) // 4)
+            steering_smoothness_score = float(np.clip(88.0 - steering_vel_std * 5.0, 15.0, 95.0))
+
+        # ── Axis 4: Gear Shift RPM Exploitation ──────────────────────────────────
+        gear_col = "nGear" if "nGear" in df.columns else ("Gear" if "Gear" in df.columns else None)
+        has_rpm = "RPM" in df.columns and pd.to_numeric(df["RPM"], errors="coerce").notna().sum() >= 5
+        if has_rpm:
+            rpm_arr = pd.to_numeric(df["RPM"], errors="coerce").ffill().bfill().fillna(0.0).to_numpy(dtype=float)
+            upshift_rpms: list[float] = []
+            if gear_col is not None:
+                gears = pd.to_numeric(df[gear_col], errors="coerce").ffill().bfill().fillna(0).to_numpy(dtype=int)
+                for idx_g in range(1, n):
+                    if gears[idx_g] > gears[idx_g - 1] and gears[idx_g - 1] >= 1 and ( gears[idx_g] - gears[idx_g - 1] ) <= 2:
+                        lo_r = max(0, idx_g - 3)
+                        upshift_rpms.append(float(np.max(rpm_arr[lo_r:idx_g + 1])))
+            if not upshift_rpms:
+                full_thr_rpm = rpm_arr[throttle >= 75.0]
+                if len(full_thr_rpm) >= 3:
+                    upshift_rpms = [float(np.percentile(full_thr_rpm, p)) for p in (75, 85, 92, 96)]
+                else:
+                    upshift_rpms = [float(np.percentile(rpm_arr, 90))]
+
+            upshift_arr = np.asarray(upshift_rpms, dtype=float)
+            mean_upshift_rpm = float(np.mean(upshift_arr))
+            redline_upshift_pct = float(np.mean(upshift_arr >= 11550.0) * 100.0)
+            short_shift_pct = float(np.mean(upshift_arr < 10950.0) * 100.0)
+            rpm_level_score = float(np.clip((mean_upshift_rpm - 10100.0) / (12350.0 - 10100.0) * 100.0, 0.0, 100.0))
+            rpm_exploitation_score = float(
+                np.clip(0.55 * rpm_level_score + 0.45 * redline_upshift_pct - 0.15 * short_shift_pct, 5.0, 99.0)
+            )
+        else:
+            mean_upshift_rpm = 11400.0
+            redline_upshift_pct = 50.0
+            short_shift_pct = 15.0
+            rpm_exploitation_score = 55.0
+
+        # ── Axis 5: Apex Minimum Speed Commitment ────────────────────────────────
+        mean_apex_retention_pct = float(np.mean(apex_retentions)) if apex_retentions else 52.0
+        min_apex_speed_kmh = float(np.min(apex_speeds)) if apex_speeds else float(np.min(speed_kmh))
+        mean_apex_speed_kmh = float(np.mean(apex_speeds)) if apex_speeds else float(np.percentile(speed_kmh, 25))
+        ret_score = float(np.clip((mean_apex_retention_pct - 34.0) / (76.0 - 34.0) * 100.0, 5.0, 99.0))
+        spd_score = float(np.clip((mean_apex_speed_kmh - 85.0) / (185.0 - 85.0) * 100.0, 5.0, 99.0))
+        apex_commitment_score = float(np.clip(0.62 * ret_score + 0.38 * spd_score, 5.0, 99.0))
+
+        # ── Axis 6: High-Speed Corner Aerodynamic Confidence ─────────────────────
+        # Compute lateral G in high-speed segments (Speed >= 180 km/h) when X/Y exist
+        lat_g_arr = np.zeros(n, dtype=float)
+        if "X" in df.columns and "Y" in df.columns:
+            x_c = pd.to_numeric(df["X"], errors="coerce").interpolate(limit_direction="both").to_numpy(dtype=float)
+            y_c = pd.to_numeric(df["Y"], errors="coerce").interpolate(limit_direction="both").to_numpy(dtype=float)
+            if np.isfinite(x_c).sum() >= n * 0.7 and np.isfinite(y_c).sum() >= n * 0.7:
+                dx_c = np.gradient(x_c)
+                dy_c = np.gradient(y_c)
+                ds_xy = np.hypot(dx_c, dy_c)
+                # FastF1 X/Y coordinates are in 1/10th metre (decimetres) on live timing feeds;
+                # normalise step size against Distance (m) so curvature is in 1/m.
+                scale_xy = float(np.nanmedian(ds_xy / np.maximum(np.abs(ds), 0.5)))
+                if scale_xy > 3.5:
+                    ds_m = ds_xy / scale_xy
+                else:
+                    ds_m = np.maximum(ds_xy, np.abs(ds))
+                heading_c = np.unwrap(np.arctan2(dy_c, dx_c))
+                curvature = np.abs(np.gradient(heading_c) / np.maximum(ds_m, 1.0))
+                curvature = np.clip(curvature, 0.0, 0.035)
+                lat_g_arr = np.clip((speed_ms ** 2) * curvature / 9.80665, 0.0, 6.2)
+
+        hs_mask = speed_kmh >= 180.0
+        if np.any(hs_mask) and np.max(lat_g_arr[hs_mask]) > 0.3:
+            high_speed_peak_lat_g = float(np.percentile(lat_g_arr[hs_mask], 95))
+        elif np.any(hs_mask):
+            # Estimate high-speed combined G from high-speed corner speed retention & throttle commitment
+            hs_thr = float(np.mean(throttle[hs_mask]))
+            high_speed_peak_lat_g = float(np.clip(2.4 + (hs_thr / 100.0) * 2.1, 1.8, 5.5))
+        else:
+            high_speed_peak_lat_g = 2.5
+
+        if high_speed_apexes:
+            high_speed_apex_kmh = float(np.mean(high_speed_apexes))
+            hs_ret = float(np.mean(high_speed_retentions))
+        else:
+            # Top-quartile fastest corners on slower tracks
+            sorted_apx = sorted(apex_speeds, reverse=True)
+            top_k = sorted_apx[: max(1, len(sorted_apx) // 2)] if sorted_apx else [float(np.percentile(speed_kmh, 60))]
+            high_speed_apex_kmh = float(np.mean(top_k))
+            hs_ret = mean_apex_retention_pct
+
+        g_score = float(np.clip((high_speed_peak_lat_g - 1.8) / (5.2 - 1.8) * 100.0, 5.0, 99.0))
+        hs_spd_score = float(np.clip((high_speed_apex_kmh - 135.0) / (245.0 - 135.0) * 100.0, 5.0, 99.0))
+        hs_ret_score = float(np.clip((hs_ret - 45.0) / (85.0 - 45.0) * 100.0, 5.0, 99.0))
+        aero_confidence_score = float(np.clip(0.42 * g_score + 0.33 * hs_spd_score + 0.25 * hs_ret_score, 5.0, 99.0))
+
+        axes = {
+            "trail_braking": round(trail_braking_score, 1),
+            "throttle_aggression": round(throttle_aggression_score, 1),
+            "steering_smoothness": round(steering_smoothness_score, 1),
+            "rpm_exploitation": round(rpm_exploitation_score, 1),
+            "apex_commitment": round(apex_commitment_score, 1),
+            "aero_confidence": round(aero_confidence_score, 1),
+        }
+        scores = [axes[k] for k, _ in DNA_AXES]
+        axis_labels = [lbl for _, lbl in DNA_AXES]
+        overall_dna_score = round(float(np.mean(scores)), 1)
+        archetype, archetype_description = _classify_driving_style(axes)
+
+        return {
+            "axes": axes,
+            "axis_labels": axis_labels,
+            "scores": scores,
+            "overall_dna_score": overall_dna_score,
+            "archetype": archetype,
+            "archetype_description": archetype_description,
+            "raw_metrics": {
+                "mean_trail_brake_dist_m": round(mean_tb_dist, 1),
+                "decel_decay_smoothness": round(mean_decel_smooth, 1),
+                "mean_throttle_ramp_pct_m": round(mean_ramp, 2),
+                "mean_init_throttle_dist_m": round(mean_init_d, 1),
+                "steering_vel_std": round(steering_vel_std, 2),
+                "micro_corrections": int(micro_corrections),
+                "steering_source": steering_source,
+                "mean_upshift_rpm": round(mean_upshift_rpm, 0),
+                "redline_upshift_pct": round(redline_upshift_pct, 1),
+                "short_shift_pct": round(short_shift_pct, 1),
+                "mean_apex_retention_pct": round(mean_apex_retention_pct, 1),
+                "mean_apex_speed_kmh": round(mean_apex_speed_kmh, 1),
+                "min_apex_speed_kmh": round(min_apex_speed_kmh, 1),
+                "high_speed_peak_lat_g": round(high_speed_peak_lat_g, 2),
+                "high_speed_apex_kmh": round(high_speed_apex_kmh, 1),
+                "corners_analysed": int(len(apex_speeds)),
+            },
+        }
+    except Exception:
+        return None
+
