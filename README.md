@@ -199,21 +199,22 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 14. **Track Evolution & Grip Improvement Ramp Index**: In Practice and Qualifying sessions, review driver fixed-effects pace normalisation, Track Ramp Rate (ms/min), Total Track Grip Gain (s), and track condition classification banners.
 15. **Braking Efficiency & Trail-Braking Analysis**: Select any turn from the corner dropdown to analyze braking distance before apex, peak deceleration ($G$), trail-braking release points, and brake-to-throttle transition times (ms) on stacked telemetry subplots.
 16. **Corner Exit Traction & Throttle Aggression Analysis**: Select any corner to evaluate throttle pick-up points, distance to 100% full throttle, throttle ramp rate (%/m), hesitation wheelspin lifts, exit acceleration ($G$), and Traction Aggression Score (0–100), with automatic flat-out corner detection.
-17. **Gear Shift Strategy & RPM Power Bands**: Inspect engine RPM curves with annotated shift markers, tactical short-shifts (< 11,000 RPM at > 60% throttle), redline shifts, and percentage gear usage distributions (Gears 1 to 8). Also review the **Driver Driving Style DNA & Apex Aggression Spider Radar** directly below to compare 6-axis driving DNA scores, archetype badges, and raw telemetry traits.
-18. **Multi-Year Historical Lap Comparison**: In compare mode, select a second season and Grand Prix to compare cars across technical regulation eras on a 500-point distance grid.
-19. **High-Resolution Telemetry & Dynamic Channel Filter**: Inspect telemetry waveforms. Use the **Telemetry Channels** multiselect to toggle channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them with dynamic figure scaling.
-20. **Export Telemetry Data (CSV, Parquet, JSON)**: Expand the export panel beneath the telemetry charts to download high-frequency data with sector splits and lap metadata.
-21. **Speed Delta & Continuous Time Delta per Meter**: In compare mode, identify exact track coordinates where time is gained or lost along the lap.
-22. **Speed Trap & Intermediate Velocity Radar Breakdown**: Inspect the 4-axis polar radar comparing speeds across ST, I1, I2, and FL, benchmark constructor and power unit aerodynamic efficiency, and review the classified speed trap table.
-23. **Intra-Team Teammate Battle & Qualifying Delta Matrix**: Toggle between Qualifying Lap Delta and Race Pace Delta to review diverging teammate gap bars, sector dominance tallies, and classified matrix tables.
-24. **Multi-Driver Grid Analysis & Heatmaps**: Select 3 to 20 drivers across the field to render colour-coded heatmaps for Sector Split Deltas, Lap-by-Lap Pace, and Top Speed.
-25. **Track Maps, Corner Analysis & Animated Race Replay**: Switch between speed heat-maps, AWS-style mini-sector dominance maps, driver input pedal traces, 4-subplot corner analysis, or run the multi-car animated race replay.
-26. **Brag Video**: Below the Speed Trap section, choose a highlight mode, aspect ratio, resolution, frame rate and playback speed, then click **Generate Brag Video**. Preview it, download it, and open **Latent Space Manifold inspector** for the 3D PCA trajectory.
-27. **Clean Air vs Dirty Air Impact**: In Race and Sprint sessions, review the traffic section for your selected driver(s): Clean Air %, Time Lost in Traffic, Dirty Air Deficit, Overtaking Success rate and the zone-coloured pace chart.
-28. **Weekend Progression Tracker**: Below the Speed Trap section, click **Load weekend progression** to load every session of the loaded Grand Prix for Driver 1 and review pace evolution, mileage, practice-to-qualifying improvement and tyre usage.
-29. **Official Classification & Championship Standings**: Review complete official session classifications and seasonal drivers' and constructors' championship standings.
-30. **Real-Time Live Timing Mode**: Toggle live timing in the sidebar during active race weekends to record WebSocket packets and stream live timing.
-31. **Post-Race Debrief PDF Exporter**: Click **Generate PDF Report** in the sidebar to export a broadcast-quality printable PDF debrief.
+17. **Gear Shift Strategy & RPM Power Bands**: Inspect engine RPM curves with annotated shift markers, tactical short-shifts (< 11,000 RPM at > 60% throttle), redline shifts, and percentage gear usage distributions (Gears 1 to 8).
+18. **Driver Driving Style DNA & Apex Aggression Spider Radar**: Compare drivers across 6 normalised (0–100) driving style dimensions (Trail-Braking Modulation, Throttle Aggression, Steering Smoothness, RPM Exploitation, Apex Speed Commitment, and High-Speed Aero Confidence) on an interactive polar spider radar alongside archetype classification badges and physical telemetry breakdown tables.
+19. **Multi-Year Historical Lap Comparison**: In compare mode, select a second season and Grand Prix to compare cars across technical regulation eras on a 500-point distance grid.
+20. **High-Resolution Telemetry & Dynamic Channel Filter**: Inspect telemetry waveforms. Use the **Telemetry Channels** multiselect to toggle channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them with dynamic figure scaling.
+21. **Export Telemetry Data (CSV, Parquet, JSON)**: Expand the export panel beneath the telemetry charts to download high-frequency data with sector splits and lap metadata.
+22. **Speed Delta & Continuous Time Delta per Meter**: In compare mode, identify exact track coordinates where time is gained or lost along the lap.
+23. **Speed Trap & Intermediate Velocity Radar Breakdown**: Inspect the 4-axis polar radar comparing speeds across ST, I1, I2, and FL, benchmark constructor and power unit aerodynamic efficiency, and review the classified speed trap table.
+24. **Intra-Team Teammate Battle & Qualifying Delta Matrix**: Toggle between Qualifying Lap Delta and Race Pace Delta to review diverging teammate gap bars, sector dominance tallies, and classified matrix tables.
+25. **Multi-Driver Grid Analysis & Heatmaps**: Select 3 to 20 drivers across the field to render colour-coded heatmaps for Sector Split Deltas, Lap-by-Lap Pace, and Top Speed.
+26. **Track Maps, Corner Analysis & Animated Race Replay**: Switch between speed heat-maps, AWS-style mini-sector dominance maps, driver input pedal traces, 4-subplot corner analysis, or run the multi-car animated race replay.
+27. **Brag Video**: Below the Speed Trap section, choose a highlight mode, aspect ratio, resolution, frame rate and playback speed, then click **Generate Brag Video**. Preview it, download it, and open **Latent Space Manifold inspector** for the 3D PCA trajectory.
+28. **Clean Air vs Dirty Air Impact**: In Race and Sprint sessions, review the traffic section for your selected driver(s): Clean Air %, Time Lost in Traffic, Dirty Air Deficit, Overtaking Success rate and the zone-coloured pace chart.
+29. **Weekend Progression Tracker**: Below the Speed Trap section, click **Load weekend progression** to load every session of the loaded Grand Prix for Driver 1 and review pace evolution, mileage, practice-to-qualifying improvement and tyre usage.
+30. **Official Classification & Championship Standings**: Review complete official session classifications and seasonal drivers' and constructors' championship standings.
+31. **Real-Time Live Timing Mode**: Toggle live timing in the sidebar during active race weekends to record WebSocket packets and stream live timing.
+32. **Post-Race Debrief PDF Exporter**: Click **Generate PDF Report** in the sidebar to export a broadcast-quality printable PDF debrief.
 
 ---
 
@@ -225,15 +226,15 @@ fastf1_pitwall/
 ├── src/                        # Modular source package
 │   ├── data/
 │   │   └── loader.py           # FastF1 session caching, proxy/TLS bypass, statistical builders,
-│   │                           # robust regression, metric extractors & telemetry exporters (CSV/Parquet/JSON)
+│   │                           # robust regression, 6-axis Driving Style DNA, metric extractors & telemetry exporters (CSV/Parquet/JSON)
 │   ├── charts/
 │   │   ├── plotly.py           # Interactive Plotly figures (History, stints, strategy timelines, compound deg curves,
-│   │   │                       # maps, replays, corners, braking, traction exits, track evolution, gears, radars, teammate matrix, pit loss, weekend progression, dirty air, latent space)
+│   │   │                       # maps, replays, corners, braking, traction exits, track evolution, gears, DNA & speed radars, teammate matrix, pit loss, weekend progression, dirty air, latent space)
 │   │   ├── matplotlib.py       # Static Matplotlib telemetry charts & dynamic channel filtering
 │   │   └── video.py            # Pillow brag-video frame renderer + MP4 / GIF encoding
 │   └── ui/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
-│       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, teammate matrix,
+│       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, driving style DNA, teammate matrix,
 │                               # pit loss breakdown, weekend progression, dirty air, brag video, traction sections & telemetry export panels
 ├── tests/                      # Automated Pytest suite (183 tests across 23 dedicated modules)
 │   ├── test_driving_style_dna.py       # 6-axis Driving Style DNA, trajectory yaw fallback, archetypes & spider radar

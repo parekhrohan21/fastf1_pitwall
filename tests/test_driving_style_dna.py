@@ -314,3 +314,4 @@ def test_null_and_empty_handling():
     assert build_driving_style_dna_fig({}) is None
     env = _build_dna_benchmark_envelope(None)
     assert len(env) == 6
+

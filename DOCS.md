@@ -568,6 +568,8 @@ _render_pit_loss_section()       ← Pit Lane Transit Loss & In-Lap / Out-Lap Pe
         │
 build_tyre_deg_fig()             ← Tyre Degradation, Fuel Burn Decoupler & Predictive Thermal Crossover Matrix
         │
+_render_strategy_simulator_section() ← Tyre Stint Pace Degradation Matrix & Pit Window Re-optimisation Simulator (Race / Sprint only)
+        │
 _render_consistency_section()    ← Driver Consistency Index & Stint Pace Distribution
         │
 _render_weather_correlation_section() ← Track Temperature & Weather Impact Correlation
@@ -579,6 +581,8 @@ _render_braking_analysis_section() ← Braking Efficiency & Trail-Braking Zone A
 _render_traction_exit_section()  ← Corner Exit Traction & Throttle Pick-Up Aggression Analysis
         │
 _render_gear_analysis_section()  ← Gear Shift Strategy & RPM Power Band Optimization
+        │
+_render_driving_style_dna_section() ← Driver Driving Style DNA & Apex Aggression Spider Radar (6-axis polar radar + archetype badges)
         │
 _render_multi_year_comparison_section() ← Multi-Year Historical Lap Comparison (compare mode only)
         │
@@ -651,6 +655,8 @@ Each chart section follows the same pattern:
 | Braking Efficiency & Trail-Braking (3-subplot) | Plotly subplots | `_calculate_braking_metrics` | `build_braking_efficiency_fig` | `_render_braking_analysis_section`. 3 subplots: Speed, Brake Pressure (%), Deceleration (G) vs distance to apex. |
 | Corner Exit Traction & Throttle Pick-Up (3-subplot) | Plotly subplots | `_calculate_traction_metrics` | `build_traction_exit_fig` | `_render_traction_exit_section` and `render_maps_block` (`with map_tab5`). 3 subplots: Throttle (%) with pick-up/full/hesitation markers, Speed (km/h), Longitudinal Acceleration ($G$) vs distance relative to apex. |
 | Gear Shift Strategy & RPM Power Band (2-subplot) | Plotly subplots | `_calculate_gear_shift_metrics` | `build_gear_shift_fig` | `_render_gear_analysis_section`. 2 subplots: Engine RPM vs Track Distance with shift markers & Horizontal gear distribution (% distance in gears 1-8). |
+| Driver Driving Style DNA Spider Radar (6-axis) | Plotly polar radar + HTML | `_calculate_driving_style_dna`, `_classify_driving_style` | `build_driving_style_dna_fig` + `_render_driving_style_dna_section` | `tel1`, `tel2` DataFrames + `sess.get_circuit_info()`. 6 normalised (0–100) axes (Trail-Braking, Throttle Aggression, Steering/Trajectory Smoothness, RPM Exploitation, Apex Commitment, High-Speed Aero Confidence) + archetype badges. |
+| Tyre Stint Strategy & Pit Window Simulator | Plotly subplots + HTML | `_build_strategy_simulation`, `_build_compound_deg_models`, `_optimise_strategies` | `build_strategy_timeline_fig`, `build_deg_matrix_fig` + `_render_strategy_simulator_section` | `sess.laps` (Race / Sprint only). Zero-fuel compound pace curves, exhaustive 1/2-stop solver, re-optimisation from any lap, and ±3-lap undercut risk table. |
 | Speed Trap Radar Profile (4-axis) | Plotly polar radar | `_calculate_speed_trap_metrics` | `build_speed_trap_radar_fig` | `_render_speed_trap_section`. 4 polar axes (ST, I1, I2, FL) with driver overlays and grid maximum baseline. |
 | Speed Trap / PU Benchmarks (Grouped Bars) | Plotly grouped bar | `_calculate_speed_trap_metrics` | `build_speed_trap_bar_fig` | `_render_speed_trap_section`. Compares timing trap velocities across constructors or power units (Max vs Mean). |
 | Race Replay | Plotly animated | — (inline) | inline | `sess.pos_data` per driver |
@@ -929,9 +935,14 @@ The dashboard contains an automated unit testing suite targeting data-wrangling 
 
 ### Unit Tests (`pytest`)
 
-The tests reside in the `tests/` directory (151 tests across 21 modules):
+The tests reside in the `tests/` directory (183 tests across 23 modules):
 - `tests/__init__.py`: Package initialisation.
 - `tests/conftest.py`: Reusable `pytest` fixtures providing static mock `results` and `laps` DataFrames.
+- `tests/test_driving_style_dna.py`: 6-axis Driving Style DNA extraction (`_calculate_driving_style_dna`), direct `Steering` vs `X/Y` trajectory yaw-rate smoothness fallback, corner apex detection (`_detect_corner_apexes`), driving style archetype classification (`_classify_driving_style`), and 6-axis polar spider radar figures (`build_driving_style_dna_fig`).
+- `tests/test_strategy_simulator.py`: Field-pooled zero-fuel compound degradation models (`_build_compound_deg_models`), exhaustive prefix-sum 0/1/2-stop strategy solver (`_optimise_strategies`), mid-race re-optimisation splicing, ±3-lap undercut vulnerability & rejoin traffic (`_analyse_undercut_risk`), and strategy timeline / compound deg figures.
+- `tests/test_brag_video_latent.py`: 3D PCA telemetry latent manifold (`_build_telemetry_latent_manifold`), highlight moment extraction, spline frame timing, and Pillow HUD frame / MP4 / GIF encoding.
+- `tests/test_dirty_air.py`: Traffic zone classification (Clean Air, Dirty Air, DRS / Battle), clean-air detrending, dirty-air deficit, time lost in traffic, and overtaking success rate.
+- `tests/test_weekend_progression.py`: Multi-session weekend summaries, session-to-session deltas, total mileage, practice-to-qualifying improvement, and compound allocation matrix.
 - `tests/test_traction_exit.py`: Corner exit traction dynamics, distance to initial and 100% full throttle, throttle ramp rate (%/m), throttle gradient (%/s), hesitation/modulation detection, oversteer corrections, peak exit acceleration ($G$), exit speed at 100m, composite Traction Aggression Score, flat-out corner detection (including the 85% threshold boundary), snap closed-to-full pick-ups, and 3-row stacked Plotly traction exit profile.
 - `tests/test_track_evolution.py`: Theil-Sen seeded robust regression with MAD trimming, flyer lap filtering (107%, pit in/out, track status), ramp rate and grip gain recovery on synthetic sessions with known ramps, Qualifying knockout bias removal via driver fixed effects, condition classification, track temperature merging, and dual-axis figure rendering.
 - `tests/test_pit_transit_loss.py`: Pit lane speed-limiter transit duration ($t_{\text{pit\_lane}}$), in-lap push delta vs clean-air baseline ($\Delta t_{\text{in}}$), out-lap cold tyre warm-up performance ($\Delta t_{\text{out}}$), net total pit loss, sector-by-sector ($S_1, S_2, S_3$) warm-up deltas, multi-stop sequencing, edge cases, and stacked horizontal bar figures.
