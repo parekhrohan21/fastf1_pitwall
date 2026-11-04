@@ -165,6 +165,8 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
                 drv_laps = laps_df[laps_df["Driver"] == drv_abbr]
                 if not drv_laps.empty:
                     stops_count = drv_laps[drv_laps["PitInTime"].notna() & drv_laps["PitOutTime"].notna()].shape[0]
+                    if stops_count == 0 and "PitInTime" in drv_laps.columns:
+                        stops_count = int(drv_laps["PitInTime"].notna().sum())
                     stops_str = str(stops_count)
 
         if is_qualifying:

@@ -92,7 +92,7 @@ st.set_page_config(
 # Modular imports
 from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
-    load_schedule, load_session, clear_session_cache, livetiming_rejects_requests, format_laptime, driver_colour, hex_to_rgb,
+    load_schedule, load_session, clear_session_cache, livetiming_rejects_requests, f1_sign_in_error, format_laptime, driver_colour, hex_to_rgb,
     _build_driver_labels, get_telemetry_cached, _format_classification_time,
     _map_driver_id_to_number, _get_session_winner, _get_default_gp_index,
     get_constructor_colour, is_same_team, _build_constructor_standings,
@@ -274,6 +274,7 @@ with st.sidebar:
     # any recorded request failures — for debugging FastF1 downloads on hosts
     # that block the default HTTP client.
     with st.sidebar.expander("🛠️ Diagnostics & Debug Info", expanded=False):
+        st.write(f"**Data Source:** {_PATCH_STATUS.get('last_data_source', 'Auto (OpenF1 / Jolpica / FastF1)')}")
         st.write(f"**Patch Imported:** {_PATCH_STATUS['imported']}")
         st.write(f"**Patch Applied:** {_PATCH_STATUS['patched']}")
         if _PATCH_STATUS['import_err']:
@@ -295,7 +296,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
         "<div style='font-size:10px; opacity:0.5; letter-spacing:0.5px; text-align:center;'>"
-        "Data © FastF1 / Ergast / F1<br>Educational use only"
+        "Data © OpenF1 / Jolpica-F1 / MultiViewer / FastF1<br>Educational use only"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -303,9 +304,10 @@ with st.sidebar:
 # ── Session state ─────────────────────────────────────────────────────────────
 # Loaded sessions persist in st.session_state; the sidebar widgets only describe
 # what *would* be loaded. On Load, live mode reads a recorded SignalR stream
-# file, otherwise load_session() fetches through FastF1's disk cache (./cache).
-# A failed load clears that GP's cache so the next click is a clean retry, then
-# st.stop() ends the run. Session 2 loads only in session-compare mode and never
+# file, otherwise load_session() fetches via local cache, OpenF1 + MultiViewer
+# + Jolpica-F1 (free, no sign-in required), or FastF1.
+# A failed load clears incomplete cache entries so the next click is a clean retry,
+# then st.stop() ends the run. Session 2 loads only in session-compare mode and never
 # in live mode. sess / sess2 / sess_key / sess_key2 are then read back from
 # state — they are the source of truth for everything below.
 if "session" not in st.session_state:
@@ -338,7 +340,7 @@ if load_btn:
             st.session_state["sess_key"] = f"LIVE_{live_filename}_{sess_key}"
             st.session_state["year1"] = year
     else:
-        with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~30 s)"):
+        with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~15–30 s)"):
             try:
                 sess = load_session(year, gp, session_type)
                 if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
@@ -353,23 +355,22 @@ if load_btn:
                 err_msg = str(e).rstrip(".") + "."
                 if livetiming_rejects_requests():
                     st.error(
-                        "**F1 data server is rejecting requests**\n\n"
-                        "F1's livetiming server (livetiming.formula1.com) is returning HTTP 401/403, "
-                        "so no session data can be downloaded right now. This is an upstream change, "
-                        "not a problem with your selection, and retrying will not help. "
-                        "Check for a newer FastF1 release that supports it."
+                        "**Upstream F1 data servers are unreachable**\n\n"
+                        "Both the free OpenF1/Jolpica APIs and F1's live-timing server failed to respond. "
+                        "Check your network connection and click **⬇️ Load Session(s)** to retry."
                     )
                 else:
                     st.error(
                         f"**Session Loading Error**\n\n"
-                        f"FastF1 could not load the lap data: {err_msg}\n\n"
-                        "We have cleared the cache for this session. Please try clicking **⬇️ Load Session(s)** again to reload."
+                        f"Could not load lap data for this session: {err_msg}\n\n"
+                        "This session may not have taken place yet, or temporary rate limiting occurred. "
+                        "Please try clicking **⬇️ Load Session(s)** again."
                     )
                 _render_footer()
                 st.stop()
 
     if compare_sessions and not live_mode:
-        with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~30 s)"):
+        with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~15–30 s)"):
             try:
                 sess2 = load_session(year2, gp2, session_type2)
                 if not hasattr(sess2, "laps") or sess2.laps is None or sess2.laps.empty:
@@ -384,11 +385,9 @@ if load_btn:
                 err_msg2 = str(e).rstrip(".") + "."
                 if livetiming_rejects_requests():
                     st.error(
-                        "**F1 data server is rejecting requests**\n\n"
-                        "F1's livetiming server (livetiming.formula1.com) is returning HTTP 401/403, "
-                        "so no session data can be downloaded right now. This is an upstream change, "
-                        "not a problem with your selection, and retrying will not help. "
-                        "Check for a newer FastF1 release that supports it."
+                        "**Upstream F1 data servers are unreachable**\n\n"
+                        "Both the free OpenF1/Jolpica APIs and F1's live-timing server failed to respond. "
+                        "Check your network connection and click **⬇️ Load Session(s)** to retry."
                     )
                 else:
                     st.error(

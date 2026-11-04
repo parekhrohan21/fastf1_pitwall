@@ -91,7 +91,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | Package | Minimum Version | Purpose & Architectural Role |
 |---|---|---|
 | **`streamlit`** | `≥ 1.44.0` | Frontend dashboard framework using modern `width='stretch'` responsive layout API and custom theme injection. |
-| **`fastf1`** | `≥ 3.3.0` | Core F1 timing, telemetry waveform, circuit layout, and Ergast integration data engine. |
+| **`fastf1`** | `≥ 3.3.0` | Core F1 timing, local `.ff1pkl` cache engine, and SignalR live stream parser (augmented with zero-auth OpenF1, MultiViewer & Jolpica-F1 adapters). |
 | **`pandas`** | `≥ 2.2.0` | High-frequency telemetry dataframe wrangling, lap filtering, and timeseries aggregation. |
 | **`numpy`** | `≥ 1.26.0` | Deceleration ($G$), polynomial regressions, distance grids, and statistical operations. |
 | **`plotly`** | `≥ 5.18.0` | Interactive charts (lap time histories, stint Gantt bars, delta graphs, corner analysis, radar profiles). |
@@ -110,13 +110,19 @@ The application is built on a modern, high-performance telemetry analytics stack
 
 ## ⚙️ Configuration
 
-There is nothing required to configure for standard local usage. Optional environment variables:
+**No account or sign-in is required.** Pit Wall works out of the box using a multi-source, zero-authentication data pipeline (`src/data/loader.py`):
+
+1. **Local FastF1 Cache (`./src/data/cache` & `./cache`)**: Instant offline loading (< 1 s) for any previously cached session.
+2. **OpenF1 API (`https://api.openf1.org/v1`) + MultiViewer Circuit API (`https://api.multiviewer.app/api/v1/circuits`) + Jolpica-F1 (`https://api.jolpi.ca/ergast/f1`)**: 100% free, no-sign-in primary engine for **2023–present** sessions — serving full 6-channel car telemetry (`Speed`, `RPM`, `nGear`, `Throttle`, `Brake`, `DRS`), 3D track coordinates (`X`, `Y`, `Z`), corner numbers/angles, tyre stints, pit stops, weather, race control messages, and classifications.
+3. **Jolpica-F1 Historical Engine (`https://api.jolpi.ca/ergast/f1`)**: 100% free, no-sign-in fallback for **2018–2022** historical seasons (schedules, classifications, lap-by-lap timings, pit stops, and championship standings).
+4. **Optional FastF1 Direct Live-Timing Auth (`F1_USERNAME` / `F1_PASSWORD`)**: If you optionally have an F1TV Access subscription and configure credentials in `.streamlit/secrets.toml` or environment variables, FastF1 can also authenticate directly against `livetiming.formula1.com`.
 
 | Setting | Configuration Location | Purpose & Practical Usage |
 |---|---|---|
-| `F1_PROXY` | Environment variable or `.streamlit/secrets.toml` (`http://user:pass@proxy:port`) | Routes FastF1 and Ergast HTTP/HTTPS requests through an external proxy. Use behind restrictive corporate firewalls or if CloudFront blocks your IP. |
+| `F1_USERNAME` / `F1_PASSWORD` | `.streamlit/secrets.toml`, Streamlit Cloud secrets or environment variables | **Optional.** F1 account credentials if you wish to use authenticated `livetiming.formula1.com` alongside the default free OpenF1/Jolpica APIs. |
+| `F1_PROXY` | Environment variable or `.streamlit/secrets.toml` (`http://user:pass@proxy:port`) | **Optional.** Routes HTTP/HTTPS requests through an external proxy behind restrictive corporate firewalls. |
 
-FastF1 session telemetry is automatically cached in `./cache`, which is created on first run and gitignored. Delete this folder to force a completely fresh re-download of session telemetry.
+Session telemetry and free API responses are automatically cached in `./src/data/cache` (and `./cache`), which are created on first run and gitignored. Delete these folders to force a fresh re-download.
 
 ---
 
@@ -367,7 +373,7 @@ git fetch -p
 | **Port 8501 already in use** | A previous Streamlit instance is still bound to the port. | Run `lsof -i :8501` and kill the process, or run Streamlit on a different port using `streamlit run app.py --server.port 8502`. |
 | **Docker daemon not reachable** | Docker Desktop is not running on your host. | Launch Docker Desktop (`open -a Docker` on macOS), wait 30 seconds for the engine to initialize, and retry. |
 | **F1 API HTTP 403 blocks (CloudFront/Cloudflare)** | F1 CDN anti-bot blocks on cloud hosting providers. | Handled automatically via TLS impersonation (`curl_cffi`). If blocks persist, set the `F1_PROXY` environment variable or Streamlit secret to route requests through a proxy. |
-| **F1 Live Timing HTTP 401/403 Rejection** | Upstream F1 live timing server (`livetiming.formula1.com`) rejecting requests or undergoing upstream authentication changes. | Handled gracefully: `livetiming_rejects_requests()` probes the server on session load failures and displays a clear upstream outage notification rather than retrying futilely. Check for a newer FastF1 release. |
+| **F1 `livetiming.formula1.com` HTTP 401/403** | Since October 2026 `livetiming.formula1.com` requires a paid F1TV login for unauthenticated requests. | ✅ **Handled automatically with zero sign-in required.** `load_session()` transparently routes 2023–present sessions through the free **OpenF1 API + MultiViewer Circuit API + Jolpica-F1** and 2018–2022 sessions through **Jolpica-F1**, while preserving local `.ff1pkl` caches. |
 | **Verify API connectivity or TLS status** | Network firewall or CDN blocking. | Expand **🛠️ Diagnostics & Debug Info** at the bottom of the sidebar and click **Run Connection Test** to verify connectivity. |
 | **Plotly deprecation warning on `use_container_width`** | Running an older codebase version. | The codebase uses `width='stretch'` / `width='content'` throughout. Update to the latest version of the repository. |
 | **Top bar keeps the old theme** | Browser cached stylesheet edge case. | Toggle the dark/light mode button in the sidebar once more — CSS injection re-applies on every rerun. |

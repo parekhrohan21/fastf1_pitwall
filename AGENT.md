@@ -20,7 +20,7 @@ Your primary responsibilities are:
 | --- | --- |
 | **Stack** | Python 3.11+ · Streamlit ≥ 1.44 · FastF1 ≥ 3.3 |
 | **Entry point** | `app.py` (orchestrating `src/` package modules) |
-| **Data source** | FastF1 library → official F1 timing API + Ergast |
+| **Data source** | Local FastF1 `.ff1pkl` cache + OpenF1 API (`api.openf1.org/v1`) + MultiViewer Circuit API (`api.multiviewer.app`) + Jolpica-F1 API (`api.jolpi.ca/ergast/f1`) + optional FastF1 LiveTiming |
 | **Port** | `8501` (local and Docker) |
 | **Cache dir** | `./cache/` (FastF1 disk cache, gitignored) |
 | **Docker** | `Dockerfile` present; mount `./cache:/app/cache` |

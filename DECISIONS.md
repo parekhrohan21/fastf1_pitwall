@@ -60,7 +60,7 @@ sequence; the mapping is given in each record where one exists.
 | [028](#adr-028--a-dedicated-decisions-log) | A dedicated decisions log | #172 |
 | [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
 | [030](#adr-030--six-axis-driving-style-dna-with-trajectory-yaw-fallback) | Six-axis Driving Style DNA with trajectory yaw fallback | #197 |
-| [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
+| [031](#adr-031--zero-auth-multi-source-f1-data-pipeline-openf1--multiviewer--jolpica-f1) | Zero-auth multi-source F1 data pipeline (OpenF1 + MultiViewer + Jolpica-F1) | Free API Fallback |
 
 ---
 
@@ -565,4 +565,19 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 - *Requiring a live `Session` object inside `_calculate_driving_style_dna`*: couples the maths to FastF1 I/O and prevents fast offline unit testing on synthetic DataFrames.
 
 **Consequences & guardrails.** `tests/test_driving_style_dna.py` (14 tests) verifies all 6 axes with and without `Steering` and `X/Y` channels, style differentiation between aggressive and smooth profiles, all 6 archetype classifications, and `go.Scatterpolar` figure construction.
+
+---
+
+## ADR-031 — Zero-auth multi-source F1 data pipeline (OpenF1 + MultiViewer + Jolpica-F1)
+
+**Context.** Since October 2026, Formula 1's `livetiming.formula1.com` endpoint returns HTTP 401/403 for unauthenticated requests unless the caller signs in with a paid F1TV Access (or higher) subscription. Requiring `F1_USERNAME` and `F1_PASSWORD` prevented Pit Wall from working out of the box for users without a paid F1TV account.
+
+**Decision.** Implement a 4-tier, zero-sign-in session and schedule loader in `src/data/loader.py`:
+1. **Tier 1 — Local FastF1 `.ff1pkl` cache (`./src/data/cache` and `./cache`):** Checks `_find_cached_fastf1_dir` first so pre-cached sessions load offline in `< 1 s`, and `clear_session_cache` never deletes complete `.ff1pkl` directories.
+2. **Tier 2 — OpenF1 API (`https://api.openf1.org/v1`) + MultiViewer Circuit API (`https://api.multiviewer.app/api/v1/circuits/{key}/{year}`) + Jolpica-F1 (`https://api.jolpi.ca/ergast/f1`) for 2023–present:** Builds a drop-in `FreeF1Session` (`FreeF1Laps`, `FreeF1Lap`, `FreeF1Telemetry`, `FreeF1CircuitInfo`, `_LazyPosDataDict`) exposing the exact FastF1 DataFrame/Series interface (`laps`, `results`, `weather_data`, `race_control_messages`, `track_status`, `pos_data`, `get_driver()`, `get_circuit_info()`, `lap.get_car_data().add_distance()`). Requests to `api.openf1.org` are disk-cached (`src/data/cache/free_api_cache`) and rate-limited (`0.36 s` pacing, 4-attempt backoff) to stay within OpenF1's free 3 req/s community tier.
+3. **Tier 3 — Jolpica-F1 Historical Engine (`_load_jolpica_session`) for 2018–2022:** Fetches schedules, classifications, paginated lap timings (`/laps.json`), and pit stops (`/pitstops.json`) from Jolpica-F1 with circuit-calibrated telemetry synthesis so historical seasons also load without sign-in.
+4. **Tier 4 — Optional FastF1 Authenticated Live-Timing:** Retained as an optional fallback when `F1_USERNAME` and `F1_PASSWORD` are configured.
+
+**Consequences & guardrails.** Covered by `tests/test_free_api_fallback.py` (6 unit tests; 189 total tests across 24 test modules). All 32 dashboard sections work without any F1 account login.
+
 

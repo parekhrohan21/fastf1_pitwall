@@ -31,3 +31,6 @@ ENV/
 # Temporary scripts & scratch files
 scratch*.py
 test_cf.py
+
+# F1 account credentials (F1_USERNAME / F1_PASSWORD) — never commit
+.streamlit/secrets.toml

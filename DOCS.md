@@ -87,7 +87,7 @@ The Pit Wall dashboard is built around three principles:
 | Layer | Library | Version | Role |
 |---|---|---|---|
 | Web framework | Streamlit | ≥ 1.44 | UI, routing, state, server |
-| F1 data | FastF1 | ≥ 3.3 | Session loading, lap data, telemetry, driver info |
+| F1 data | FastF1 + OpenF1 + MultiViewer + Jolpica-F1 | ≥ 3.3 | Multi-tier zero-auth session loading, 6-channel telemetry, circuit corners, weather, race control, and historical lap timings |
 | Static charts | Matplotlib | ≥ 3.8 | 6-channel telemetry, speed delta (transparent overlay) |
 | Interactive charts | Plotly | ≥ 5.18 | Track map, race replay, lap history, stint timeline, gap chart |
 | Data wrangling | Pandas | ≥ 2.2 | All lap/telemetry DataFrames |
