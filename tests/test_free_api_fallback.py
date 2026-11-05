@@ -288,3 +288,4 @@ def test_load_jolpica_session_with_mocked_endpoints(monkeypatch):
     assert sess.get_driver("BOT")["FullName"] == "Valtteri Bottas"
     best_lap = sess.laps.pick_fastest()
     assert np.isclose(best_lap["LapTime"].total_seconds(), 69.5)
+

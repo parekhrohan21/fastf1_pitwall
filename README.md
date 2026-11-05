@@ -82,7 +82,7 @@ The dashboard launches in standalone app display mode with a custom 🏎 Pit Wal
 | **Package Manager** | `pip` (or `venv`, `uv`, `conda`) | Pre-packaged in container image |
 | **Memory (RAM)** | **4 GB minimum**, **8 GB+ recommended** for multi-driver animated replays | 4 GB memory allocated to Docker daemon |
 | **Disk Space** | ~500 MB for Python environment + ~50–100 MB per cached Grand Prix session | ~1.5 GB for Docker image + local `./cache` volume |
-| **Network** | Outbound HTTPS access to `livetiming.formula1.com:443` and `api.jolpi.ca:443` | Outbound HTTPS access to F1 timing APIs |
+| **Network** | Outbound HTTPS access to `api.openf1.org:443`, `api.multiviewer.app:443`, `api.jolpi.ca:443`, and `livetiming.formula1.com:443` | Outbound HTTPS access to F1 timing APIs |
 
 ### Core Python Dependencies Matrix
 
@@ -101,7 +101,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
 | **`imageio`** & **`imageio-ffmpeg`** | `≥ 2.34.0` / `≥ 0.5.1` | H.264 MP4 encoding for the Brag Video (optional: without them the clip falls back to an animated GIF built with Pillow). |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**169 unit/integration tests across 22 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**189 unit/integration tests across 24 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -176,12 +176,13 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 
 ### 📱 Application Platform & Infrastructure
 
+- **Zero-Auth Multi-Source F1 Data Pipeline (`OpenF1` + `MultiViewer` + `Jolpica-F1` + Local `.ff1pkl` Cache)** ([Commit `5e3aed1`](https://github.com/parekhrohan21/fastf1_pitwall/commit/5e3aed1), [ADR-031](DECISIONS.md#adr-031--zero-auth-multi-source-f1-data-pipeline-openf1--multiviewer--jolpica-f1)): Resolves the October 2026 `livetiming.formula1.com` HTTP 401/403 authentication barrier without requiring an F1TV subscription or account sign-in. Implements a 4-tier session and schedule loader (`FreeF1Session`, `FreeF1Laps`, `FreeF1Lap`, `FreeF1Telemetry`, `FreeF1CircuitInfo`, `_free_api_get_json`) with rate-limited disk caching (`0.36 s` pacing, 4-attempt exponential backoff) that seamlessly serves 2023–present 6-channel telemetry, 3D track coordinates, FIA corner geometry, stints, pit stops, weather, and race control from OpenF1 + MultiViewer + Jolpica-F1, and 2018–2022 historical sessions from Jolpica-F1.
 - **Real-Time Live Timing Mode** ([Issue #84](https://github.com/parekhrohan21/fastf1_pitwall/issues/84)): Stream live timing and telemetry via FastF1 SignalR WebSocket client with disk packet recording and auto-refresh intervals during active F1 race weekends.
 - **Post-Race Debrief PDF Exporter** ([Issue #122](https://github.com/parekhrohan21/fastf1_pitwall/issues/122)): Capture the entire visual state of your analysis (Lap Time History, Tyre Stints, Gap to Leader, Position History) and export it as a clean, broadcast-style PDF report for easy offline sharing.
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112), Commits `dbe8b59`, `a669c45`, `32160d7`): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode and full light-mode contrast overrides for BaseWeb selectboxes, virtualised dropdown popovers, checkboxes, toggles, and expanders.
-- **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Includes automated upstream server health probing (`livetiming_rejects_requests`) to detect and distinguish F1 live timing HTTP 401/403 authorization rejections from session loading errors.
+- **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Displays the active data source in the sidebar diagnostics panel and probes both free APIs and upstream servers (`livetiming_rejects_requests`).
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **183 automated pytest unit and integration tests** across 23 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **189 automated pytest unit and integration tests** across 24 dedicated modules.
 
 ---
 
@@ -231,8 +232,8 @@ fastf1_pitwall/
 ├── app.py                      # Main Streamlit entry point, layout orchestration & 11-stage render pipeline
 ├── src/                        # Modular source package
 │   ├── data/
-│   │   └── loader.py           # FastF1 session caching, proxy/TLS bypass, statistical builders,
-│   │                           # robust regression, 6-axis Driving Style DNA, metric extractors & telemetry exporters (CSV/Parquet/JSON)
+│   │   └── loader.py           # 4-tier zero-auth F1 data pipeline (OpenF1, MultiViewer, Jolpica-F1 & FastF1 cache),
+│   │                           # proxy/TLS bypass, statistical builders, robust regression, 6-axis Driving Style DNA & exporters
 │   ├── charts/
 │   │   ├── plotly.py           # Interactive Plotly figures (History, stints, strategy timelines, compound deg curves,
 │   │   │                       # maps, replays, corners, braking, traction exits, track evolution, gears, DNA & speed radars, teammate matrix, pit loss, weekend progression, dirty air, latent space)
@@ -242,7 +243,8 @@ fastf1_pitwall/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, driving style DNA, teammate matrix,
 │                               # pit loss breakdown, weekend progression, dirty air, brag video, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (183 tests across 23 dedicated modules)
+├── tests/                      # Automated Pytest suite (189 tests across 24 dedicated modules)
+│   ├── test_free_api_fallback.py       # Zero-auth OpenF1 / MultiViewer / Jolpica-F1 session & telemetry adapters
 │   ├── test_driving_style_dna.py       # 6-axis Driving Style DNA, trajectory yaw fallback, archetypes & spider radar
 │   ├── test_strategy_simulator.py      # Compound deg models, exhaustive 1/2-stop solver, re-opt & undercut risk
 │   ├── test_brag_video_latent.py       # Latent manifold, highlight moments, spline frames & video encoding fallbacks
@@ -322,7 +324,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **183 unit and integration tests** across 23 test modules must pass cleanly.
+All **189 unit and integration tests** across 24 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -399,6 +401,8 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[5e3aed1](https://github.com/parekhrohan21/fastf1_pitwall/commit/5e3aed1)** | `feat(data): implement zero-auth multi-source F1 API pipeline (OpenF1 + MultiViewer + Jolpica-F1)` | Data Architecture & Reliability | 4-tier zero-sign-in session and schedule loader (`FreeF1Session`, `FreeF1Laps`, `FreeF1Lap`, `FreeF1Telemetry`, `FreeF1CircuitInfo`, `_load_openf1_session`, `_load_jolpica_session`, `_free_api_get_json`) resolving the October 2026 `livetiming.formula1.com` HTTP 401/403 authentication barrier without requiring an F1TV account, plus two-row pit stop pairing and 6 unit tests in `tests/test_free_api_fallback.py` (ADR-031). |
+| **[e0b2e30](https://github.com/parekhrohan21/fastf1_pitwall/commit/e0b2e30)** | `docs: sync README, DOCS.md, and AGENT.md with Driving Style DNA (#197) and Strategy Simulator (#196)` | Documentation | Synchronised `README.md`, `DOCS.md`, `AGENT.md`, and `DECISIONS.md` (ADR-029, ADR-030) with the Strategy Simulator (#196) and 6-axis Driving Style DNA (#197) features. |
 | **[#197](https://github.com/parekhrohan21/fastf1_pitwall/issues/197)** | `feat: Driver Driving Style DNA & Apex Aggression Spider Radar` | Driver Analytics | 6-axis polar spider radar (`build_driving_style_dna_fig`) and telemetry profiler (`_calculate_driving_style_dna`, `_classify_driving_style`, `_render_driving_style_dna_section`) evaluating trail-braking modulation, throttle ramp aggression, steering/trajectory smoothness, gear shift RPM exploitation, apex speed commitment, and high-speed aero confidence with driver archetype classification badges. |
 | **[#196](https://github.com/parekhrohan21/fastf1_pitwall/issues/196)** | `feat: Tire Stint Pace Degradation Matrix & Pit Window Re-optimisation Simulator` | Strategy Simulation | Field-pooled zero-fuel compound pace models (`_build_compound_deg_models`), exhaustive prefix-sum 0/1/2-stop strategy solver (`_optimise_strategies`), mid-race re-optimisation, ±3-lap undercut & rejoin traffic analysis (`_analyse_undercut_risk`), and multi-strategy race timeline (`build_strategy_timeline_fig`, `build_deg_matrix_fig`, `_render_strategy_simulator_section`). |
 | **[32160d7](https://github.com/parekhrohan21/fastf1_pitwall/commit/32160d7)** / **[a669c45](https://github.com/parekhrohan21/fastf1_pitwall/commit/a669c45)** / **[dbe8b59](https://github.com/parekhrohan21/fastf1_pitwall/commit/dbe8b59)** | `fix(ui): light-mode dropdown control, popup menu, checkbox, toggle, and expander visibility` | UI & Theming | Forced explicit light-mode colour-scheme and high-contrast `#111111` text / `#ffffff`–`#f0f0f0` surface rules across BaseWeb selectbox controls, portal-mounted virtualised dropdown menus (`stSelectboxVirtualDropdown`), multiselect tags, checkboxes, toggles, and expander headers (`src/ui/styles.py`). |
@@ -506,6 +510,6 @@ For detailed architectural specifications, code deep-dives, and technical change
 
 ## ⚖️ Data & Licensing
 
-Telemetry data is sourced via [FastF1](https://docs.fastf1.dev) from the official F1 live timing stream and the Ergast-compatible [Jolpica F1 API](https://github.com/jolpica/jolpica-f1). Pit Wall is an independent community project and is not affiliated with Formula 1 or the FIA.
+Telemetry, circuit geometry, and historical timing data are sourced via [OpenF1](https://openf1.org), [MultiViewer](https://multiviewer.app), the Ergast-compatible [Jolpica F1 API](https://github.com/jolpica/jolpica-f1), and [FastF1](https://docs.fastf1.dev). Pit Wall is an independent community project and is not affiliated with Formula 1 or the FIA.
 
 **For educational and non-commercial use only.**

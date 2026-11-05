@@ -46,7 +46,7 @@ fastf1_pitwall/
 │       ├── __init__.py
 │       ├── styles.py    ← styling sheets, constants, PWA headers, dark/light injection
 │       └── components.py ← layout rendering components (Summary, stats, classifications, map tabs, footer)
-├── tests/              ← pytest suite (183 tests across 23 modules, see Codebase Architecture Map)
+├── tests/              ← pytest suite (189 tests across 24 modules, see Codebase Architecture Map)
 ├── .github/workflows/test.yml ← CI: runs pytest on every push / PR to main
 ├── .devcontainer/      ← GitHub Codespaces / Dev Container definition
 ├── requirements.txt    ← pinned dependencies
@@ -76,7 +76,7 @@ The application logic is modularised into individual packages under `src/` to se
 | `src/charts/plotly.py` | Constructs and returns interactive Plotly figure objects for lap history, tyre strategy Gantt timelines, gap analysis, track maps, tyre degradation (linear + quadratic thermal curves + cliff vlines + fuel burn decoupling), strategy timelines & compound degradation curves (`build_strategy_timeline_fig`, `build_deg_matrix_fig`), teammate battle diverging delta charts (`build_teammate_matrix_fig`), pit transit loss stacked horizontal bar charts (`build_pit_loss_fig`), stint consistency violin/boxplots (`build_stint_consistency_fig`), weather correlation dual-axis (`build_weather_correlation_fig`), track evolution dual-axis scatter with trend curve (`build_track_evolution_fig`), multi-year comparison speed delta (`build_multi_year_comparison_fig`), animated replays, 4-subplot corner analysis (`build_corner_fig`), 3-subplot braking efficiency overlays (`build_braking_efficiency_fig`), 3-subplot corner exit traction & acceleration overlays (`build_traction_exit_fig`), 2-subplot gear shift & RPM distributions (`build_gear_shift_fig`), 6-axis Driving Style DNA spider radars (`build_driving_style_dna_fig`), 4-axis speed trap polar radars (`build_speed_trap_radar_fig`), and constructor/PU grouped bar benchmarks (`build_speed_trap_bar_fig`), weekend progression pace + step-delta chart (`build_weekend_progression_fig`), traffic-zone pace scatter (`build_dirty_air_fig`), and the 3-D latent trajectory (`build_latent_space_projection_fig`). |
 | `src/charts/video.py` | Brag video renderer: `generate_brag_video_frames` draws HUD frames with Pillow and encodes MP4 (imageio-ffmpeg) or animated GIF. |
 | `src/charts/matplotlib.py` | Creates static Matplotlib figures for 6-channel telemetry profiles and speed delta overlays. |
-| `tests/` | Pytest unit and integration tests (183 tests across 23 modules, e.g. `test_driving_style_dna.py`, `test_strategy_simulator.py`, `test_traction_exit.py`, `test_track_evolution.py`, `test_pit_transit_loss.py`, `test_teammate_battle.py`, `test_fuel_decoupled_tyre_deg.py`, `test_speed_trap.py`, `test_gear_shifts.py`, `test_braking_analysis.py`, `test_telemetry_export.py`, `test_telemetry_channels.py`, `test_tyre_crossover.py`, `test_corner_analysis.py`). |
+| `tests/` | Pytest unit and integration tests (189 tests across 24 modules, e.g. `test_free_api_fallback.py`, `test_driving_style_dna.py`, `test_strategy_simulator.py`, `test_traction_exit.py`, `test_track_evolution.py`, `test_pit_transit_loss.py`, `test_teammate_battle.py`, `test_fuel_decoupled_tyre_deg.py`, `test_speed_trap.py`, `test_gear_shifts.py`, `test_braking_analysis.py`, `test_telemetry_export.py`, `test_telemetry_channels.py`, `test_tyre_crossover.py`, `test_corner_analysis.py`). |
 
 ---
 
