@@ -16,7 +16,8 @@ from src.data.loader import (
     _build_export_csv, _build_export_parquet, _build_export_json,
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation,
-    DNA_AXES, _calculate_driving_style_dna
+    DNA_AXES, _calculate_driving_style_dna,
+    _build_corner_geometry_cached, _compare_corner_lines
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -27,7 +28,7 @@ from src.charts.plotly import (
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
     build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig,
-    build_driving_style_dna_fig
+    build_driving_style_dna_fig, build_corner_geometry_fig
 )
 from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
@@ -3855,3 +3856,176 @@ def _render_driving_style_dna_section(
             unsafe_allow_html=True,
         )
 
+
+
+# ── Corner Geometry & Minimum-Radius Apex Trajectory Curvature (#198) ────────
+# ── Review notes (#198) ──
+# Builds the radius-of-curvature racing line map, KPI cards, a per-corner apex
+# table and, in Compare Mode, apex-delta callout cards for the corners where the
+# two lines differ most. Compare Mode needs both laps on the same circuit, so it
+# is skipped when Session 2 is a different Grand Prix.
+
+def _render_corner_geometry_section(
+    sess_k: str,
+    sess_obj,
+    lap1,
+    lap2=None,
+    driver1: str = "",
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+    compare: bool = False,
+    same_circuit: bool = True,
+    fmt_func1=None,
+    fmt_func2=None,
+) -> None:
+    """Render the Corner Geometry & Minimum-Radius Apex Trajectory Curvature section."""
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.6; margin:-6px 0 14px;'>"
+        "Instantaneous radius of curvature R = 1/κ computed from the car's X/Y position trace, "
+        "κ = |ẋÿ − ẏẍ| / (ẋ² + ẏ²)<sup>3/2</sup>. The geometric apex is the tightest point of each "
+        "corner, compared with the official corner marker. Early/late apex is measured along the lap.</div>",
+        unsafe_allow_html=True,
+    )
+    if lap1 is None:
+        st.info("ℹ️ Select a lap to analyse corner geometry.")
+        return
+
+    corners_df = None
+    if sess_obj is not None:
+        try:
+            c_info = sess_obj.get_circuit_info()
+            if c_info is not None and c_info.corners is not None and not c_info.corners.empty:
+                corners_df = pd.DataFrame(c_info.corners[[c for c in ("X", "Y", "Number", "Letter") if c in c_info.corners.columns]])
+        except Exception:
+            corners_df = None
+
+    def _geo(lap, drv, key):
+        try:
+            lap_num = int(lap["LapNumber"])
+        except Exception:
+            lap_num = -1
+        tel = _get_telemetry_for_map(lap, drv, key)
+        if tel is None or tel.empty:
+            return None
+        if "Synthetic" in tel.columns and bool(tel["Synthetic"].any()):
+            return "synthetic"
+        cols = [c for c in ("X", "Y", "Speed", "Distance") if c in tel.columns]
+        # plain DataFrame: st.cache_data cannot hash FastF1's Telemetry subclass
+        return _build_corner_geometry_cached(key, drv, lap_num, pd.DataFrame(tel[cols]), corners_df)
+
+    geo1 = _geo(lap1, driver1, sess_k)
+    if geo1 == "synthetic":
+        st.info("ℹ️ Real car position data is not available for this lap right now (the zero-auth data "
+                "source fell back to an estimated trace), so corner geometry cannot be measured. "
+                "Try again later or sign in with an F1 account.")
+        return
+    if not geo1 or not geo1["corners"]:
+        st.info("ℹ️ Position (X/Y) data is not available for this lap, so corner geometry cannot be computed.")
+        return
+
+    show_cmp = bool(compare and driver2 and lap2 is not None and same_circuit)
+    geo2 = _geo(lap2, driver2, f"{sess_k}_cmp") if show_cmp else None
+    if geo2 == "synthetic":
+        st.caption("Driver 2 has no real position data for this lap, so only Driver 1 is shown.")
+        geo2 = None
+    if compare and driver2 and lap2 is not None and not same_circuit:
+        st.caption("Compare Mode line deltas need both laps on the same circuit, so only Driver 1 is shown.")
+
+    label1 = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
+    label2 = ""
+    if driver2:
+        label2 = fmt_func2(driver2) if callable(fmt_func2) else (fmt_func1(driver2) if callable(fmt_func1) else str(driver2))
+    short1, short2 = label1.split("·")[0].strip(), label2.split("·")[0].strip()
+
+    summ = geo1["summary"]
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Corners analysed", summ["corners_analysed"],
+              help="Matched to official corner markers" if summ["marker_source"] == "circuit" else "Detected from the radius profile")
+    if summ["tightest_radius_m"] is not None:
+        k2.metric("Tightest corner", f"{summ['tightest_corner']} · {summ['tightest_radius_m']:.0f} m")
+    if summ["mean_apex_offset_m"] is not None:
+        k3.metric("Mean apex-to-marker offset", f"{summ['mean_apex_offset_m']:.1f} m",
+                  help="Distance between the geometric apex and the official corner marker. "
+                       "Markers sit near the racing line, so read this relatively.")
+
+    fig = build_corner_geometry_fig(geo1, geo2, short1, short2 or None, colour1, colour2)
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch", key=f"corner_geom_{sess_k}_{driver1}_{driver2}",
+                        config={"displayModeBar": False})
+
+    cmp_rows = {r["corner"]: r for r in _compare_corner_lines(geo1, geo2)} if geo2 else {}
+    by2 = {c["corner"]: c for c in geo2["corners"]} if geo2 else {}
+
+    if cmp_rows:
+        top = sorted(cmp_rows.values(), key=lambda r: r["apex_distance_m"], reverse=True)[:3]
+        cols = st.columns(len(top))
+        for col, r in zip(cols, top):
+            inside = r["apex_lateral_m"]
+            who = short2 if inside > 0 else short1
+            who_col = colour2 if inside > 0 else colour1
+            col.markdown(
+                "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.18); "
+                "border-radius:12px; padding:12px 14px; margin-bottom:10px;'>"
+                f"<div style='font-size:11px; opacity:0.6; text-transform:uppercase; letter-spacing:1px;'>{r['corner']} · apex Δ</div>"
+                f"<div style='font-size:22px; font-weight:800; font-family:monospace;'>{r['apex_distance_m']:.1f} m</div>"
+                f"<div style='font-size:12px; opacity:0.85;'><span style='color:{who_col}; font-weight:700;'>{who}</span> "
+                f"{abs(inside):.1f} m further inside at the apex · ΔR {r['radius_delta_m']:+.0f} m</div></div>",
+                unsafe_allow_html=True,
+            )
+
+    def _shift_txt(c):
+        if c.get("apex_shift_m") is None:
+            return "—"
+        sh = c["apex_shift_m"]
+        if abs(sh) < 5:
+            return "on marker"
+        return f"{abs(sh):.0f} m {'late' if sh > 0 else 'early'}"
+
+    th = "padding:8px 10px; text-align:{a};"
+    td = "padding:7px 10px; text-align:{a};"
+    if cmp_rows:
+        headers = ["Corner", "Dir", f"{short1} R min", f"{short1} apex", f"{short2} R min", f"{short2} apex",
+                   "Apex Δ", "Entry / Apex / Exit inside Δ"]
+    else:
+        headers = ["Corner", "Dir", "R min", "Apex speed", "Apex vs marker", "Marker offset"]
+    head_html = "".join(f"<th style='{th.format(a='left' if i < 2 else 'center')}'>{h}</th>" for i, h in enumerate(headers))
+
+    rows_html = ""
+    for i, c in enumerate(geo1["corners"]):
+        bg = "rgba(128,128,128,0.05)" if i % 2 else "transparent"
+        spd = f"{c['apex_speed_kmh']:.0f} km/h" if c.get("apex_speed_kmh") is not None else "—"
+        cells = [c["corner"] + (" ⚠" if c.get("low_confidence") else ""),
+                 "Left" if c["direction"] == "L" else "Right"]
+        if cmp_rows:
+            r = cmp_rows.get(c["corner"])
+            c2 = by2.get(c["corner"])
+            if r is None or c2 is None:
+                continue
+            cells += [f"{c['min_radius_m']:.0f} m", _shift_txt(c), f"{c2['min_radius_m']:.0f} m", _shift_txt(c2),
+                      f"{r['apex_distance_m']:.1f} m",
+                      f"{r['entry_lateral_m']:+.1f} / {r['apex_lateral_m']:+.1f} / {r['exit_lateral_m']:+.1f} m"]
+        else:
+            off = f"{c['apex_offset_m']:.1f} m" if c.get("apex_offset_m") is not None else "—"
+            cells += [f"{c['min_radius_m']:.0f} m", spd, _shift_txt(c), off]
+        rows_html += (f"<tr style='background:{bg}; border-bottom:1px solid rgba(128,128,128,0.12);'>"
+                      + "".join(f"<td style='{td.format(a='left' if j < 2 else 'center')}'>{v}</td>" for j, v in enumerate(cells))
+                      + "</tr>")
+
+    note = (f"<div style='font-size:10px; opacity:0.55; margin-top:8px;'>Inside Δ: lateral gap between the lines, "
+            f"positive = {short2} is further to the inside of the corner. Measured 60 m before the apex, "
+            "the apex, and 60 m after.</div>") if cmp_rows else ""
+    if summ.get("low_confidence_corners"):
+        note += ("<div style='font-size:10px; opacity:0.55; margin-top:4px;'>⚠ Low confidence: the radius implies "
+                 "more cornering load than an F1 car can pull, so the ~4 Hz position data could not resolve this "
+                 "fast direction change. Treat its radius as a lower bound.</div>")
+    st.markdown(
+        "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.15); "
+        "border-radius:12px; padding:14px 16px; margin-top:8px; overflow-x:auto;'>"
+        "<div style='font-size:12px; font-weight:600; margin-bottom:8px; opacity:0.82;'>Per-Corner Apex Geometry</div>"
+        "<table style='width:100%; border-collapse:collapse; font-size:12.5px;'>"
+        "<thead><tr style='font-size:10px; opacity:0.6; text-transform:uppercase; letter-spacing:1px; "
+        f"border-bottom:1px solid rgba(128,128,128,0.2);'>{head_html}</tr></thead>"
+        f"<tbody>{rows_html}</tbody></table>{note}</div>",
+        unsafe_allow_html=True,
+    )

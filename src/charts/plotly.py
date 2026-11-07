@@ -3087,3 +3087,92 @@ def build_driving_style_dna_fig(
     )
     return fig
 
+
+
+# ── Corner Geometry & Minimum-Radius Apex Trajectory Curvature (#198) ────────
+# CHANGE (#198): racing line drawn as markers coloured by instantaneous radius of
+# curvature (log scale: tight hairpins red/orange, open sweepers blue), with the
+# official corner markers and each driver's geometric apex (min-R point).
+# ── Review notes (#198) ──
+# The colour axis uses log10(R) because radii span ~15 m hairpins to the 1000 m
+# straight cap; a linear scale paints every corner the same colour. Equal axis
+# scaling keeps the track shape true, so apex offsets read correctly by eye.
+
+_GEOM_RADIUS_TICKS = [20, 50, 100, 200, 500, 1000]
+
+
+def build_corner_geometry_fig(
+    geo1: dict | None,
+    geo2: dict | None = None,
+    driver1: str = "Driver 1",
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+) -> go.Figure | None:
+    """2D racing line coloured by radius of curvature, with corner markers and apexes."""
+    if not geo1 or len(geo1.get("x", [])) < 2:
+        return None
+
+    fig = go.Figure()
+    log_r = np.log10(np.asarray(geo1["radius"], dtype=float))
+    speed = np.asarray(geo1.get("speed"), dtype=float)
+    fig.add_trace(go.Scatter(
+        x=geo1["x"], y=geo1["y"], mode="markers",
+        marker=dict(
+            size=4, color=log_r, colorscale="Turbo", reversescale=True,
+            cmin=np.log10(_GEOM_RADIUS_TICKS[0]), cmax=np.log10(_GEOM_RADIUS_TICKS[-1]),
+            colorbar=dict(
+                title=dict(text="Radius (m)", side="right"),
+                tickvals=[np.log10(t) for t in _GEOM_RADIUS_TICKS],
+                ticktext=[str(t) for t in _GEOM_RADIUS_TICKS],
+                thickness=12, len=0.75,
+            ),
+        ),
+        customdata=np.column_stack([geo1["radius"], speed, geo1["s"]]),
+        name=f"{driver1} line (R)",
+        hovertemplate=(f"<b>{driver1}</b><br>R = %{{customdata[0]:.0f}} m"
+                       "<br>Speed = %{customdata[1]:.0f} km/h<br>s = %{customdata[2]:.0f} m<extra></extra>"),
+    ))
+
+    if geo2 and len(geo2.get("x", [])) > 1:
+        fig.add_trace(go.Scatter(
+            x=geo2["x"], y=geo2["y"], mode="lines",
+            line=dict(color=colour2, width=1.6, dash="dot"),
+            name=f"{driver2 or 'Driver 2'} line", hoverinfo="skip",
+        ))
+
+    markers = [c for c in geo1["corners"] if c.get("marker_x") is not None]
+    if markers:
+        fig.add_trace(go.Scatter(
+            x=[c["marker_x"] for c in markers], y=[c["marker_y"] for c in markers],
+            mode="markers+text", text=[c["corner"] for c in markers], textposition="top center",
+            textfont=dict(size=10),
+            marker=dict(size=9, symbol="circle-open", color="rgba(128,128,128,0.9)", line=dict(width=2)),
+            name="Official corner marker",
+            hovertemplate="<b>%{text}</b> marker<extra></extra>",
+        ))
+
+    for geo, col, drv in ((geo1, colour1, driver1), (geo2, colour2, driver2)):
+        if not geo or not geo.get("corners"):
+            continue
+        cs = geo["corners"]
+        fig.add_trace(go.Scatter(
+            x=[c["apex_x"] for c in cs], y=[c["apex_y"] for c in cs], mode="markers",
+            marker=dict(size=11, symbol="star", color=col, line=dict(width=1, color="white")),
+            customdata=[[c["corner"], c["min_radius_m"], c["apex_speed_kmh"] or 0.0] for c in cs],
+            name=f"{drv or 'Driver'} geometric apex",
+            hovertemplate=(f"<b>{drv}</b> · %{{customdata[0]}} apex<br>R min = %{{customdata[1]:.0f}} m"
+                           "<br>Apex speed = %{customdata[2]:.0f} km/h<extra></extra>"),
+        ))
+
+    fig.update_layout(
+        height=560,
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=11)),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
+        hovermode="closest",
+    )
+    return fig

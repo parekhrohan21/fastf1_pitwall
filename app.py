@@ -120,7 +120,7 @@ from src.ui.components import (
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section, _render_weekend_progression_section,
     _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section,
-    _render_driving_style_dna_section
+    _render_driving_style_dna_section, _render_corner_geometry_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1157,6 +1157,20 @@ if tel1 is not None:
         driver1, driver2 if compare else None, colour1, colour2, compare,
         fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
     )
+
+# ── Corner Geometry & Minimum-Radius Apex Trajectory Curvature (#198) ────────
+# Line deltas only make sense on one circuit, so a session compare against a
+# different Grand Prix shows Driver 1 alone.
+st.markdown("<div class='section-title'>📐 Corner Geometry & Minimum-Radius Apex Analysis</div>", unsafe_allow_html=True)
+try:
+    _same_circuit = sess2 is None or sess2.event["EventName"] == sess.event["EventName"]
+except Exception:
+    _same_circuit = False
+_render_corner_geometry_section(
+    sess_key, sess, lap1, lap2 if (compare and driver2) else None,
+    driver1, driver2 if compare else None, colour1, colour2, compare,
+    same_circuit=_same_circuit, fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+)
 
 
 
