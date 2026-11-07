@@ -974,6 +974,10 @@ class FreeF1Session:
             "X": x_arr,
             "Y": y_arr,
             "Z": z_arr,
+            # CHANGE (#198): marks traces whose X/Y are straight lines between corner
+            # markers, so geometry features can refuse them instead of reporting
+            # curvature that was never driven.
+            "Synthetic": True,
         })
         tel_obj = FreeF1Telemetry(tel_df).add_distance()
         if self._ref_track_xy is None:
@@ -7556,3 +7560,290 @@ def _calculate_driving_style_dna(
     except Exception:
         return None
 
+
+
+# ── Corner Geometry & Minimum-Radius Apex Trajectory Curvature (#198) ────────
+# CHANGE (#198): new pure helpers that turn a lap's X/Y position trace into an
+# instantaneous radius-of-curvature profile and per-corner apex geometry.
+#   1. _resample_xy_path   — X/Y → metres, resampled on a uniform arc-length grid
+#   2. _path_curvature     — signed κ(s) = (x'y'' − y'x'') / (x'² + y'²)^(3/2)
+#   3. _build_corner_geometry — geometric apex (min R) per corner vs the official
+#      corner marker: apex offset (m), early/late shift along the lap, apex speed
+#   4. _compare_corner_lines  — Compare Mode deltas between two drivers' lines
+# ── Review notes (#198) ──
+# • Position data arrives at ~4 Hz, so raw samples are ~7 m apart in a hairpin
+#   but ~20 m apart at 290 km/h, and the linear segments between them put kinks
+#   into the path. The path is resampled every 2 m and differentiated with a
+#   Savitzky-Golay filter (cubic), whose window scales with speed: ~1.1 s of
+#   travel, at least 30 m. A fixed 30 m window gave impossible 11-22 g corners on
+#   real Silverstone/Jeddah laps; a fixed 70 m one blurred hairpins. Checked on
+#   cached 2026 Silverstone/Miami and 2025 Jeddah race laps: the Loop reads ~20 m
+#   at 82 km/h and every Silverstone/Miami apex stays under 6 g.
+# • Very fast direction changes (e.g. Jeddah T7-T8 at 250 km/h) still read too
+#   tight because the sample spacing cannot resolve them. Corners whose implied
+#   lateral load v²/R exceeds GEOM_MAX_PLAUSIBLE_G are flagged low_confidence.
+# • FastF1 X/Y are in 1/10 m. When the frame also carries Distance (merged
+#   telemetry from lap.get_telemetry()), the scale is calibrated from it instead,
+#   which also covers feeds whose units differ.
+# • The "official apex" is the corner-number marker from circuit_info. Markers sit
+#   near, not exactly on, the racing line, so apex offsets of a few metres are
+#   normal and are best read as relative values (driver vs driver, lap vs lap).
+# • There is no track-edge data, so absolute entry width / exit run-off usage cannot
+#   be measured. Compare Mode reports the lateral offset between the two lines at
+#   entry, apex and exit instead (positive = Driver 2 is further to the inside).
+# • In the zero-auth fallback, positions may be interpolated from one reference
+#   lap, so every driver then shares the same line and the Compare deltas read ~0.
+
+GEOM_GRID_STEP_M = 2.0
+GEOM_SMOOTH_WINDOW_M = 30.0   # minimum window; used alone when Speed is missing
+GEOM_SMOOTH_SECONDS = 1.1     # adaptive window = this much travel at the local speed
+GEOM_WINDOWS_M = (30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 110.0, 130.0)
+GEOM_MAX_PLAUSIBLE_G = 6.5
+GEOM_APEX_SEARCH_M = 80.0
+GEOM_ENTRY_EXIT_M = 60.0
+GEOM_MAX_RADIUS_M = 1000.0
+GEOM_CORNER_MAX_RADIUS_M = 400.0
+_FASTF1_XY_SCALE = 0.1  # FastF1 X/Y units are 1/10 m
+
+
+def _xy_scale(tel_df: pd.DataFrame, raw_len: float) -> float:
+    """Metres per X/Y unit, calibrated from Distance when the frame has it."""
+    if "Distance" in tel_df.columns and raw_len > 0:
+        d = pd.to_numeric(tel_df["Distance"], errors="coerce").dropna()
+        if len(d) > 10:
+            ratio = float(d.max() - d.min()) / raw_len
+            # only trust the calibration when it lands near a known unit (dm or m)
+            if 0.05 <= ratio <= 1.5:
+                return ratio
+    return _FASTF1_XY_SCALE
+
+
+def _resample_xy_path(tel_df: pd.DataFrame | None, step_m: float = GEOM_GRID_STEP_M) -> dict | None:
+    """Resample a lap's X/Y trace (and Speed) onto a uniform arc-length grid in metres."""
+    if tel_df is None or tel_df.empty or not {"X", "Y"}.issubset(tel_df.columns):
+        return None
+    x = pd.to_numeric(tel_df["X"], errors="coerce").to_numpy(dtype=float)
+    y = pd.to_numeric(tel_df["Y"], errors="coerce").to_numpy(dtype=float)
+    speed = (pd.to_numeric(tel_df["Speed"], errors="coerce").to_numpy(dtype=float)
+             if "Speed" in tel_df.columns else np.full(len(x), np.nan))
+    ok = np.isfinite(x) & np.isfinite(y)
+    x, y, speed = x[ok], y[ok], speed[ok]
+    if len(x) < 20:
+        return None
+
+    seg = np.hypot(np.diff(x), np.diff(y))
+    raw_len = float(seg.sum())
+    if raw_len <= 0:
+        return None
+    scale = _xy_scale(tel_df, raw_len)
+
+    # drop repeated samples (zero-length segments) so arc length is strictly increasing
+    keep = np.concatenate([[True], seg > 0])
+    x, y, speed = x[keep] * scale, y[keep] * scale, speed[keep]
+    s = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])
+    if s[-1] < 20 * step_m:
+        return None
+
+    grid = np.arange(0.0, s[-1], step_m)
+    has_speed = np.isfinite(speed)
+    speed_i = (np.interp(grid, s[has_speed], speed[has_speed])
+               if has_speed.sum() >= 2 else np.full(len(grid), np.nan))
+    return {
+        "s": grid,
+        "x": np.interp(grid, s, x),
+        "y": np.interp(grid, s, y),
+        "speed": speed_i,
+        "scale": scale,
+        "step": step_m,
+    }
+
+
+def _path_curvature(x: np.ndarray, y: np.ndarray, step_m: float = GEOM_GRID_STEP_M,
+                    window_m: float = GEOM_SMOOTH_WINDOW_M) -> np.ndarray | None:
+    """Signed curvature κ (1/m) of a uniformly sampled path; positive = left turn."""
+    from scipy.signal import savgol_filter
+    win = int(round(window_m / step_m))
+    win = max(5, win | 1)  # odd, and long enough for a cubic fit
+    if len(x) < win:
+        return None
+    dx = savgol_filter(x, win, 3, deriv=1, delta=step_m)
+    dy = savgol_filter(y, win, 3, deriv=1, delta=step_m)
+    ddx = savgol_filter(x, win, 3, deriv=2, delta=step_m)
+    ddy = savgol_filter(y, win, 3, deriv=2, delta=step_m)
+    denom = np.power(dx * dx + dy * dy, 1.5)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        kappa = (dx * ddy - dy * ddx) / denom
+    return np.nan_to_num(kappa, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _adaptive_curvature(path: dict) -> np.ndarray | None:
+    """Signed curvature with a speed-scaled smoothing window (see review notes)."""
+    x, y, step, speed = path["x"], path["y"], path["step"], path["speed"]
+    if not np.isfinite(speed).any():
+        return _path_curvature(x, y, step, GEOM_SMOOTH_WINDOW_M)
+    wins = np.asarray(GEOM_WINDOWS_M)
+    per_win = [_path_curvature(x, y, step, w) for w in wins]
+    if per_win[0] is None:
+        return None
+    # fall back to the widest window that the lap is long enough for
+    valid = [k for k in per_win if k is not None]
+    ks = np.vstack(valid)
+    need = np.nan_to_num(speed / 3.6 * GEOM_SMOOTH_SECONDS, nan=GEOM_SMOOTH_WINDOW_M)
+    idx = np.searchsorted(wins[:len(valid)], np.clip(need, wins[0], wins[len(valid) - 1]))
+    idx = np.clip(idx, 0, len(valid) - 1)
+    return ks[idx, np.arange(ks.shape[1])]
+
+
+def _radius_from_curvature(kappa: np.ndarray, max_radius: float = GEOM_MAX_RADIUS_M) -> np.ndarray:
+    """R = 1/|κ|, capped so straights read as max_radius instead of infinity."""
+    with np.errstate(divide="ignore"):
+        r = 1.0 / np.abs(kappa)
+    return np.clip(np.nan_to_num(r, posinf=max_radius), 1.0, max_radius)
+
+
+def _auto_corner_indices(radius: np.ndarray, step_m: float) -> list[int]:
+    """Find corners as local radius minima tighter than GEOM_CORNER_MAX_RADIUS_M."""
+    from scipy.signal import find_peaks
+    peaks, _ = find_peaks(-radius, height=-GEOM_CORNER_MAX_RADIUS_M,
+                          distance=max(1, int(100.0 / step_m)), prominence=50.0)
+    return [int(p) for p in peaks]
+
+
+def _build_corner_geometry(tel_df: pd.DataFrame | None, corners_df: pd.DataFrame | None = None) -> dict | None:
+    """Radius-of-curvature profile and per-corner geometric apex analysis for one lap.
+
+    corners_df is circuit_info.corners (X, Y, Number, Letter in the same units as
+    the telemetry). Without it, corners are detected from the radius profile.
+    """
+    path = _resample_xy_path(tel_df)
+    if path is None:
+        return None
+    step = path["step"]
+    kappa = _adaptive_curvature(path)
+    if kappa is None:
+        return None
+    radius = _radius_from_curvature(kappa)
+    s, x, y = path["s"], path["x"], path["y"]
+    half = max(1, int(GEOM_APEX_SEARCH_M / step))
+    # Savitzky-Golay derivatives are unreliable within a window of the lap ends
+    edge = min(int(GEOM_SMOOTH_WINDOW_M / step), len(s) // 4)
+
+    # (label, marker index on the path or None, marker x/y or None)
+    anchors: list[tuple[str, int | None, tuple[float, float] | None]] = []
+    if corners_df is not None and not corners_df.empty and {"X", "Y"}.issubset(corners_df.columns):
+        for _, c in corners_df.iterrows():
+            cx, cy = pd.to_numeric(c.get("X"), errors="coerce"), pd.to_numeric(c.get("Y"), errors="coerce")
+            if not (np.isfinite(cx) and np.isfinite(cy)):
+                continue
+            mx, my = float(cx) * path["scale"], float(cy) * path["scale"]
+            m_idx = int(np.argmin((x - mx) ** 2 + (y - my) ** 2))
+            letter = c.get("Letter") if isinstance(c.get("Letter"), str) else ""
+            try:
+                label = f"T{int(c.get('Number'))}{letter}"
+            except (TypeError, ValueError):
+                label = f"T{len(anchors) + 1}"
+            anchors.append((label, m_idx, (mx, my)))
+    if not anchors:
+        anchors = [(f"C{i + 1}", p, None) for i, p in enumerate(_auto_corner_indices(radius, step))]
+
+    corners = []
+    for label, m_idx, marker in anchors:
+        lo, hi = max(edge, m_idx - half), min(len(s) - edge, m_idx + half + 1)
+        if hi <= lo:
+            continue
+        window = radius[lo:hi]
+        min_r = float(window.min())
+        # Constant-radius arcs have no single tightest point, so take the middle of
+        # the stretch within 5% of the minimum rather than wherever noise dips lowest.
+        tight = np.flatnonzero(window <= min_r * 1.05)
+        a_idx = lo + int(tight[len(tight) // 2])
+        if min_r >= GEOM_MAX_RADIUS_M:
+            continue  # marker on a straight / kink with no measurable curvature
+        apex_speed = float(path["speed"][a_idx]) if np.isfinite(path["speed"][a_idx]) else None
+        lat_g = (apex_speed / 3.6) ** 2 / min_r / 9.81 if apex_speed is not None else None
+        rec = {
+            "corner": label,
+            "apex_idx": a_idx,
+            "apex_s": float(s[a_idx]),
+            "apex_x": float(x[a_idx]),
+            "apex_y": float(y[a_idx]),
+            "min_radius_m": min_r,
+            "apex_speed_kmh": apex_speed,
+            "lateral_g": lat_g,
+            # implied cornering load beyond what an F1 car can pull: radius not resolved
+            "low_confidence": bool(lat_g is not None and lat_g > GEOM_MAX_PLAUSIBLE_G),
+            "direction": "L" if kappa[a_idx] > 0 else "R",
+            "marker_x": marker[0] if marker else None,
+            "marker_y": marker[1] if marker else None,
+            "apex_offset_m": None,
+            "apex_shift_m": None,
+        }
+        if marker:
+            rec["apex_offset_m"] = float(np.hypot(x[a_idx] - marker[0], y[a_idx] - marker[1]))
+            # positive = geometric apex comes after the marker along the lap (late apex)
+            rec["apex_shift_m"] = float(s[a_idx] - s[m_idx])
+        corners.append(rec)
+
+    offsets = [c["apex_offset_m"] for c in corners if c["apex_offset_m"] is not None]
+    trusted = [c for c in corners if not c["low_confidence"]] or corners
+    tightest = min(trusted, key=lambda c: c["min_radius_m"]) if trusted else None
+    return {
+        "s": s, "x": x, "y": y, "radius": radius, "kappa": kappa, "speed": path["speed"],
+        "corners": corners,
+        "summary": {
+            "corners_analysed": len(corners),
+            "tightest_corner": tightest["corner"] if tightest else None,
+            "tightest_radius_m": tightest["min_radius_m"] if tightest else None,
+            "mean_apex_offset_m": float(np.mean(offsets)) if offsets else None,
+            "marker_source": "circuit" if any(c["marker_x"] is not None for c in corners) else "auto",
+            "low_confidence_corners": sum(c["low_confidence"] for c in corners),
+        },
+    }
+
+
+def _lateral_offset(geo_ref: dict, idx: int, geo_other: dict) -> float:
+    """Signed distance from geo_ref's point idx to the nearest point of geo_other,
+    measured along geo_ref's inward normal (positive = other line is more inside)."""
+    x, y = geo_ref["x"], geo_ref["y"]
+    i0, i1 = max(0, idx - 1), min(len(x) - 1, idx + 1)
+    tx, ty = x[i1] - x[i0], y[i1] - y[i0]
+    norm = float(np.hypot(tx, ty)) or 1.0
+    nx, ny = -ty / norm, tx / norm  # left-hand normal
+    ox, oy = geo_other["x"], geo_other["y"]
+    j = int(np.argmin((ox - x[idx]) ** 2 + (oy - y[idx]) ** 2))
+    lateral = (ox[j] - x[idx]) * nx + (oy[j] - y[idx]) * ny
+    # the inside of a left turn is the left side; of a right turn, the right side
+    turn = 1.0 if geo_ref["kappa"][idx] >= 0 else -1.0
+    return float(lateral * turn)
+
+
+def _compare_corner_lines(geo1: dict | None, geo2: dict | None) -> list[dict]:
+    """Per-corner line deltas between two laps of the same circuit (matched by corner label)."""
+    if not geo1 or not geo2:
+        return []
+    by_label = {c["corner"]: c for c in geo2["corners"]}
+    step = float(geo1["s"][1] - geo1["s"][0]) if len(geo1["s"]) > 1 else GEOM_GRID_STEP_M
+    off = int(GEOM_ENTRY_EXIT_M / step)
+    n = len(geo1["s"])
+    rows = []
+    for c1 in geo1["corners"]:
+        c2 = by_label.get(c1["corner"])
+        if c2 is None:
+            continue
+        a = c1["apex_idx"]
+        rows.append({
+            "corner": c1["corner"],
+            "apex_distance_m": float(np.hypot(c1["apex_x"] - c2["apex_x"], c1["apex_y"] - c2["apex_y"])),
+            "radius_delta_m": c2["min_radius_m"] - c1["min_radius_m"],
+            "entry_lateral_m": _lateral_offset(geo1, max(0, a - off), geo2),
+            "apex_lateral_m": _lateral_offset(geo1, a, geo2),
+            "exit_lateral_m": _lateral_offset(geo1, min(n - 1, a + off), geo2),
+        })
+    return rows
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_corner_geometry_cached(sess_k: str, driver: str, lap_num: int,
+                                  tel_df: pd.DataFrame, corners_df: pd.DataFrame | None) -> dict | None:
+    """Cached wrapper; sess_k / driver / lap_num only key the cache."""
+    return _build_corner_geometry(tel_df, corners_df)
