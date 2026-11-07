@@ -61,6 +61,7 @@ sequence; the mapping is given in each record where one exists.
 | [029](#adr-029--exhaustive-prefix-sum-pit-strategy-solver-with-field-pooled-degradation) | Exhaustive prefix-sum pit strategy solver with field-pooled degradation | #196 |
 | [030](#adr-030--six-axis-driving-style-dna-with-trajectory-yaw-fallback) | Six-axis Driving Style DNA with trajectory yaw fallback | #197 |
 | [031](#adr-031--zero-auth-multi-source-f1-data-pipeline-openf1--multiviewer--jolpica-f1) | Zero-auth multi-source F1 data pipeline (OpenF1 + MultiViewer + Jolpica-F1) | Free API Fallback |
+| [032](#adr-032--speed-scaled-curvature-smoothing-for-corner-geometry) | Speed-scaled curvature smoothing for corner geometry | #198 |
 
 ---
 
@@ -580,4 +581,23 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 
 **Consequences & guardrails.** Covered by `tests/test_free_api_fallback.py` (6 unit tests; 189 total tests across 24 test modules). All 32 dashboard sections work without any F1 account login.
 
+---
 
+## ADR-032 — Speed-scaled curvature smoothing for corner geometry
+
+**Issue / PR:** #198 · `AGENT.md` Decision #49 · review notes in `src/data/loader.py`
+
+**Context.** Corner radius needs the second derivative of the car's X/Y path. FastF1 position data arrives at ~4 Hz, so raw samples are ~7 m apart in a hairpin and ~20 m apart at 290 km/h, and the linear interpolation between them adds kinks that inflate curvature.
+
+**Decision.**
+1. Resample X/Y on a uniform 2 m arc-length grid (metres, scale calibrated from `Distance` when present, else FastF1's 1/10 m) and differentiate with a cubic Savitzky-Golay filter.
+2. Scale the filter window with local speed: ~1.1 s of travel, at least 30 m, chosen per point from a fixed set of windows (30–130 m).
+3. Take the geometric apex as the middle of the stretch within 5% of the corner's minimum radius, searched ±80 m around the official marker, and skip the first/last 30 m of the lap where the filter is unreliable.
+4. Flag corners whose implied lateral load $v^2/R$ exceeds 6.5 g as `low_confidence`, and exclude them from the "tightest corner" headline.
+
+**Alternatives & trade-offs.**
+- *Fixed 30 m window*: gave 11–22 g "corners" on real Silverstone and Jeddah laps.
+- *Fixed 70 m window*: physically plausible at speed but blurs tight hairpins.
+- *Cubic-spline resampling instead of linear*: made no material difference once the window scaled with speed.
+
+**Consequences & guardrails.** On cached 2026 Silverstone and Miami race laps every apex stays under 6 g, and the Loop reads ~20 m at 82 km/h. Very fast direction changes (e.g. Jeddah T7–T8) still cannot be resolved and are flagged. Absolute track-edge usage is not measured because there is no track-limit data; Compare Mode reports the relative lateral offset between two lines instead. `tests/test_corner_geometry.py` (10 tests).
