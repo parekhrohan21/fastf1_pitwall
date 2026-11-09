@@ -17,7 +17,7 @@ from src.data.loader import (
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation,
     DNA_AXES, _calculate_driving_style_dna,
-    _build_corner_geometry_cached, _compare_corner_lines
+    _build_corner_geometry_cached, _compare_corner_lines, _build_microsector_delta_cached
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -28,7 +28,7 @@ from src.charts.plotly import (
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
     build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig,
-    build_driving_style_dna_fig, build_corner_geometry_fig
+    build_driving_style_dna_fig, build_corner_geometry_fig, build_microsector_streamgraph_fig
 )
 from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
@@ -4028,4 +4028,137 @@ def _render_corner_geometry_section(
         f"border-bottom:1px solid rgba(128,128,128,0.2);'>{head_html}</tr></thead>"
         f"<tbody>{rows_html}</tbody></table>{note}</div>",
         unsafe_allow_html=True,
+    )
+
+
+
+def _render_microsector_section(
+    sess_k: str,
+    sess_obj,
+    lap1,
+    lap2,
+    tel1,
+    tel2,
+    driver1: str = "",
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+    same_circuit: bool = True,
+    fmt_func1=None,
+    fmt_func2=None,
+) -> None:
+    """Render the Micro-Sector Speed Delta & Dominance Streamgraph section (#199)."""
+    st.markdown(
+        "<div style='font-size:11px; opacity:0.6; margin:-6px 0 14px;'>"
+        "Both laps on one distance axis. Top: speed difference at every metre. Middle: running gap. "
+        "Bottom: time gained in each 50 m micro-sector — the driver who crossed it faster wins those metres. "
+        "Grey bands are corner zones, green bands DRS zones.</div>",
+        unsafe_allow_html=True,
+    )
+    if not driver2 or lap2 is None or tel1 is None or tel2 is None:
+        st.info("ℹ️ Turn on Compare Mode and pick a second driver to see the micro-sector comparison.")
+        return
+    if not same_circuit:
+        st.info("ℹ️ Micro-sector deltas need both laps on the same circuit.")
+        return
+    if any("Synthetic" in t.columns and bool(t["Synthetic"].any()) for t in (tel1, tel2)):
+        st.info("ℹ️ Real telemetry is not available for one of these laps right now (the zero-auth data "
+                "source fell back to an estimated trace), so a metre-by-metre comparison would be misleading. "
+                "Try again after the live session ends.")
+        return
+
+    corners_df = None
+    if sess_obj is not None:
+        try:
+            c_info = sess_obj.get_circuit_info()
+            if c_info is not None and c_info.corners is not None and not c_info.corners.empty:
+                corners_df = pd.DataFrame(c_info.corners[[c for c in ("Number", "Letter", "Distance") if c in c_info.corners.columns]])
+        except Exception:
+            corners_df = None
+
+    def _sec(lap, col):
+        try:
+            v = lap[col]
+            return float(v.total_seconds()) if pd.notna(v) else None
+        except Exception:
+            return None
+
+    cols = ["Distance", "Time", "Speed", "nGear", "Throttle", "DRS"]
+    t1 = pd.DataFrame(tel1[[c for c in cols if c in tel1.columns]])
+    t2 = pd.DataFrame(tel2[[c for c in cols if c in tel2.columns]])
+    try:
+        key = f"{sess_k}_{driver1}_{int(lap1['LapNumber'])}_{driver2}_{int(lap2['LapNumber'])}"
+    except Exception:
+        key = f"{sess_k}_{driver1}_{driver2}"
+    md = _build_microsector_delta_cached(key, t1, t2, corners_df,
+                                         (_sec(lap1, "Sector1Time"), _sec(lap1, "Sector2Time"),
+                                          _sec(lap2, "Sector1Time"), _sec(lap2, "Sector2Time")),
+                                         (_sec(lap1, "LapTime"), _sec(lap2, "LapTime")))
+    if not md:
+        st.info("ℹ️ Distance-aligned speed data is not available for both laps, so micro-sectors cannot be computed.")
+        return
+
+    label1 = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
+    label2 = fmt_func2(driver2) if callable(fmt_func2) else (fmt_func1(driver2) if callable(fmt_func1) else str(driver2))
+    short1, short2 = label1.split("·")[0].strip(), label2.split("·")[0].strip()
+    if short1 == short2:
+        short1, short2 = f"{short1} (1)", f"{short2} (2)"
+    summ = md["summary"]
+
+    # Plain HTML cards: st.metric deltas render as unreadable pills under the app theme.
+    def _kpi(title, value, sub, sub_col=None):
+        sc = f"color:{sub_col}; font-weight:700;" if sub_col else "opacity:0.7;"
+        return ("<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.18); "
+                "border-radius:12px; padding:12px 14px; margin-bottom:12px;'>"
+                f"<div style='font-size:11px; opacity:0.6; text-transform:uppercase; letter-spacing:1px;'>{title}</div>"
+                f"<div style='font-size:24px; font-weight:800; font-family:monospace; margin:2px 0;'>{value}</div>"
+                f"<div style='font-size:12px; {sc}'>{sub}</div></div>")
+
+    gap = summ["final_delta_ms"]
+    lead, lead_col = (short1, colour1) if gap >= 0 else (short2, colour2)
+    b1, b2 = summ["biggest_gain1"], summ["biggest_gain2"]
+    best = max([b for b in (b1, b2) if b], key=lambda b: abs(b["gain_ms"]), default=None)
+    cards_html = [
+        _kpi("Lap gap", f"{abs(gap) / 1000:.3f} s", f"{lead} faster", lead_col),
+        _kpi(f"{short1} dominates", f"{summ['metres1']:,.0f} m", f"{summ['pct1']:.0f}% of the lap", colour1),
+        _kpi(f"{short2} dominates", f"{summ['metres2']:,.0f} m", f"{summ['pct2']:.0f}% of the lap", colour2),
+    ]
+    if best:
+        who, wcol = (short1, colour1) if best["gain_ms"] > 0 else (short2, colour2)
+        where = best["label"] or f"{best['start']:.0f}–{best['end']:.0f} m"
+        cards_html.append(_kpi("Biggest 50 m swing", f"{abs(best['gain_ms']):.0f} ms", f"{who} · {where}", wcol))
+    for col, html in zip(st.columns(len(cards_html)), cards_html):
+        col.markdown(html, unsafe_allow_html=True)
+
+    fig = build_microsector_streamgraph_fig(md, short1, short2, colour1, colour2)
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch", key=f"microsector_{key}", config={"displayModeBar": False})
+
+    cards = st.columns(3)
+    for col, sec in zip(cards, md["sectors"]):
+        span = max(sec["end"] - sec["start"], 1.0)
+        p1, pe = 100 * sec["metres1"] / span, 100 * sec["metres_even"] / span
+        p2 = max(0.0, 100.0 - p1 - pe)
+        g = sec["gain_ms"]
+        winner, wcol = (short1, colour1) if g > 0 else (short2, colour2)
+        col.markdown(
+            "<div style='background:var(--secondary-background-color); border:1px solid rgba(128,128,128,0.18); "
+            "border-radius:12px; padding:12px 14px; margin-bottom:10px;'>"
+            f"<div style='font-size:11px; opacity:0.6; text-transform:uppercase; letter-spacing:1px;'>"
+            f"{sec['sector']} · {sec['start']:.0f}–{sec['end']:.0f} m</div>"
+            f"<div style='font-size:20px; font-weight:800; font-family:monospace;'>{abs(g):.0f} ms "
+            f"<b style='font-size:12px; color:{wcol};'>{winner}</b></div>"
+            "<div style='display:flex; height:8px; border-radius:4px; overflow:hidden; margin:8px 0 6px;'>"
+            f"<div style='width:{p1:.1f}%; background:{colour1};'></div>"
+            f"<div style='width:{pe:.1f}%; background:rgba(150,150,150,0.5);'></div>"
+            f"<div style='width:{p2:.1f}%; background:{colour2};'></div></div>"
+            f"<div style='font-size:11.5px; opacity:0.85; display:flex; justify-content:space-between;'>"
+            f"<span><b style='color:{colour1};'>{short1}</b> {sec['metres1']:.0f} m</span>"
+            f"<span><b style='color:{colour2};'>{short2}</b> {sec['metres2']:.0f} m</span></div></div>",
+            unsafe_allow_html=True,
+        )
+    st.caption(
+        f"{summ['n_bins']} micro-sectors of 50 m. Sector boundaries come from {short1}'s sector times. "
+        f"{short2}'s distance is aligned to {short1}'s at the sector lines (lap length {summ['lap_length_m']:,.0f} m) so corners line up. "
+        "Bins within 1 ms count as even."
     )

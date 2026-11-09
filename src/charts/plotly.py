@@ -3176,3 +3176,105 @@ def build_corner_geometry_fig(
         hovermode="closest",
     )
     return fig
+
+
+# ── Micro-Sector Speed Delta & Dominance Streamgraph (#199) ─────────────────
+def _hex_rgba(hex_col: str, alpha: float) -> str:
+    h = str(hex_col).lstrip("#")
+    if len(h) != 6:
+        return f"rgba(128,128,128,{alpha})"
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+
+
+def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: str,
+                                      colour1: str = "#FF8700", colour2: str = "#00D2BE") -> go.Figure | None:
+    """Three stacked panels on one distance axis.
+
+    1. Speed delta ribbon (km/h): filled above zero in Driver 1's colour, below
+       zero in Driver 2's.
+    2. Cumulative time delta (ms): the same diverging fill; positive = Driver 1 ahead.
+    3. 50 m micro-sector dominance bars: time gained in each bin, coloured by winner.
+    Corner zones are shaded grey and labelled, DRS zones green, sector lines dashed.
+    The hover on panel 1 shows gear, throttle, speed delta and time gained at that metre.
+    """
+    if not md or not md.get("bins"):
+        return None
+    g = md["grid"]
+    x = g["dist"]
+    if colour1.lower() == colour2.lower():
+        colour2 = "#9AA0A6"
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                        row_heights=[0.42, 0.34, 0.24])
+
+    def _ribbon(y, row):
+        pos, neg = np.where(y > 0, y, 0.0), np.where(y < 0, y, 0.0)
+        for arr, col, name in ((pos, colour1, driver1), (neg, colour2, driver2)):
+            fig.add_trace(go.Scatter(
+                x=x, y=arr, mode="lines", line=dict(width=0.6, color=col),
+                fill="tozeroy", fillcolor=_hex_rgba(col, 0.45), name=f"{name} faster",
+                legendgroup=name, showlegend=(row == 1), hoverinfo="skip",
+            ), row=row, col=1)
+
+    _ribbon(g["speed_delta"], 1)
+    _ribbon(g["time_delta_ms"], 2)
+
+    def _fmt(a, nd=0):
+        return np.where(np.isfinite(a), np.round(a, nd), np.nan)
+
+    custom = np.column_stack([
+        _fmt(g["speed1"]), _fmt(g["speed2"]), _fmt(g["gear1"]), _fmt(g["gear2"]),
+        _fmt(g["throttle1"]), _fmt(g["throttle2"]), _fmt(g["time_delta_ms"]), _fmt(g["bin_gain_ms"], 1),
+    ])
+    fig.add_trace(go.Scatter(
+        x=x, y=g["speed_delta"], mode="lines", line=dict(width=0, color="rgba(0,0,0,0)"),
+        showlegend=False, customdata=custom, name="",
+        hovertemplate=(
+            "<b>%{x:.0f} m</b><br>"
+            f"Speed Δ: %{{y:+.1f}} km/h<br>"
+            f"{driver1}: %{{customdata[0]:.0f}} km/h · gear %{{customdata[2]:.0f}} · throttle %{{customdata[4]:.0f}}%<br>"
+            f"{driver2}: %{{customdata[1]:.0f}} km/h · gear %{{customdata[3]:.0f}} · throttle %{{customdata[5]:.0f}}%<br>"
+            f"Gap: %{{customdata[6]:+.0f}} ms ({driver1} ahead if +)<br>"
+            "This 50 m: %{customdata[7]:+.1f} ms<extra></extra>"
+        ),
+    ), row=1, col=1)
+
+    bins = md["bins"]
+    fig.add_trace(go.Bar(
+        x=[b["mid"] for b in bins], y=[b["gain_ms"] for b in bins],
+        width=[(b["end"] - b["start"]) * 0.92 for b in bins],
+        marker_color=[colour1 if b["dominant"] == 1 else colour2 if b["dominant"] == 2 else "rgba(150,150,150,0.6)" for b in bins],
+        customdata=[[b["idx"], b["start"], b["end"], b["speed_delta"], (b["label"] or b["zone"]).upper()] for b in bins],
+        hovertemplate=("<b>Micro-sector %{customdata[0]}</b> (%{customdata[1]:.0f}–%{customdata[2]:.0f} m, %{customdata[4]})<br>"
+                       f"Time gained: %{{y:+.1f}} ms (+ = {driver1})<br>"
+                       "Mean speed Δ: %{customdata[3]:+.1f} km/h<extra></extra>"),
+        showlegend=False, name="",
+    ), row=3, col=1)
+
+    for z in md.get("zones", []):
+        fill = "rgba(46,204,113,0.13)" if z["kind"] == "drs" else "rgba(128,128,128,0.12)"
+        for r in (1, 2, 3):
+            fig.add_vrect(x0=z["start"], x1=z["end"], fillcolor=fill, line_width=0, layer="below", row=r, col=1)
+        if z["label"]:
+            fig.add_annotation(x=0.5 * (z["start"] + z["end"]), y=1.0, yref="y domain", xref="x",
+                               text=z["label"], showarrow=False, yanchor="bottom",
+                               font=dict(size=9, color="#2ecc71" if z["kind"] == "drs" else None), opacity=0.8)
+    for k, sb in enumerate(md.get("sector_bounds", [])):
+        for r in (1, 2, 3):
+            fig.add_vline(x=sb, line=dict(dash="dash", width=1, color="rgba(160,160,160,0.7)"), row=r, col=1)
+        fig.add_annotation(x=sb, y=1.0, yref="y3 domain", xref="x", text=f"S{k + 2}",
+                           showarrow=False, xanchor="left", yanchor="top", font=dict(size=10), opacity=0.75)
+
+    grid_col = "rgba(128,128,128,0.18)"
+    fig.update_xaxes(gridcolor=grid_col, zeroline=False)
+    fig.update_xaxes(title_text="Lap distance (m)", row=3, col=1)
+    fig.update_yaxes(gridcolor=grid_col, zerolinecolor="rgba(128,128,128,0.55)", zerolinewidth=1)
+    fig.update_yaxes(title_text="Speed Δ (km/h)", row=1, col=1)
+    fig.update_yaxes(title_text="Gap (ms)", row=2, col=1)
+    fig.update_yaxes(title_text="Per 50 m (ms)", row=3, col=1)
+    fig.update_layout(
+        height=640, margin=dict(l=60, r=20, t=40, b=40),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        hovermode="closest", bargap=0,
+        legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1),
+    )
+    return fig

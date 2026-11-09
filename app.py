@@ -120,7 +120,8 @@ from src.ui.components import (
     _render_speed_trap_section, _render_teammate_battle_section,
     _render_pit_loss_section, _render_weekend_progression_section,
     _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section,
-    _render_driving_style_dna_section, _render_corner_geometry_section
+    _render_driving_style_dna_section, _render_corner_geometry_section,
+    _render_microsector_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1286,6 +1287,20 @@ if compare and chart_mode == "Overlapping" and lap1 is not None and lap2 is not 
     if fig_td:
         st.pyplot(fig_td, width='stretch')
         plt.close(fig_td)
+
+# ── Micro-Sector Speed Delta & Dominance Streamgraph (#199) ────────────────
+# Compare Mode only, in both chart modes. Session compare across different
+# Grands Prix is refused inside the renderer.
+if compare and driver2:
+    st.markdown("<div class='section-title'>🧩 Micro-Sector Speed Delta & Dominance Timeline</div>", unsafe_allow_html=True)
+    try:
+        _same_circuit_ms = sess2 is None or sess2.event["EventName"] == sess.event["EventName"]
+    except Exception:
+        _same_circuit_ms = False
+    _render_microsector_section(
+        sess_key, sess, lap1, lap2, tel1, tel2, driver1, driver2, colour1, colour2,
+        same_circuit=_same_circuit_ms, fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+    )
 
 # ── Fastest Laps Leaderboard ──────────────────────────────────────────────────
 # From here on, sections are field-wide: they read the whole lap table rather
