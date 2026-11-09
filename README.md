@@ -101,7 +101,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
 | **`imageio`** & **`imageio-ffmpeg`** | `≥ 2.34.0` / `≥ 0.5.1` | H.264 MP4 encoding for the Brag Video (optional: without them the clip falls back to an animated GIF built with Pillow). |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**199 unit/integration tests across 25 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**208 unit/integration tests across 26 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -134,6 +134,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 
 - **6-Channel High-Frequency Telemetry & Filtering** ([Issue #138](https://github.com/parekhrohan21/fastf1_pitwall/issues/138)): View synchronized or separated traces for Speed (km/h), Throttle (%), Brake (On/Off), RPM, Gear, and DRS, with an interactive multiselect toggle to filter and reorder channels on the fly with dynamic height scaling.
 - **Head-to-Head Speed & Continuous Time Delta per Meter** ([Issue #116](https://github.com/parekhrohan21/fastf1_pitwall/issues/116)): In compare mode, overlays primary and secondary drivers alongside a Speed Delta (Δ km/h) chart and a distance-aligned Continuous Time Delta (Δ seconds vs Distance) chart showing exactly where time is gained or lost across every meter of the lap.
+- **Micro-Sector Speed Delta & Dominance Timeline** ([Issue #199](https://github.com/parekhrohan21/fastf1_pitwall/issues/199)): In Compare Mode, puts both laps on one distance axis and stacks three panels: a diverging speed-delta ribbon (km/h), the running gap (ms) and the time gained in each 50 m micro-sector, coloured by the faster driver. Corner zones (from the official corner markers) are shaded and labelled, DRS zones are shaded green, and sector lines are marked. Hovering shows both drivers' speed, gear and throttle, the gap and the time gained in that 50 m. KPI cards give the lap gap, metres dominated by each driver and the biggest 50 m swing; sector cards tally metres dominated and time gained in S1, S2 and S3. Trace ends are anchored to the official lap times and Driver 2's distance is aligned at the sector lines, so the lap and sector gaps match official timing (checked on cached 2025–2026 races).
 - **High-Throughput Telemetry Data Exporter (CSV, Parquet, JSON)** ([Issue #139](https://github.com/parekhrohan21/fastf1_pitwall/issues/139)): A collapsible export panel beneath the telemetry charts with a dynamic format selector for **CSV**, **Apache Parquet (`.parquet`)**, and **structured JSON (`.json`)**. The exported file includes high-frequency channels, X/Y/Z circuit coordinates, Sector 1/2/3 split times (seconds), and lap metadata.
 - **Ideal Lap vs Actual Lap (Theoretical Best)**: Independent Sector 1, 2, and 3 theoretical best extraction with Time Left on Table indicator cards and a ranked grid-wide theoretical best leaderboard.
 - **Multi-Year Historical Lap Comparison** ([Issue #121](https://github.com/parekhrohan21/fastf1_pitwall/issues/121)): Compare laps for the same circuit across different technical regulation eras (e.g. 2024 ground-effect vs 2020 high-downforce era) on an interpolated 500-point distance grid, displaying speed profile overlays, continuous time delta curves, and era performance metrics.
@@ -183,7 +184,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112), Commits `dbe8b59`, `a669c45`, `32160d7`): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode and full light-mode contrast overrides for BaseWeb selectboxes, virtualised dropdown popovers, checkboxes, toggles, and expanders.
 - **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Displays the active data source in the sidebar diagnostics panel and probes both free APIs and upstream servers (`livetiming_rejects_requests`).
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **199 automated pytest unit and integration tests** across 25 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **208 automated pytest unit and integration tests** across 26 dedicated modules.
 
 ---
 
@@ -212,7 +213,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 19. **Multi-Year Historical Lap Comparison**: In compare mode, select a second season and Grand Prix to compare cars across technical regulation eras on a 500-point distance grid.
 20. **High-Resolution Telemetry & Dynamic Channel Filter**: Inspect telemetry waveforms. Use the **Telemetry Channels** multiselect to toggle channels (`Speed`, `Throttle`, `Brake`, `RPM`, `Gear`, `DRS`) on/off and reorder them with dynamic figure scaling.
 21. **Export Telemetry Data (CSV, Parquet, JSON)**: Expand the export panel beneath the telemetry charts to download high-frequency data with sector splits and lap metadata.
-22. **Speed Delta & Continuous Time Delta per Meter**: In compare mode, identify exact track coordinates where time is gained or lost along the lap.
+22. **Speed Delta & Continuous Time Delta per Meter**: In compare mode, identify exact track coordinates where time is gained or lost along the lap. Below them, **🧩 Micro-Sector Speed Delta & Dominance Timeline** breaks the lap into 50 m micro-sectors: hover the ribbon for gear, throttle and time gained at any metre, and read the S1/S2/S3 cards for who dominated each sector.
 23. **Speed Trap & Intermediate Velocity Radar Breakdown**: Inspect the 4-axis polar radar comparing speeds across ST, I1, I2, and FL, benchmark constructor and power unit aerodynamic efficiency, and review the classified speed trap table.
 24. **Intra-Team Teammate Battle & Qualifying Delta Matrix**: Toggle between Qualifying Lap Delta and Race Pace Delta to review diverging teammate gap bars, sector dominance tallies, and classified matrix tables.
 25. **Multi-Driver Grid Analysis & Heatmaps**: Select 3 to 20 drivers across the field to render colour-coded heatmaps for Sector Split Deltas, Lap-by-Lap Pace, and Top Speed.
@@ -244,9 +245,10 @@ fastf1_pitwall/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, driving style DNA, teammate matrix,
 │                               # pit loss breakdown, weekend progression, dirty air, brag video, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (199 tests across 25 dedicated modules)
+├── tests/                      # Automated Pytest suite (208 tests across 26 dedicated modules)
 │   ├── test_free_api_fallback.py       # Zero-auth OpenF1 / MultiViewer / Jolpica-F1 session & telemetry adapters
 │   ├── test_corner_geometry.py         # Curvature radius, geometric apex vs marker, line deltas & radius map
+│   ├── test_microsector_delta.py       # 50 m micro-sector gains, official lap/sector gap anchoring, zones & streamgraph
 │   ├── test_driving_style_dna.py       # 6-axis Driving Style DNA, trajectory yaw fallback, archetypes & spider radar
 │   ├── test_strategy_simulator.py      # Compound deg models, exhaustive 1/2-stop solver, re-opt & undercut risk
 │   ├── test_brag_video_latent.py       # Latent manifold, highlight moments, spline frames & video encoding fallbacks
@@ -326,7 +328,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **199 unit and integration tests** across 25 test modules must pass cleanly.
+All **208 unit and integration tests** across 26 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -396,7 +398,6 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | Issue | Title | Category | Scope & Planned Capability | Status |
 |:---:|---|---|---|:---:|
 | **[#200](https://github.com/parekhrohan21/fastf1_pitwall/issues/200)** | `feat: Start Line Reaction Time & Launch Telemetry Acceleration Analyzer` | Race Start Dynamics | Dissects standing starts (0–200 km/h): reaction latency (ms from lights out), 0–100/200 km/h split times and distances, wheelspin modulation during clutch bite, and Turn 1 position delta. | Open |
-| **[#199](https://github.com/parekhrohan21/fastf1_pitwall/issues/199)** | `feat: Micro-Sector Speed Delta & Dominance Streamgraph Timeline` | Track Analytics | Continuous 50m micro-sector streamgraph / ribbon chart visualizing instantaneous speed delta (km/h) and time delta (ms) along track distance with sector dominance tallies. | Open |
 
 ---
 
@@ -404,6 +405,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#199](https://github.com/parekhrohan21/fastf1_pitwall/issues/199)** | `feat: Micro-Sector Speed Delta & Dominance Streamgraph Timeline` | Track Analytics | Three-panel distance-aligned streamgraph (`build_microsector_streamgraph_fig`): speed-delta ribbon, running gap and 50 m micro-sector time gains with corner/DRS zone shading; per-sector dominance tallies and KPI cards (`_build_microsector_delta`, `_render_microsector_section`), anchored to official lap and sector times. |
 | **[#198](https://github.com/parekhrohan21/fastf1_pitwall/issues/198)** | `feat: Corner Geometry & Minimum Radius Apex Trajectory Curvature Analysis` | Corner Dynamics | Radius-of-curvature racing line map (`build_corner_geometry_fig`), geometric apex vs official marker, early/late apex, Compare Mode apex deltas and entry/apex/exit lateral offsets (`_build_corner_geometry`, `_compare_corner_lines`). |
 | **[5e3aed1](https://github.com/parekhrohan21/fastf1_pitwall/commit/5e3aed1)** | `feat(data): implement zero-auth multi-source F1 API pipeline (OpenF1 + MultiViewer + Jolpica-F1)` | Data Architecture & Reliability | 4-tier zero-sign-in session and schedule loader (`FreeF1Session`, `FreeF1Laps`, `FreeF1Lap`, `FreeF1Telemetry`, `FreeF1CircuitInfo`, `_load_openf1_session`, `_load_jolpica_session`, `_free_api_get_json`) resolving the October 2026 `livetiming.formula1.com` HTTP 401/403 authentication barrier without requiring an F1TV account, plus two-row pit stop pairing and 6 unit tests in `tests/test_free_api_fallback.py` (ADR-031). |
 | **[e0b2e30](https://github.com/parekhrohan21/fastf1_pitwall/commit/e0b2e30)** | `docs: sync README, DOCS.md, and AGENT.md with Driving Style DNA (#197) and Strategy Simulator (#196)` | Documentation | Synchronised `README.md`, `DOCS.md`, `AGENT.md`, and `DECISIONS.md` (ADR-029, ADR-030) with the Strategy Simulator (#196) and 6-axis Driving Style DNA (#197) features. |

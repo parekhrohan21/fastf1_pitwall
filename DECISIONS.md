@@ -62,6 +62,7 @@ sequence; the mapping is given in each record where one exists.
 | [030](#adr-030--six-axis-driving-style-dna-with-trajectory-yaw-fallback) | Six-axis Driving Style DNA with trajectory yaw fallback | #197 |
 | [031](#adr-031--zero-auth-multi-source-f1-data-pipeline-openf1--multiviewer--jolpica-f1) | Zero-auth multi-source F1 data pipeline (OpenF1 + MultiViewer + Jolpica-F1) | Free API Fallback |
 | [032](#adr-032--speed-scaled-curvature-smoothing-for-corner-geometry) | Speed-scaled curvature smoothing for corner geometry | #198 |
+| [033](#adr-033--micro-sector-deltas-anchored-to-official-timing) | Micro-sector deltas anchored to official timing | #199 |
 
 ---
 
@@ -601,3 +602,25 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 - *Cubic-spline resampling instead of linear*: made no material difference once the window scaled with speed.
 
 **Consequences & guardrails.** On cached 2026 Silverstone and Miami race laps every apex stays under 6 g, and the Loop reads ~20 m at 82 km/h. Very fast direction changes (e.g. Jeddah T7–T8) still cannot be resolved and are flagged. Absolute track-edge usage is not measured because there is no track-limit data; Compare Mode reports the relative lateral offset between two lines instead. `tests/test_corner_geometry.py` (10 tests).
+
+## ADR-033 — Micro-sector deltas anchored to official timing
+
+**Issue / PR:** #199 · `AGENT.md` Decision #50 · notes beside `_build_microsector_delta` in `src/data/loader.py`
+
+**Context.** A metre-by-metre comparison of two laps needs both on one distance axis and a time for each driver at every metre. Lap car data starts one sample (~0.1–0.3 s) after the timing line and stops one sample before it, and `add_distance()` integrates speed from the first sample, so two drivers' odometers drift by several metres over a lap.
+
+**Decision.**
+1. Extend each trace at its edge speed to t = 0 and t = official `LapTime` (only when the trace's `Time` is lap-relative and within 2 s of both ends).
+2. Map Driver 2's distance piecewise-linearly onto Driver 1's, with knots at both drivers' own S1/S2 lines (located from `Sector1Time`/`Sector2Time` on each time–distance curve); one global scale when sector times are missing.
+3. Interpolate elapsed time on a 5 m grid; gap = t₂ − t₁ (positive = Driver 1 ahead).
+4. Score 50 m micro-sectors that restart at each sector line; the winner is the driver who spent less time crossing the bin. Bins within 1 ms are even.
+5. Zones: corner if the bin centre is within 75 m of an official corner marker distance (fallback: Driver 1 below 95% throttle), DRS if the flap is open (code ≥ 10) for either driver over most of the bin. Back-to-back corners merge into one labelled band ("T10–T14").
+
+**Maths & logic.** Per bin $[a,b]$: $\Delta t = (t_2(b) - t_2(a)) - (t_1(b) - t_1(a))$. Bins tile the lap and their edges include both sector lines, so the bin gains sum exactly to each sector's gap and the lap gap.
+
+**Alternatives & trade-offs.**
+- *Zero each trace at its first sample* (the first version): lap gaps came out 80–120 ms short of official on real laps.
+- *One global distance scale*: lap gap correct, but sector gains up to ~100 ms off official because the odometer error is not uniform.
+- *Mean speed per bin as the winner*: biased towards the slow end of a bin because samples are evenly spaced in time, not distance.
+
+**Consequences & guardrails.** On cached 2025 and 2026 British GP and 2026 Miami GP race laps the lap gap and all three sector gaps match official timing to the millisecond. Compare Mode only, same circuit only; synthesised fallback traces are declined. The DRS channel is all zeros in some recent cached laps (and DRS is gone under the 2026 rules), so DRS bands simply do not appear there. `tests/test_microsector_delta.py` (9 tests).
