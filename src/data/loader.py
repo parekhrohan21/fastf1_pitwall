@@ -7847,3 +7847,284 @@ def _build_corner_geometry_cached(sess_k: str, driver: str, lap_num: int,
                                   tel_df: pd.DataFrame, corners_df: pd.DataFrame | None) -> dict | None:
     """Cached wrapper; sess_k / driver / lap_num only key the cache."""
     return _build_corner_geometry(tel_df, corners_df)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CHANGE (#199): Micro-Sector Speed Delta & Dominance Streamgraph Timeline
+# ═══════════════════════════════════════════════════════════════════════════════
+# Two laps are put on a shared distance axis and compared continuously (5 m
+# grid) and in 50 m micro-sectors.
+#
+# - Distance axis: Driver 2's distance is mapped onto Driver 1's (lap length,
+#   and both sector lines when sector times exist), so odometer drift from
+#   different lines and ~4 Hz integration does not shift later corners. With
+#   one global scale the sector gains were up to ~100 ms off the official ones.
+# - Time delta: elapsed lap time of each driver interpolated at every grid
+#   metre; delta = t2 - t1, so positive means Driver 1 is ahead at that point.
+#   Trace ends are anchored to the official lap time (see _monotone_trace):
+#   without that, the gap on real laps was 80-120 ms short of the official one.
+# - Micro-sector dominance: the driver who spent less time crossing the 50 m
+#   bin wins it. Time is used rather than mean speed because mean speed over
+#   samples is biased towards the slow end of a bin.
+# - Zones: a bin is a corner zone if its centre is within MICRO_CORNER_HALF_M of
+#   an official corner marker distance (falls back to "Driver 1 below 95%
+#   throttle" without markers), a DRS zone if DRS is open (FastF1/OpenF1 codes
+#   10/12/14) for either driver over most of the bin, and a straight otherwise.
+# - Sectors: S1/S2 boundaries come from Driver 1's Sector1Time/Sector2Time
+#   located on Driver 1's time-distance curve; equal thirds when missing.
+#   sector_times_s = (d1 S1, d1 S2[, d2 S1, d2 S2]).
+MICRO_SECTOR_M = 50.0
+MICRO_GRID_STEP_M = 5.0
+MICRO_CORNER_HALF_M = 75.0
+MICRO_EVEN_MS = 1.0          # |gain| below this in one bin counts as even
+MICRO_DRS_OPEN_MIN = 10      # FastF1 / OpenF1 DRS codes >= 10 mean the flap is open
+
+
+def _monotone_trace(tel_df: pd.DataFrame, lap_time_s: float | None = None) -> pd.DataFrame | None:
+    """Distance-sorted, de-duplicated trace with float Time (s) for interpolation.
+
+    Lap car data starts a sample after the timing line and stops a sample
+    before it. When the official lap time is known (and the trace's Time is
+    relative to the lap start), both ends are extended at the edge speed to
+    t = 0 and t = lap time, so the final gap equals the official lap-time gap.
+    """
+    if tel_df is None or len(tel_df) < 10 or "Distance" not in tel_df.columns or "Time" not in tel_df.columns:
+        return None
+    df = pd.DataFrame(tel_df).copy()
+    t = df["Time"]
+    df["_t"] = t.dt.total_seconds() if pd.api.types.is_timedelta64_dtype(t) else pd.to_numeric(t, errors="coerce")
+    df["Distance"] = pd.to_numeric(df["Distance"], errors="coerce")
+    df = df.dropna(subset=["Distance", "_t"])
+    if len(df) < 10:
+        return None
+    df = df.sort_values("_t")
+    t0 = float(df["_t"].iloc[0])
+    anchored = bool(lap_time_s) and 0.0 <= t0 < 2.0 and float(df["_t"].iloc[-1]) <= lap_time_s < float(df["_t"].iloc[-1]) + 2.0
+    if not anchored:
+        t0 = float(df["_t"].iloc[0])
+        df["_t"] = df["_t"] - t0
+    df["Distance"] = np.maximum.accumulate(df["Distance"].to_numpy() - df["Distance"].iloc[0])
+    df = df.drop_duplicates(subset="Distance", keep="first")
+    if len(df) < 10 or df["Distance"].iloc[-1] < 500:
+        return None
+    if anchored:
+        v = pd.to_numeric(df["Speed"], errors="coerce") / 3.6 if "Speed" in df.columns else pd.Series(np.nan, index=df.index)
+        v0 = float(v.iloc[0]) if np.isfinite(v.iloc[0]) else 0.0
+        v1 = float(v.iloc[-1]) if np.isfinite(v.iloc[-1]) else 0.0
+        lead = v0 * float(df["_t"].iloc[0])
+        df["Distance"] = df["Distance"] + lead
+        head = df.iloc[[0]].copy(); head["_t"] = 0.0; head["Distance"] = 0.0
+        tail = df.iloc[[-1]].copy()
+        tail["Distance"] = float(df["Distance"].iloc[-1]) + v1 * (lap_time_s - float(df["_t"].iloc[-1]))
+        tail["_t"] = float(lap_time_s)
+        df = pd.concat([head, df, tail], ignore_index=True).drop_duplicates(subset="Distance", keep="first")
+    return df
+
+
+def _sector_distances(trace: pd.DataFrame, s1_s: float | None, s2_s: float | None, lap_len: float) -> list[float]:
+    """Distances of the S1/S2 boundaries on one trace, or equal thirds."""
+    t, d = trace["_t"].to_numpy(), trace["Distance"].to_numpy()
+    d = d * (lap_len / d[-1])
+    try:
+        if s1_s and s2_s and 0 < s1_s < s1_s + s2_s < t[-1]:
+            return [float(np.interp(s1_s, t, d)), float(np.interp(s1_s + s2_s, t, d))]
+    except Exception:
+        pass
+    return [lap_len / 3.0, 2.0 * lap_len / 3.0]
+
+
+def _build_microsector_delta(
+    tel1_df: pd.DataFrame,
+    tel2_df: pd.DataFrame,
+    corners_df: pd.DataFrame | None = None,
+    sector_times_s: tuple | None = None,
+    bin_m: float = MICRO_SECTOR_M,
+    lap_times_s: tuple | None = None,
+) -> dict | None:
+    """Continuous and 50 m micro-sector speed/time comparison of two laps.
+
+    Returns dict with:
+      grid: {dist, speed1, speed2, speed_delta, time_delta_ms, gear1, gear2, throttle1, throttle2, bin_gain_ms}
+      bins: list of {idx, start, end, mid, gain_ms, dominant (1|2|0), speed1, speed2, speed_delta, zone, label, sector}
+      sectors: list of {sector, start, end, metres1, metres2, metres_even, gain_ms}
+      zones: list of {kind ('corner'|'drs'), start, end, label}
+      summary: {lap_length_m, final_delta_ms, metres1, metres2, pct1, pct2, biggest_gain1, biggest_gain2, n_bins}
+    Positive deltas favour Driver 1.
+    """
+    lt1, lt2 = tuple(lap_times_s)[:2] if lap_times_s and len(lap_times_s) >= 2 else (None, None)
+    tr1, tr2 = _monotone_trace(tel1_df, lt1), _monotone_trace(tel2_df, lt2)
+    if tr1 is None or tr2 is None or "Speed" not in tr1.columns or "Speed" not in tr2.columns:
+        return None
+    L = float(tr1["Distance"].iloc[-1])
+    L2 = float(tr2["Distance"].iloc[-1])
+    st_ = tuple(sector_times_s) if sector_times_s else ()
+    s1_s, s2_s = (st_[0], st_[1]) if len(st_) >= 2 else (None, None)
+    sec_bounds = _sector_distances(tr1, s1_s, s2_s, L)
+    d1 = tr1["Distance"].to_numpy()
+    d2_raw = tr2["Distance"].to_numpy()
+    # Driver 2's distance is mapped piecewise-linearly onto Driver 1's, with
+    # knots at both drivers' own sector lines when all four sector times are
+    # known, so each sector's gain matches the official sector-time delta.
+    knots2, knots1 = [0.0, L2], [0.0, L]
+    if len(st_) >= 4 and st_[2] and st_[3]:
+        b2 = _sector_distances(tr2, st_[2], st_[3], L2)
+        if b2 != [L2 / 3.0, 2.0 * L2 / 3.0] and sec_bounds != [L / 3.0, 2.0 * L / 3.0]:
+            knots2, knots1 = [0.0, *b2, L2], [0.0, *sec_bounds, L]
+    d2 = np.interp(d2_raw, knots2, knots1)
+
+    grid = np.arange(0.0, L + 1e-6, MICRO_GRID_STEP_M)
+    if grid[-1] < L:
+        grid = np.append(grid, L)
+
+    def _ch(tr, d, col, default=np.nan):
+        if col not in tr.columns:
+            return np.full(len(grid), default)
+        v = pd.to_numeric(tr[col], errors="coerce").astype(float).to_numpy()
+        ok = np.isfinite(v)
+        if ok.sum() < 2:
+            return np.full(len(grid), default)
+        return np.interp(grid, d[ok], v[ok])
+
+    def _step(tr, d, col):
+        # gear / DRS are discrete: nearest-previous sample, not interpolation
+        if col not in tr.columns:
+            return np.full(len(grid), np.nan)
+        v = pd.to_numeric(tr[col], errors="coerce").astype(float).to_numpy()
+        idx = np.clip(np.searchsorted(d, grid, side="right") - 1, 0, len(d) - 1)
+        return v[idx]
+
+    t1 = np.interp(grid, d1, tr1["_t"].to_numpy())
+    t2 = np.interp(grid, d2, tr2["_t"].to_numpy())
+    sp1, sp2 = _ch(tr1, d1, "Speed"), _ch(tr2, d2, "Speed")
+    thr1, thr2 = _ch(tr1, d1, "Throttle"), _ch(tr2, d2, "Throttle")
+    g1, g2 = _step(tr1, d1, "nGear"), _step(tr2, d2, "nGear")
+    drs1, drs2 = _step(tr1, d1, "DRS"), _step(tr2, d2, "DRS")
+    time_delta_ms = (t2 - t1) * 1000.0
+
+    sec_edges = [0.0] + sec_bounds + [L]
+
+    def _sector_of(x):
+        for k in range(3):
+            if x < sec_edges[k + 1] or k == 2:
+                return k + 1
+        return 3
+
+    # corner marker distances, rescaled from the reference lap to this lap length
+    c_dist, c_lab = [], []
+    if corners_df is not None and len(corners_df) and "Distance" in corners_df.columns:
+        cd = pd.to_numeric(corners_df["Distance"], errors="coerce")
+        if cd.notna().sum() >= 2:
+            ref_len = max(float(cd.max()), 1.0)
+            scale = L / ref_len if ref_len > L else 1.0
+            for _, row in corners_df.loc[cd.notna()].iterrows():
+                c_dist.append(float(row["Distance"]) * scale)
+                num = row.get("Number")
+                let = row.get("Letter") if isinstance(row.get("Letter"), str) else ""
+                c_lab.append(f"T{int(num)}{let}" if pd.notna(num) else "T?")
+    c_dist = np.asarray(c_dist)
+
+    # 50 m bins restart at each sector line so no bin straddles two sectors;
+    # a short remainder (< 15 m) at a sector end is folded into the bin before.
+    edges = [0.0]
+    for k in range(3):
+        a, b = sec_edges[k], sec_edges[k + 1]
+        e = list(np.arange(a, b, bin_m)[1:]) + [b]
+        if len(e) > 1 and e[-1] - e[-2] < bin_m * 0.3:
+            del e[-2]
+        edges += e
+    edges = np.round(np.asarray(edges), 6)
+
+    bins, bin_gain_grid = [], np.zeros(len(grid))
+    for i in range(len(edges) - 1):
+        a, b = edges[i], edges[i + 1]
+        ta1, tb1 = np.interp([a, b], grid, t1)
+        ta2, tb2 = np.interp([a, b], grid, t2)
+        gain = ((tb2 - ta2) - (tb1 - ta1)) * 1000.0
+        m = (grid >= a) & (grid <= b)
+        dom = 0 if abs(gain) < MICRO_EVEN_MS else (1 if gain > 0 else 2)
+        mid = 0.5 * (a + b)
+        zone, label = "straight", ""
+        if len(c_dist):
+            j = int(np.argmin(np.abs(c_dist - mid)))
+            if abs(c_dist[j] - mid) <= MICRO_CORNER_HALF_M:
+                zone, label = "corner", c_lab[j]
+        elif np.isfinite(thr1[m]).any() and np.nanmean(thr1[m]) < 95:
+            zone = "corner"
+        if zone != "corner":
+            open_frac = np.nanmean(((drs1[m] >= MICRO_DRS_OPEN_MIN) | (drs2[m] >= MICRO_DRS_OPEN_MIN)).astype(float))
+            if open_frac > 0.5:
+                zone = "drs"
+        s_a, s_b = float(np.nanmean(sp1[m])), float(np.nanmean(sp2[m]))
+        bins.append({
+            "idx": i + 1, "start": float(a), "end": float(b), "mid": float(mid),
+            "gain_ms": float(gain), "dominant": dom,
+            "speed1": s_a, "speed2": s_b, "speed_delta": s_a - s_b,
+            "zone": zone, "label": label, "sector": _sector_of(mid),  # mid never sits on a sector line
+        })
+        bin_gain_grid[m] = gain
+
+    # merge consecutive corner / DRS bins into shaded zones; back-to-back
+    # corners become one band labelled "T10–T14" so labels do not overlap
+    zones = []
+    for bn in bins:
+        if bn["zone"] == "straight":
+            continue
+        last = zones[-1] if zones else None
+        if last and last["kind"] == bn["zone"] and abs(last["end"] - bn["start"]) < 1e-6:
+            last["end"] = bn["end"]
+            if bn["label"] and bn["label"] not in last["_labels"]:
+                last["_labels"].append(bn["label"])
+        else:
+            zones.append({"kind": bn["zone"], "start": bn["start"], "end": bn["end"],
+                          "_labels": [bn["label"]] if bn["label"] else []})
+    for z in zones:
+        labs = z.pop("_labels")
+        if z["kind"] == "drs":
+            z["label"] = "DRS"
+        else:
+            z["label"] = labs[0] if len(labs) == 1 else (f"{labs[0]}–{labs[-1]}" if labs else "")
+
+    sectors = []
+    for k in range(3):
+        sb = [bn for bn in bins if bn["sector"] == k + 1]
+        w = lambda bn: bn["end"] - bn["start"]
+        sectors.append({
+            "sector": f"S{k + 1}", "start": sec_edges[k], "end": sec_edges[k + 1],
+            "metres1": float(sum(w(bn) for bn in sb if bn["dominant"] == 1)),
+            "metres2": float(sum(w(bn) for bn in sb if bn["dominant"] == 2)),
+            "metres_even": float(sum(w(bn) for bn in sb if bn["dominant"] == 0)),
+            "gain_ms": float(sum(bn["gain_ms"] for bn in sb)),
+        })
+
+    m1 = sum(s["metres1"] for s in sectors)
+    m2 = sum(s["metres2"] for s in sectors)
+    best1 = max(bins, key=lambda bn: bn["gain_ms"])
+    best2 = min(bins, key=lambda bn: bn["gain_ms"])
+    return {
+        "grid": {
+            "dist": grid, "speed1": sp1, "speed2": sp2, "speed_delta": sp1 - sp2,
+            "time_delta_ms": time_delta_ms, "gear1": g1, "gear2": g2,
+            "throttle1": thr1, "throttle2": thr2, "bin_gain_ms": bin_gain_grid,
+        },
+        "bins": bins,
+        "sectors": sectors,
+        "sector_bounds": sec_bounds,
+        "zones": zones,
+        "summary": {
+            "lap_length_m": L,
+            "final_delta_ms": float(time_delta_ms[-1]),
+            "metres1": m1, "metres2": m2,
+            "pct1": 100.0 * m1 / L, "pct2": 100.0 * m2 / L,
+            "biggest_gain1": best1 if best1["gain_ms"] > 0 else None,
+            "biggest_gain2": best2 if best2["gain_ms"] < 0 else None,
+            "n_bins": len(bins),
+        },
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _build_microsector_delta_cached(cache_key: str, tel1_df: pd.DataFrame, tel2_df: pd.DataFrame,
+                                    corners_df: pd.DataFrame | None, sector_times_s: tuple | None,
+                                    lap_times_s: tuple | None = None) -> dict | None:
+    """Cached wrapper; cache_key only labels the entry (inputs are hashed too)."""
+    return _build_microsector_delta(tel1_df, tel2_df, corners_df, sector_times_s, lap_times_s=lap_times_s)
