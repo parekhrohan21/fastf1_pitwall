@@ -193,7 +193,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 > **Note:** On first load, the dashboard automatically defaults to the most recent completed Grand Prix of the current season and selects the session winner (or fastest driver in practice) as Driver 1.
 
 1. **Sidebar → Season, Grand Prix & Session**: Pick a year (2018 – present), Grand Prix event, and session type (Race, Qualifying, Sprint, FP1, FP2, or FP3).
-2. **Click ⬇️ Load Session(s)**: The first load downloads data from the F1 timing API (~10–30 seconds). Subsequent loads are instantaneous from the local disk cache.
+2. **Click ⬇️ Load Session(s)**: The first load of a session downloads it from the free OpenF1 / MultiViewer / Jolpica-F1 APIs (or F1 live timing when F1TV credentials are configured); expect roughly 10–60 seconds, since OpenF1 requests are paced at 0.36 s. Subsequent loads are instantaneous from the local disk cache.
 3. **Session Info Banner**: Inspect the circuit name, country flag, round number, session type icon (🏆 Race, ⏱ Qualifying, ⚡ Sprint, 🔧 Practice), and event date.
 4. **Select Drivers and Laps**: Pick a primary driver and select *Fastest* or a specific lap number. Tick **👥 Compare with Driver 2** to enable head-to-head comparison mode across all charts.
 5. **Driver Summary Banner & Session Statistics**: Review official driver headshots, team logo badges, tyre status, weather strip, and session statistics (Grid, Finish, Status, Best Lap, Race Pace, Top Speed).
@@ -322,6 +322,7 @@ When modifying modules in `src/` or `app.py`, adhere to the following safety pat
   st.session_state["sess_key"] = None
   st.session_state["sess_key2"] = None
   ```
+- **Comment the code you add**: Open each feature with a `# CHANGE (#<issue>)` block that says what it does and why. Inside longer functions, number the steps (`# 1. Clean both traces`, `# 2. ...`). Explain the reason behind any non-obvious line: units, sign conventions such as "positive = Driver 1 ahead", thresholds, and fallbacks. Recent examples are `_build_microsector_delta` and `_build_corner_geometry` in `src/data/loader.py`.
 
 ### Step 4 — Run Unit Tests & Verify Syntax
 Before staging or committing any code, always run the pytest automated test suite to ensure that all data wrangling, telemetry export, channel filtering, and model fitting functions pass cleanly without regression:
@@ -414,6 +415,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[fe4b215](https://github.com/parekhrohan21/fastf1_pitwall/commit/fe4b215)** / **[64980df](https://github.com/parekhrohan21/fastf1_pitwall/commit/64980df)** | `docs(readme): open bugs, live-session estimated traces and inline code comments` | Documentation | Listed open bugs #204–#210 and perf issue #203 in the roadmap and troubleshooting table; documented estimated traces during live sessions, low-confidence corner geometry rows and the first-load data source; added step-by-step comments to the corner geometry (#198) and micro-sector (#199) code in `loader.py`, `plotly.py` and `components.py`. |
 | **[#199](https://github.com/parekhrohan21/fastf1_pitwall/issues/199)** | `feat: Micro-Sector Speed Delta & Dominance Streamgraph Timeline` | Track Analytics | Three-panel distance-aligned streamgraph (`build_microsector_streamgraph_fig`): speed-delta ribbon, running gap and 50 m micro-sector time gains with corner/DRS zone shading; per-sector dominance tallies and KPI cards (`_build_microsector_delta`, `_render_microsector_section`), anchored to official lap and sector times. |
 | **[#198](https://github.com/parekhrohan21/fastf1_pitwall/issues/198)** | `feat: Corner Geometry & Minimum Radius Apex Trajectory Curvature Analysis` | Corner Dynamics | Radius-of-curvature racing line map (`build_corner_geometry_fig`), geometric apex vs official marker, early/late apex, Compare Mode apex deltas and entry/apex/exit lateral offsets (`_build_corner_geometry`, `_compare_corner_lines`). |
 | **[5e3aed1](https://github.com/parekhrohan21/fastf1_pitwall/commit/5e3aed1)** | `feat(data): implement zero-auth multi-source F1 API pipeline (OpenF1 + MultiViewer + Jolpica-F1)` | Data Architecture & Reliability | 4-tier zero-sign-in session and schedule loader (`FreeF1Session`, `FreeF1Laps`, `FreeF1Lap`, `FreeF1Telemetry`, `FreeF1CircuitInfo`, `_load_openf1_session`, `_load_jolpica_session`, `_free_api_get_json`) resolving the October 2026 `livetiming.formula1.com` HTTP 401/403 authentication barrier without requiring an F1TV account, plus two-row pit stop pairing and 6 unit tests in `tests/test_free_api_fallback.py` (ADR-031). |

@@ -3901,6 +3901,8 @@ def _render_corner_geometry_section(
             corners_df = None
 
     def _geo(lap, drv, key):
+        # Geometry for one lap: None if no X/Y, "synthetic" if the data source
+        # only has an estimated trace, else the cached _build_corner_geometry result.
         try:
             lap_num = int(lap["LapNumber"])
         except Exception:
@@ -3924,6 +3926,8 @@ def _render_corner_geometry_section(
         st.info("ℹ️ Position (X/Y) data is not available for this lap, so corner geometry cannot be computed.")
         return
 
+    # Driver 2 only when comparing laps on the same circuit (line deltas are
+    # meaningless across tracks)
     show_cmp = bool(compare and driver2 and lap2 is not None and same_circuit)
     geo2 = _geo(lap2, driver2, f"{sess_k}_cmp") if show_cmp else None
     if geo2 == "synthetic":
@@ -3954,9 +3958,11 @@ def _render_corner_geometry_section(
         st.plotly_chart(fig, width="stretch", key=f"corner_geom_{sess_k}_{driver1}_{driver2}",
                         config={"displayModeBar": False})
 
+    # per-corner line deltas keyed by corner label, plus Driver 2's own corners
     cmp_rows = {r["corner"]: r for r in _compare_corner_lines(geo1, geo2)} if geo2 else {}
     by2 = {c["corner"]: c for c in geo2["corners"]} if geo2 else {}
 
+    # callout cards: the three corners where the two apexes are furthest apart
     if cmp_rows:
         top = sorted(cmp_rows.values(), key=lambda r: r["apex_distance_m"], reverse=True)[:3]
         cols = st.columns(len(top))
@@ -3975,6 +3981,7 @@ def _render_corner_geometry_section(
             )
 
     def _shift_txt(c):
+        # early / late apex text; within 5 m of the marker counts as "on marker"
         if c.get("apex_shift_m") is None:
             return "—"
         sh = c["apex_shift_m"]
@@ -3991,6 +3998,8 @@ def _render_corner_geometry_section(
         headers = ["Corner", "Dir", "R min", "Apex speed", "Apex vs marker", "Marker offset"]
     head_html = "".join(f"<th style='{th.format(a='left' if i < 2 else 'center')}'>{h}</th>" for i, h in enumerate(headers))
 
+    # Per-corner table. Compare Mode shows both drivers side by side and only
+    # corners both laps have; single mode shows speed and marker offset.
     rows_html = ""
     for i, c in enumerate(geo1["corners"]):
         bg = "rgba(128,128,128,0.05)" if i % 2 else "transparent"
@@ -4055,6 +4064,8 @@ def _render_microsector_section(
         "Grey bands are corner zones, green bands DRS zones.</div>",
         unsafe_allow_html=True,
     )
+    # Guards, in order: need two laps with telemetry, on the same circuit, and
+    # real (not estimated) car data.
     if not driver2 or lap2 is None or tel1 is None or tel2 is None:
         st.info("ℹ️ Turn on Compare Mode and pick a second driver to see the micro-sector comparison.")
         return
@@ -4067,6 +4078,8 @@ def _render_microsector_section(
                 "Try again after the live session ends.")
         return
 
+    # Official corner markers (number, letter, distance along the lap) label the
+    # corner zones; without them the data layer falls back to throttle.
     corners_df = None
     if sess_obj is not None:
         try:
@@ -4077,12 +4090,15 @@ def _render_microsector_section(
             corners_df = None
 
     def _sec(lap, col):
+        # a lap's timedelta field (LapTime, Sector1Time, ...) as seconds, or None
         try:
             v = lap[col]
             return float(v.total_seconds()) if pd.notna(v) else None
         except Exception:
             return None
 
+    # Only the channels the analysis uses, as plain DataFrames: st.cache_data
+    # cannot hash FastF1's Telemetry subclass. The key names the cache entry.
     cols = ["Distance", "Time", "Speed", "nGear", "Throttle", "DRS"]
     t1 = pd.DataFrame(tel1[[c for c in cols if c in tel1.columns]])
     t2 = pd.DataFrame(tel2[[c for c in cols if c in tel2.columns]])
@@ -4090,6 +4106,8 @@ def _render_microsector_section(
         key = f"{sess_k}_{driver1}_{int(lap1['LapNumber'])}_{driver2}_{int(lap2['LapNumber'])}"
     except Exception:
         key = f"{sess_k}_{driver1}_{driver2}"
+    # Sector times of both laps align distances at the sector lines; lap times
+    # anchor the trace ends so the gaps match official timing.
     md = _build_microsector_delta_cached(key, t1, t2, corners_df,
                                          (_sec(lap1, "Sector1Time"), _sec(lap1, "Sector2Time"),
                                           _sec(lap2, "Sector1Time"), _sec(lap2, "Sector2Time")),
@@ -4100,6 +4118,8 @@ def _render_microsector_section(
 
     label1 = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
     label2 = fmt_func2(driver2) if callable(fmt_func2) else (fmt_func1(driver2) if callable(fmt_func1) else str(driver2))
+    # short names ("VER" from "VER · 1 · Max Verstappen"); a driver compared with
+    # themselves (session compare) gets (1)/(2) so the legend stays readable
     short1, short2 = label1.split("·")[0].strip(), label2.split("·")[0].strip()
     if short1 == short2:
         short1, short2 = f"{short1} (1)", f"{short2} (2)"
@@ -4114,6 +4134,8 @@ def _render_microsector_section(
                 f"<div style='font-size:24px; font-weight:800; font-family:monospace; margin:2px 0;'>{value}</div>"
                 f"<div style='font-size:12px; {sc}'>{sub}</div></div>")
 
+    # KPI row: lap gap, metres won by each driver, and the largest single-bin
+    # swing for either driver.
     gap = summ["final_delta_ms"]
     lead, lead_col = (short1, colour1) if gap >= 0 else (short2, colour2)
     b1, b2 = summ["biggest_gain1"], summ["biggest_gain2"]
@@ -4134,6 +4156,8 @@ def _render_microsector_section(
     if fig is not None:
         st.plotly_chart(fig, width="stretch", key=f"microsector_{key}", config={"displayModeBar": False})
 
+    # One card per sector: net time gained, the winner, and a split bar showing
+    # the share of the sector each driver won (grey = even bins).
     cards = st.columns(3)
     for col, sec in zip(cards, md["sectors"]):
         span = max(sec["end"] - sec["start"], 1.0)

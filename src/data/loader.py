@@ -7631,6 +7631,7 @@ def _resample_xy_path(tel_df: pd.DataFrame | None, step_m: float = GEOM_GRID_STE
     if len(x) < 20:
         return None
 
+    # raw path length in X/Y units; compared with Distance to find metres per unit
     seg = np.hypot(np.diff(x), np.diff(y))
     raw_len = float(seg.sum())
     if raw_len <= 0:
@@ -7644,6 +7645,7 @@ def _resample_xy_path(tel_df: pd.DataFrame | None, step_m: float = GEOM_GRID_STE
     if s[-1] < 20 * step_m:
         return None
 
+    # resample on equal 2 m steps: Savitzky-Golay derivatives need uniform spacing
     grid = np.arange(0.0, s[-1], step_m)
     has_speed = np.isfinite(speed)
     speed_i = (np.interp(grid, s[has_speed], speed[has_speed])
@@ -7666,10 +7668,12 @@ def _path_curvature(x: np.ndarray, y: np.ndarray, step_m: float = GEOM_GRID_STEP
     win = max(5, win | 1)  # odd, and long enough for a cubic fit
     if len(x) < win:
         return None
+    # smoothed first (x', y') and second (x'', y'') derivatives w.r.t. arc length
     dx = savgol_filter(x, win, 3, deriv=1, delta=step_m)
     dy = savgol_filter(y, win, 3, deriv=1, delta=step_m)
     ddx = savgol_filter(x, win, 3, deriv=2, delta=step_m)
     ddy = savgol_filter(y, win, 3, deriv=2, delta=step_m)
+    # κ = (x'y'' − y'x'') / (x'² + y'²)^1.5; sign gives turn direction
     denom = np.power(dx * dx + dy * dy, 1.5)
     with np.errstate(divide="ignore", invalid="ignore"):
         kappa = (dx * ddy - dy * ddx) / denom
@@ -7681,6 +7685,9 @@ def _adaptive_curvature(path: dict) -> np.ndarray | None:
     x, y, step, speed = path["x"], path["y"], path["step"], path["speed"]
     if not np.isfinite(speed).any():
         return _path_curvature(x, y, step, GEOM_SMOOTH_WINDOW_M)
+    # Compute curvature once per candidate window (30-130 m), then pick, point by
+    # point, the smallest window covering ~1.1 s of travel at the local speed:
+    # hairpins keep detail, fast sweeps get enough samples to be smooth.
     wins = np.asarray(GEOM_WINDOWS_M)
     per_win = [_path_curvature(x, y, step, w) for w in wins]
     if per_win[0] is None:
@@ -7735,6 +7742,7 @@ def _build_corner_geometry(tel_df: pd.DataFrame | None, corners_df: pd.DataFrame
             cx, cy = pd.to_numeric(c.get("X"), errors="coerce"), pd.to_numeric(c.get("Y"), errors="coerce")
             if not (np.isfinite(cx) and np.isfinite(cy)):
                 continue
+            # marker to metres, then snap it to the nearest point on this lap's path
             mx, my = float(cx) * path["scale"], float(cy) * path["scale"]
             m_idx = int(np.argmin((x - mx) ** 2 + (y - my) ** 2))
             letter = c.get("Letter") if isinstance(c.get("Letter"), str) else ""
@@ -7748,6 +7756,7 @@ def _build_corner_geometry(tel_df: pd.DataFrame | None, corners_df: pd.DataFrame
 
     corners = []
     for label, m_idx, marker in anchors:
+        # search ±80 m around the marker (clear of the unreliable lap ends)
         lo, hi = max(edge, m_idx - half), min(len(s) - edge, m_idx + half + 1)
         if hi <= lo:
             continue
@@ -7760,6 +7769,7 @@ def _build_corner_geometry(tel_df: pd.DataFrame | None, corners_df: pd.DataFrame
         if min_r >= GEOM_MAX_RADIUS_M:
             continue  # marker on a straight / kink with no measurable curvature
         apex_speed = float(path["speed"][a_idx]) if np.isfinite(path["speed"][a_idx]) else None
+        # lateral load at the apex: a = v²/R, in g
         lat_g = (apex_speed / 3.6) ** 2 / min_r / 9.81 if apex_speed is not None else None
         rec = {
             "corner": label,
@@ -7784,6 +7794,7 @@ def _build_corner_geometry(tel_df: pd.DataFrame | None, corners_df: pd.DataFrame
             rec["apex_shift_m"] = float(s[a_idx] - s[m_idx])
         corners.append(rec)
 
+    # headline "tightest corner" ignores low-confidence corners unless all are
     offsets = [c["apex_offset_m"] for c in corners if c["apex_offset_m"] is not None]
     trusted = [c for c in corners if not c["low_confidence"]] or corners
     tightest = min(trusted, key=lambda c: c["min_radius_m"]) if trusted else None
@@ -7809,6 +7820,7 @@ def _lateral_offset(geo_ref: dict, idx: int, geo_other: dict) -> float:
     tx, ty = x[i1] - x[i0], y[i1] - y[i0]
     norm = float(np.hypot(tx, ty)) or 1.0
     nx, ny = -ty / norm, tx / norm  # left-hand normal
+    # nearest point of the other line, projected onto the normal = sideways gap
     ox, oy = geo_other["x"], geo_other["y"]
     j = int(np.argmin((ox - x[idx]) ** 2 + (oy - y[idx]) ** 2))
     lateral = (ox[j] - x[idx]) * nx + (oy[j] - y[idx]) * ny
@@ -7892,6 +7904,7 @@ def _monotone_trace(tel_df: pd.DataFrame, lap_time_s: float | None = None) -> pd
         return None
     df = pd.DataFrame(tel_df).copy()
     t = df["Time"]
+    # "_t" = elapsed seconds as a plain float (FastF1 stores Time as timedelta)
     df["_t"] = t.dt.total_seconds() if pd.api.types.is_timedelta64_dtype(t) else pd.to_numeric(t, errors="coerce")
     df["Distance"] = pd.to_numeric(df["Distance"], errors="coerce")
     df = df.dropna(subset=["Distance", "_t"])
@@ -7899,15 +7912,23 @@ def _monotone_trace(tel_df: pd.DataFrame, lap_time_s: float | None = None) -> pd
         return None
     df = df.sort_values("_t")
     t0 = float(df["_t"].iloc[0])
+    # Anchor only when Time really is lap-relative: the first sample must sit
+    # within 2 s of the timing line and the last within 2 s of the official lap
+    # time. Session-relative or truncated traces fail this and are just zeroed.
     anchored = bool(lap_time_s) and 0.0 <= t0 < 2.0 and float(df["_t"].iloc[-1]) <= lap_time_s < float(df["_t"].iloc[-1]) + 2.0
     if not anchored:
-        t0 = float(df["_t"].iloc[0])
         df["_t"] = df["_t"] - t0
+    # Distance must only grow for np.interp: restart at 0 and clamp any
+    # backwards steps (sensor noise), then drop repeated distances (car stopped).
     df["Distance"] = np.maximum.accumulate(df["Distance"].to_numpy() - df["Distance"].iloc[0])
     df = df.drop_duplicates(subset="Distance", keep="first")
+    # Under 500 m means a partial lap (pit exit, red flag): not comparable.
     if len(df) < 10 or df["Distance"].iloc[-1] < 500:
         return None
     if anchored:
+        # Shift the trace forward by the distance covered before the first
+        # sample (edge speed x time since the line), then add synthetic points
+        # at the line (t = 0, d = 0) and at the finish (t = lap time).
         v = pd.to_numeric(df["Speed"], errors="coerce") / 3.6 if "Speed" in df.columns else pd.Series(np.nan, index=df.index)
         v0 = float(v.iloc[0]) if np.isfinite(v.iloc[0]) else 0.0
         v1 = float(v.iloc[-1]) if np.isfinite(v.iloc[-1]) else 0.0
@@ -7924,8 +7945,10 @@ def _monotone_trace(tel_df: pd.DataFrame, lap_time_s: float | None = None) -> pd
 def _sector_distances(trace: pd.DataFrame, s1_s: float | None, s2_s: float | None, lap_len: float) -> list[float]:
     """Distances of the S1/S2 boundaries on one trace, or equal thirds."""
     t, d = trace["_t"].to_numpy(), trace["Distance"].to_numpy()
-    d = d * (lap_len / d[-1])
+    d = d * (lap_len / d[-1])  # express in the target lap length
     try:
+        # The car crosses S1 at elapsed time S1 and S2 at S1 + S2: read off the
+        # distance at those times. Sanity check: both inside the trace, in order.
         if s1_s and s2_s and 0 < s1_s < s1_s + s2_s < t[-1]:
             return [float(np.interp(s1_s, t, d)), float(np.interp(s1_s + s2_s, t, d))]
     except Exception:
@@ -7951,10 +7974,13 @@ def _build_microsector_delta(
       summary: {lap_length_m, final_delta_ms, metres1, metres2, pct1, pct2, biggest_gain1, biggest_gain2, n_bins}
     Positive deltas favour Driver 1.
     """
+    # 1. Clean both traces (monotonic distance, float seconds, ends anchored to
+    #    the official lap time when it is supplied).
     lt1, lt2 = tuple(lap_times_s)[:2] if lap_times_s and len(lap_times_s) >= 2 else (None, None)
     tr1, tr2 = _monotone_trace(tel1_df, lt1), _monotone_trace(tel2_df, lt2)
     if tr1 is None or tr2 is None or "Speed" not in tr1.columns or "Speed" not in tr2.columns:
         return None
+    # 2. Driver 1's lap is the reference: its length L is the x-axis.
     L = float(tr1["Distance"].iloc[-1])
     L2 = float(tr2["Distance"].iloc[-1])
     st_ = tuple(sector_times_s) if sector_times_s else ()
@@ -7965,18 +7991,22 @@ def _build_microsector_delta(
     # Driver 2's distance is mapped piecewise-linearly onto Driver 1's, with
     # knots at both drivers' own sector lines when all four sector times are
     # known, so each sector's gain matches the official sector-time delta.
-    knots2, knots1 = [0.0, L2], [0.0, L]
+    knots2, knots1 = [0.0, L2], [0.0, L]  # default: one straight rescale L2 -> L
     if len(st_) >= 4 and st_[2] and st_[3]:
         b2 = _sector_distances(tr2, st_[2], st_[3], L2)
+        # equal thirds means a sector time was unusable: keep the single rescale
         if b2 != [L2 / 3.0, 2.0 * L2 / 3.0] and sec_bounds != [L / 3.0, 2.0 * L / 3.0]:
             knots2, knots1 = [0.0, *b2, L2], [0.0, *sec_bounds, L]
     d2 = np.interp(d2_raw, knots2, knots1)
 
+    # 3. Shared 5 m grid (last point exactly at L) that every channel is
+    #    resampled onto, so both drivers can be subtracted point by point.
     grid = np.arange(0.0, L + 1e-6, MICRO_GRID_STEP_M)
     if grid[-1] < L:
         grid = np.append(grid, L)
 
     def _ch(tr, d, col, default=np.nan):
+        # continuous channel (speed, throttle): linear interpolation, skipping NaNs
         if col not in tr.columns:
             return np.full(len(grid), default)
         v = pd.to_numeric(tr[col], errors="coerce").astype(float).to_numpy()
@@ -7993,6 +8023,8 @@ def _build_microsector_delta(
         idx = np.clip(np.searchsorted(d, grid, side="right") - 1, 0, len(d) - 1)
         return v[idx]
 
+    # t1/t2 = when each driver reached each grid metre. Their difference is the
+    # running gap: t2 > t1 means Driver 2 got there later, so Driver 1 leads.
     t1 = np.interp(grid, d1, tr1["_t"].to_numpy())
     t2 = np.interp(grid, d2, tr2["_t"].to_numpy())
     sp1, sp2 = _ch(tr1, d1, "Speed"), _ch(tr2, d2, "Speed")
@@ -8001,15 +8033,17 @@ def _build_microsector_delta(
     drs1, drs2 = _step(tr1, d1, "DRS"), _step(tr2, d2, "DRS")
     time_delta_ms = (t2 - t1) * 1000.0
 
-    sec_edges = [0.0] + sec_bounds + [L]
+    sec_edges = [0.0] + sec_bounds + [L]  # [start, S1 line, S2 line, finish]
 
     def _sector_of(x):
+        # sector number (1-3) of a distance; anything past the S2 line is S3
         for k in range(3):
             if x < sec_edges[k + 1] or k == 2:
                 return k + 1
         return 3
 
-    # corner marker distances, rescaled from the reference lap to this lap length
+    # 4. Corner marker distances, rescaled from the reference lap to this lap
+    #    length (only shrunk, never stretched), with "T4" / "T9A" style labels.
     c_dist, c_lab = [], []
     if corners_df is not None and len(corners_df) and "Distance" in corners_df.columns:
         cd = pd.to_numeric(corners_df["Distance"], errors="coerce")
@@ -8023,6 +8057,7 @@ def _build_microsector_delta(
                 c_lab.append(f"T{int(num)}{let}" if pd.notna(num) else "T?")
     c_dist = np.asarray(c_dist)
 
+    # 5. Micro-sector edges.
     # 50 m bins restart at each sector line so no bin straddles two sectors;
     # a short remainder (< 15 m) at a sector end is folded into the bin before.
     edges = [0.0]
@@ -8032,7 +8067,11 @@ def _build_microsector_delta(
         if len(e) > 1 and e[-1] - e[-2] < bin_m * 0.3:
             del e[-2]
         edges += e
-    edges = np.round(np.asarray(edges), 6)
+    edges = np.round(np.asarray(edges), 6)  # strip float drift from np.arange
+
+    # 6. Score each bin: time each driver took to cross it, the difference
+    #    (positive = Driver 1 quicker), the winner, the zone type and mean speeds.
+    #    bin_gain_grid copies each bin's gain onto its grid points for the hover.
 
     bins, bin_gain_grid = [], np.zeros(len(grid))
     for i in range(len(edges) - 1):
@@ -8044,12 +8083,14 @@ def _build_microsector_delta(
         dom = 0 if abs(gain) < MICRO_EVEN_MS else (1 if gain > 0 else 2)
         mid = 0.5 * (a + b)
         zone, label = "straight", ""
+        # corner zone: near an official marker, or (no markers) Driver 1 lifting
         if len(c_dist):
             j = int(np.argmin(np.abs(c_dist - mid)))
             if abs(c_dist[j] - mid) <= MICRO_CORNER_HALF_M:
                 zone, label = "corner", c_lab[j]
         elif np.isfinite(thr1[m]).any() and np.nanmean(thr1[m]) < 95:
             zone = "corner"
+        # DRS zone: flap open for either driver over more than half the bin
         if zone != "corner":
             open_frac = np.nanmean(((drs1[m] >= MICRO_DRS_OPEN_MIN) | (drs2[m] >= MICRO_DRS_OPEN_MIN)).astype(float))
             if open_frac > 0.5:
@@ -8063,7 +8104,7 @@ def _build_microsector_delta(
         })
         bin_gain_grid[m] = gain
 
-    # merge consecutive corner / DRS bins into shaded zones; back-to-back
+    # 7. Merge consecutive corner / DRS bins into shaded zones; back-to-back
     # corners become one band labelled "T10–T14" so labels do not overlap
     zones = []
     for bn in bins:
@@ -8084,6 +8125,9 @@ def _build_microsector_delta(
         else:
             z["label"] = labs[0] if len(labs) == 1 else (f"{labs[0]}–{labs[-1]}" if labs else "")
 
+    # 8. Per-sector tallies: metres won by each driver (sum of bin lengths) and
+    #    net time gained. Bin edges include the sector lines, so each sector's
+    #    gain_ms is exactly that sector's gap.
     sectors = []
     for k in range(3):
         sb = [bn for bn in bins if bn["sector"] == k + 1]
@@ -8096,6 +8140,7 @@ def _build_microsector_delta(
             "gain_ms": float(sum(bn["gain_ms"] for bn in sb)),
         })
 
+    # 9. Lap totals and each driver's single best bin (None if they won none).
     m1 = sum(s["metres1"] for s in sectors)
     m2 = sum(s["metres2"] for s in sectors)
     best1 = max(bins, key=lambda bn: bn["gain_ms"])

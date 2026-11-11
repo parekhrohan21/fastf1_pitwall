@@ -3114,6 +3114,8 @@ def build_corner_geometry_fig(
         return None
 
     fig = go.Figure()
+    # Driver 1's line: one dot per 2 m sample, coloured by log10(radius) with
+    # Turbo reversed (red = tight). The colourbar ticks are relabelled in metres.
     log_r = np.log10(np.asarray(geo1["radius"], dtype=float))
     speed = np.asarray(geo1.get("speed"), dtype=float)
     fig.add_trace(go.Scatter(
@@ -3134,6 +3136,7 @@ def build_corner_geometry_fig(
                        "<br>Speed = %{customdata[1]:.0f} km/h<br>s = %{customdata[2]:.0f} m<extra></extra>"),
     ))
 
+    # Driver 2 (Compare Mode): plain dotted line in their colour, for comparison
     if geo2 and len(geo2.get("x", [])) > 1:
         fig.add_trace(go.Scatter(
             x=geo2["x"], y=geo2["y"], mode="lines",
@@ -3141,6 +3144,7 @@ def build_corner_geometry_fig(
             name=f"{driver2 or 'Driver 2'} line", hoverinfo="skip",
         ))
 
+    # official corner markers (open grey circles), labelled T1, T2, ...
     markers = [c for c in geo1["corners"] if c.get("marker_x") is not None]
     if markers:
         fig.add_trace(go.Scatter(
@@ -3152,6 +3156,7 @@ def build_corner_geometry_fig(
             hovertemplate="<b>%{text}</b> marker<extra></extra>",
         ))
 
+    # each driver's geometric apex (tightest point of each corner) as a star
     for geo, col, drv in ((geo1, colour1, driver1), (geo2, colour2, driver2)):
         if not geo or not geo.get("corners"):
             continue
@@ -3172,7 +3177,7 @@ def build_corner_geometry_fig(
         plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=11)),
         xaxis=dict(visible=False),
-        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
+        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),  # 1 m on x == 1 m on y
         hovermode="closest",
     )
     return fig
@@ -3180,6 +3185,7 @@ def build_corner_geometry_fig(
 
 # ── Micro-Sector Speed Delta & Dominance Streamgraph (#199) ─────────────────
 def _hex_rgba(hex_col: str, alpha: float) -> str:
+    """'#RRGGBB' -> 'rgba(r,g,b,alpha)' for translucent fills; grey if unparsable."""
     h = str(hex_col).lstrip("#")
     if len(h) != 6:
         return f"rgba(128,128,128,{alpha})"
@@ -3201,12 +3207,15 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
         return None
     g = md["grid"]
     x = g["dist"]
+    # teammates share a team colour: give Driver 2 grey so the ribbon still diverges
     if colour1.lower() == colour2.lower():
         colour2 = "#9AA0A6"
     fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
                         row_heights=[0.42, 0.34, 0.24])
 
     def _ribbon(y, row):
+        # split one signed series into two filled areas: above zero (Driver 1
+        # ahead/faster) and below zero (Driver 2), each in that driver's colour
         pos, neg = np.where(y > 0, y, 0.0), np.where(y < 0, y, 0.0)
         for arr, col, name in ((pos, colour1, driver1), (neg, colour2, driver2)):
             fig.add_trace(go.Scatter(
@@ -3218,6 +3227,8 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
     _ribbon(g["speed_delta"], 1)
     _ribbon(g["time_delta_ms"], 2)
 
+    # Invisible line over panel 1 that carries all hover data, so the visible
+    # fills can stay hover-free and one tooltip shows everything at that metre.
     def _fmt(a, nd=0):
         return np.where(np.isfinite(a), np.round(a, nd), np.nan)
 
@@ -3238,6 +3249,7 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
         ),
     ), row=1, col=1)
 
+    # panel 3: one bar per micro-sector, bar width = bin length, height = ms gained
     bins = md["bins"]
     fig.add_trace(go.Bar(
         x=[b["mid"] for b in bins], y=[b["gain_ms"] for b in bins],
@@ -3250,6 +3262,7 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
         showlegend=False, name="",
     ), row=3, col=1)
 
+    # background bands on all three panels: grey = corner zone, green = DRS zone
     for z in md.get("zones", []):
         fill = "rgba(46,204,113,0.13)" if z["kind"] == "drs" else "rgba(128,128,128,0.12)"
         for r in (1, 2, 3):
@@ -3258,12 +3271,15 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
             fig.add_annotation(x=0.5 * (z["start"] + z["end"]), y=1.0, yref="y domain", xref="x",
                                text=z["label"], showarrow=False, yanchor="bottom",
                                font=dict(size=9, color="#2ecc71" if z["kind"] == "drs" else None), opacity=0.8)
+    # dashed sector lines, labelled S2 / S3 on the bottom panel
     for k, sb in enumerate(md.get("sector_bounds", [])):
         for r in (1, 2, 3):
             fig.add_vline(x=sb, line=dict(dash="dash", width=1, color="rgba(160,160,160,0.7)"), row=r, col=1)
         fig.add_annotation(x=sb, y=1.0, yref="y3 domain", xref="x", text=f"S{k + 2}",
                            showarrow=False, xanchor="left", yanchor="top", font=dict(size=10), opacity=0.75)
 
+    # Transparent backgrounds and no fixed font colour so the chart follows the
+    # app's dark/light theme.
     grid_col = "rgba(128,128,128,0.18)"
     fig.update_xaxes(gridcolor=grid_col, zeroline=False)
     fig.update_xaxes(title_text="Lap distance (m)", row=3, col=1)
