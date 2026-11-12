@@ -36,6 +36,7 @@ def _lap(speed_fn, drs_fn=None, hz: float = 4.0, t_offset: float = 0.0):
 
 
 def test_identical_laps_are_even():
+    """Comparing a lap with itself: zero gap everywhere and no micro-sector winner."""
     a, lt, _ = _lap(lambda d: 200.0)
     md = _build_microsector_delta(a, a.copy(), lap_times_s=(lt, lt))
     assert abs(md["summary"]["final_delta_ms"]) < 1e-6
@@ -44,6 +45,7 @@ def test_identical_laps_are_even():
 
 
 def test_uniformly_faster_driver_dominates_whole_lap():
+    """A driver 2 km/h faster everywhere wins every bin, and the lap gap equals the true lap-time difference."""
     a, lt1, _ = _lap(lambda d: 200.0)
     b, lt2, _ = _lap(lambda d: 198.0)
     md = _build_microsector_delta(a, b, lap_times_s=(lt1, lt2))
@@ -54,6 +56,7 @@ def test_uniformly_faster_driver_dominates_whole_lap():
 
 
 def test_local_loss_only_shows_where_it_happens():
+    """A slow 200 m stretch shows up only in the bins around it, and bin gains add up to the lap gap."""
     slow = lambda d: 150.0 if 1000 <= d < 1200 else 220.0
     a, lt1, _ = _lap(lambda d: 220.0)
     b, lt2, _ = _lap(slow)
@@ -66,6 +69,7 @@ def test_local_loss_only_shows_where_it_happens():
 
 
 def test_late_first_sample_is_anchored_to_official_lap_time():
+    """Car data starting 0.2 s after the line still gives the official lap gap once anchored (and not without)."""
     # car data that starts 0.2 s after the line and stops short of it would
     # otherwise understate the gap
     a, lt1, _ = _lap(lambda d: 200.0, t_offset=0.0)
@@ -77,6 +81,7 @@ def test_late_first_sample_is_anchored_to_official_lap_time():
 
 
 def test_sector_gains_match_official_sector_deltas():
+    """With sector times supplied, each sector's summed gain equals the official sector-time difference."""
     f1 = lambda d: 210.0 + 20 * np.sin(d / 300.0)
     f2 = lambda d: 205.0 + 25 * np.sin(d / 280.0)
     a, lt1, T1 = _lap(f1, t_offset=0.1)
@@ -93,6 +98,7 @@ def test_sector_gains_match_official_sector_deltas():
 
 
 def test_bins_are_50m_and_never_straddle_sector_lines():
+    """Bins are at most ~65 m, never cross a sector line, and together cover the whole lap."""
     a, lt, T = _lap(lambda d: 200.0)
     b, lt2, _ = _lap(lambda d: 199.0)
     md = _build_microsector_delta(a, b, sector_times_s=(T(1010.0), T(2033.0) - T(1010.0)), lap_times_s=(lt, lt2))
@@ -105,6 +111,7 @@ def test_bins_are_50m_and_never_straddle_sector_lines():
 
 
 def test_corner_and_drs_zones():
+    """Corner bands come from marker distances (T1, T2A) and DRS bands from open-flap codes."""
     drs = lambda d: 12 if 2200 <= d < 2700 else 0
     a, lt1, _ = _lap(lambda d: 220.0, drs_fn=drs)
     b, lt2, _ = _lap(lambda d: 218.0, drs_fn=drs)
@@ -118,6 +125,7 @@ def test_corner_and_drs_zones():
 
 
 def test_missing_or_short_data_returns_none():
+    """No data, too few samples or no Distance column returns None instead of raising."""
     a, lt, _ = _lap(lambda d: 200.0)
     assert _build_microsector_delta(None, a) is None
     assert _build_microsector_delta(a, a.head(5)) is None
@@ -125,6 +133,7 @@ def test_missing_or_short_data_returns_none():
 
 
 def test_streamgraph_figure_builds():
+    """The figure has one bar per bin and two fill colours, even when both drivers share a team colour."""
     a, lt1, _ = _lap(lambda d: 200.0)
     b, lt2, _ = _lap(lambda d: 150.0 if 1000 <= d < 1200 else 205.0)
     md = _build_microsector_delta(a, b, lap_times_s=(lt1, lt2))

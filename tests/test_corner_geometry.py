@@ -55,6 +55,7 @@ def _corners(radius_m: float = 50.0, straight_m: float = 400.0, units_per_m: flo
 
 
 def test_circle_curvature_matches_radius():
+    """Curvature of a perfect circle reads back as 1/R."""
     t = np.linspace(0, 2 * np.pi, 2000, endpoint=False)
     R = 80.0
     path = _resample_xy_path(pd.DataFrame({"X": R * np.cos(t) * 10, "Y": R * np.sin(t) * 10}))
@@ -66,6 +67,7 @@ def test_circle_curvature_matches_radius():
 
 
 def test_hairpin_minimum_radius_and_apex_on_marker():
+    """A stadium hairpin's minimum radius is found, with the apex at the marker placed on it."""
     geo = _build_corner_geometry(_stadium(), _corners())
     assert geo is not None
     t1 = next(c for c in geo["corners"] if c["corner"] == "T1")
@@ -87,6 +89,7 @@ def _ellipse(a: float = 300.0, b: float = 100.0, n: int = 6000):
 
 
 def test_ellipse_apex_at_tightest_point():
+    """On an ellipse the apex lands at the end of the long axis, where the path is tightest."""
     df, x, y = _ellipse()
     corners = pd.DataFrame({"X": [3000.0], "Y": [0.0], "Number": [1], "Letter": [""]})
     t1 = _build_corner_geometry(df, corners)["corners"][0]
@@ -95,6 +98,7 @@ def test_ellipse_apex_at_tightest_point():
 
 
 def test_marker_before_apex_reads_as_late_apex():
+    """A marker 30 m before the tightest point reports a late apex (positive shift)."""
     df, x, y = _ellipse()
     s = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])
     apex_i = int(np.argmin((x - 300.0) ** 2 + y ** 2))
@@ -106,6 +110,7 @@ def test_marker_before_apex_reads_as_late_apex():
 
 
 def test_distance_column_calibrates_xy_units():
+    """X/Y in arbitrary units are converted to metres using the Distance column."""
     # same lap with X/Y in metres instead of decimetres; Distance gives the true scale
     geo = _build_corner_geometry(_stadium(units_per_m=1.0, with_distance=True), _corners(units_per_m=1.0))
     t1 = next(c for c in geo["corners"] if c["corner"] == "T1")
@@ -113,6 +118,7 @@ def test_distance_column_calibrates_xy_units():
 
 
 def test_auto_detects_corners_without_circuit_info():
+    """Without official markers, corners are found from radius minima."""
     # rotate the lap start to mid-straight so neither hairpin touches the path ends
     df = _stadium()
     df = pd.concat([df.iloc[200:], df.iloc[:200]], ignore_index=True)
@@ -125,6 +131,7 @@ def test_auto_detects_corners_without_circuit_info():
 
 
 def test_compare_lines_wider_line_reads_outside():
+    """A wider second line gives a negative inside offset (further outside)."""
     geo_tight = _build_corner_geometry(_stadium(radius_m=50.0), _corners())
     geo_wide = _build_corner_geometry(_stadium(radius_m=53.0), _corners())
     rows = {r["corner"]: r for r in _compare_corner_lines(geo_tight, geo_wide)}
@@ -138,6 +145,7 @@ def test_compare_lines_wider_line_reads_outside():
 
 
 def test_missing_or_short_xy_returns_none():
+    """Missing or too-short X/Y data returns None instead of raising."""
     assert _build_corner_geometry(None) is None
     assert _build_corner_geometry(pd.DataFrame({"Speed": [100.0] * 50})) is None
     assert _build_corner_geometry(pd.DataFrame({"X": [0.0, 1.0], "Y": [0.0, 1.0]})) is None
@@ -145,6 +153,7 @@ def test_missing_or_short_xy_returns_none():
 
 
 def test_corner_geometry_fig_builds_single_and_compare():
+    """The radius map builds for one driver and for Compare Mode."""
     geo1 = _build_corner_geometry(_stadium(), _corners())
     geo2 = _build_corner_geometry(_stadium(radius_m=53.0), _corners())
     fig = build_corner_geometry_fig(geo1, None, "NOR")
@@ -158,6 +167,7 @@ def test_corner_geometry_fig_builds_single_and_compare():
 
 
 def test_implausible_lateral_g_is_flagged_low_confidence():
+    """A corner implying more than 6.5 g is flagged low confidence."""
     # a 50 m hairpin taken at 290 km/h would need ~13 g: flagged, and not reported
     # as the tightest corner while a trusted one exists
     df = _stadium()

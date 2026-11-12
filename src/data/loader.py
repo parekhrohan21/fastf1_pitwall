@@ -39,21 +39,30 @@ fastf1.Cache.enable_cache(CACHE_DIR)
 #      historical results, standings, lap times & pit stops (1950–present)
 # Optional F1_USERNAME / F1_PASSWORD credentials remain supported as an optional
 # pass-through for users who also wish to query livetiming.formula1.com directly.
+# Settings FastF1 reads from environment variables: account e-mail, password,
+# and which sign-in method to use.
 _F1_CRED_KEYS = ("F1_USERNAME", "F1_PASSWORD", "FASTF1_AUTH_METHOD")
 
 
 def _bridge_f1_secrets():
+    """Copy F1 credentials from Streamlit secrets into os.environ.
+
+    FastF1 only looks at environment variables, while Streamlit Cloud users
+    store credentials in st.secrets (.streamlit/secrets.toml). A value already
+    set in the environment wins and is never overwritten.
+    """
     for key in _F1_CRED_KEYS:
         if os.environ.get(key):
-            continue
+            continue  # environment variable already set: keep it
         try:
             val = st.secrets.get(key)
         except Exception:
-            return
+            return  # no secrets.toml at all: nothing to bridge
         if val:
             os.environ[key] = str(val)
 
 
+# Run once at import so credentials are in place before any session loads.
 _bridge_f1_secrets()
 
 
@@ -71,8 +80,10 @@ def f1_sign_in_error():
     explicitly set.
     """
     if not f1_credentials_configured():
-        return None
+        return None  # default path: free APIs, no sign-in needed
     try:
+        # Signs in (or reuses a stored, still-valid token) so that later
+        # livetiming.formula1.com requests carry an Authorization header.
         from fastf1.internals.f1account import get_token
         get_token()
     except Exception:
@@ -122,6 +133,9 @@ try:
     from requests.structures import CaseInsensitiveDict
 
     _PATCH_STATUS["imported"] = True
+    # Hosts whose requests are re-sent through curl_cffi with a Chrome TLS
+    # fingerprint, because CloudFront / Cloudflare block the default Python
+    # TLS handshake on cloud servers. Matched as substrings of the URL.
     _F1_DOMAINS = (
         "formula1.com",
         "fastf1.dev",
@@ -131,12 +145,16 @@ try:
         "openf1.org",
         "multiviewer.app",
     )
+    # F1 account sign-in hosts are left to plain `requests`: the sign-in flow
+    # depends on requests' own cookie and redirect handling, and these hosts do
+    # not need the browser fingerprint. Matched against the exact hostname.
     _F1_AUTH_HOSTS = (
         "id.formula1.com",
         "account.formula1.com",
         "api.formula1.com",
         "f1login.fastf1.dev",
     )
+    # keep the original so non-F1 traffic (and auth hosts) use it unchanged
     _original_adapter_send = requests.adapters.HTTPAdapter.send
 
     def _patched_adapter_send(
@@ -145,13 +163,19 @@ try:
     ):
         url = getattr(request, "url", "") or ""
         host = urlsplit(url).hostname or ""
+        # Only F1 data hosts are rerouted; everything else falls through to the
+        # original requests adapter at the end of this function.
         if (any(domain in url for domain in _F1_DOMAINS)
                 and host not in _F1_AUTH_HOSTS):
+            # Drop hop-by-hop headers curl manages itself, and the Python
+            # User-Agent, which would undo the Chrome impersonation.
             hdrs = {k: v for k, v in request.headers.items()
                     if k not in ("TE", "Connection", "Transfer-Encoding",
                                  "Keep-Alive", "Proxy-Authorization", "Upgrade",
                                  "User-Agent")}
 
+            # Minimal stand-in for urllib3's raw response, so curl_cffi's reply
+            # can be wrapped in a normal requests.Response that FastF1 accepts.
             class MockRaw:
                 def __init__(self, url, headers=None, reason=None, status=None):
                     self._request_url = url
@@ -162,6 +186,8 @@ try:
                     self.version = 11
                     self.closed = True
 
+            # Optional proxy (env var or Streamlit secret) for networks where
+            # F1 hosts are blocked even with impersonation.
             proxy_url = os.environ.get("F1_PROXY")
             if not proxy_url and hasattr(st, "secrets"):
                 try:
@@ -2319,7 +2345,11 @@ def load_live_session(year: int, gp: str, session_type: str, live_filename: str 
 
 
 def livetiming_rejects_requests() -> bool:
-    """True only if both F1's livetiming server AND the free OpenF1/Jolpica APIs reject requests."""
+    """True only if both F1's livetiming server AND the free OpenF1/Jolpica APIs reject requests.
+
+    Used to decide whether to show the "F1 data server is rejecting requests"
+    error. If the free APIs answer, sessions can still load, so no error.
+    """
     # Check if OpenF1 or Jolpica-F1 free APIs are reachable first
     try:
         probe = _free_api_get_json(f"{_OPENF1_BASE}/sessions?year=2024", timeout=8)
@@ -2328,6 +2358,8 @@ def livetiming_rejects_requests() -> bool:
     except Exception:
         pass
 
+    # Send the stored F1TV token if the user signed in. Without it this probe
+    # always got 401 and wrongly reported the server as rejecting everyone.
     headers = {}
     try:
         from fastf1.internals.f1account import token_manager
@@ -2341,9 +2373,9 @@ def livetiming_rejects_requests() -> bool:
             "https://livetiming.formula1.com/static/2024/Index.json",
             headers=headers, impersonate="chrome124", timeout=10,
         )
-        return resp.status_code in (401, 403)
+        return resp.status_code in (401, 403)  # 401/403 = rejected; anything else = reachable
     except Exception:
-        return False
+        return False  # network error: not proof of rejection, don't show the error
 
 
 def clear_session_cache(year: int, gp: str):

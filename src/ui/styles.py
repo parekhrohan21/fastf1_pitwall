@@ -1029,7 +1029,7 @@ color: #111111 !important;
    (#fafafa) on deeply nested value containers (e.g. StyledSingleValue at
    [data-baseweb="select"] > div > div > div). Force every descendant inside
    [data-baseweb="select"] to #111111 and declare a light colour-scheme. */
-html { color-scheme: light !important; }
+html { color-scheme: light !important; }  /* native widgets (scrollbars, inputs) draw light */
 [data-baseweb="select"] > div,
 [data-baseweb="select"] > div > div,
 [data-baseweb="select"] [role="combobox"],
@@ -1043,7 +1043,7 @@ html { color-scheme: light !important; }
 [data-testid="stNumberInput"] input {
 background-color: #f0f0f0 !important;
 color: #111111 !important;
--webkit-text-fill-color: #111111 !important;
+-webkit-text-fill-color: #111111 !important;  /* Safari/Chrome paint input text from this, not color */
 border-color: rgba(0,0,0,0.15) !important;
 }
 [data-baseweb="select"],
@@ -1053,6 +1053,7 @@ border-color: rgba(0,0,0,0.15) !important;
 color: #111111 !important;
 -webkit-text-fill-color: #111111 !important;
 }
+/* multiselect chips (e.g. telemetry channels): light orange instead of dark */
 [data-baseweb="select"] [data-baseweb="tag"] {
 background-color: rgba(255, 135, 0, 0.18) !important;
 border: 1px solid rgba(255, 135, 0, 0.35) !important;
@@ -1068,6 +1069,7 @@ color: #111111 !important;
 /* CHANGE: checkbox squares rendered dark grey and the live-timing toggle track
    near-white on the light page. Give both an explicit light-mode look, with the
    brand orange when switched on (selected via :has on the hidden input). */
+/* checkbox square: the <span> right inside the label */
 [data-testid="stCheckbox"] label[data-baseweb="checkbox"] > span {
 background-color: #ffffff !important;
 border: 2px solid #6b6b73 !important;
@@ -1076,6 +1078,9 @@ border: 2px solid #6b6b73 !important;
 background-color: #FF8700 !important;
 border-color: #FF8700 !important;
 }
+/* toggle switch track: a toggle's label starts with the track <div> followed by
+   the text <div>; a plain checkbox's only <div> is its text, which
+   :not(:last-child) excludes */
 [data-testid="stCheckbox"] label[data-baseweb="checkbox"] > div:first-of-type:not(:last-child) {
 background-color: #c4c4ca !important;
 }

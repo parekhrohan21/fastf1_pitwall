@@ -343,6 +343,8 @@ if load_btn:
     else:
         with st.spinner(f"Loading Session 1: {gp} {year} {session_label}…  (first load ~15–30 s)"):
             try:
+                # load_session tries the local cache, then the free APIs (and F1
+                # live timing if signed in); an empty lap table counts as a failure
                 sess = load_session(year, gp, session_type)
                 if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
                     raise ValueError("No lap data available for this session.")
@@ -350,10 +352,14 @@ if load_btn:
                 st.session_state["sess_key"] = sess_key
                 st.session_state["year1"] = year
             except Exception as e:
+                # Remove half-downloaded cache files and forget the session, so
+                # the next click retries cleanly instead of reloading bad data.
                 clear_session_cache(year, gp)
                 st.session_state["session"] = None
                 st.session_state["sess_key"] = None
                 err_msg = str(e).rstrip(".") + "."
+                # Network-wide failure (free APIs and F1 both down) gets its own
+                # message; otherwise it is a problem with this session's data.
                 if livetiming_rejects_requests():
                     st.error(
                         "**Upstream F1 data servers are unreachable**\n\n"
@@ -380,6 +386,7 @@ if load_btn:
                 st.session_state["sess_key2"] = sess_key2
                 st.session_state["year2"] = year2
             except Exception as e:
+                # same recovery as Session 1, for the second compared session
                 clear_session_cache(year2, gp2)
                 st.session_state["session2"] = None
                 st.session_state["sess_key2"] = None
