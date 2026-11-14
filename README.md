@@ -2,7 +2,14 @@
 
 A professional-grade **Streamlit + FastF1** dashboard with a dynamic, data-driven styling engine for exploring lap telemetry, strategic pacing, and performance analytics from any Formula 1 session since 2018.
 
-Select a season, Grand Prix, session, driver, and lap — then instantly visualise **6-channel high-frequency telemetry** alongside driver headshots, lap time history, fuel-adjusted pace, tyre stint timelines, dynamic pit window & race strategy re-optimisation simulations, corner exit traction aggression, track evolution grip ramp indexes, pit lane transit loss breakdowns, intra-team teammate battles, full race-weekend progression tracking, clean vs dirty air pace degradation, telemetry latent-space brag videos, braking dynamics, gear shift strategies, speed trap velocity radars, fastest laps leaderboards, interactive track maps, full race replays, and detailed lap/weather summaries. --will add bullet points
+Select a season, Grand Prix, session, driver and lap, then explore:
+
+- **Telemetry & head-to-head:** 6-channel high-frequency telemetry, speed and continuous time deltas, the **micro-sector dominance timeline** (50 m speed/time gains matched to official sector times), and multi-year lap comparisons.
+- **Corners & driving style:** braking dynamics, corner exit traction, gear shift strategy, **corner geometry** (radius-coloured racing line and early/late apex) and the Driving Style DNA radar.
+- **Pace, tyres & strategy:** lap time history, fuel-adjusted pace, tyre stint timelines and degradation, the pit window and strategy re-optimisation simulator, pit lane transit loss, and clean vs dirty air pace.
+- **Drivers & teams:** driver headshots and summaries, intra-team teammate battles, speed trap radars, fastest laps leaderboards and full race-weekend progression.
+- **Track & race overview:** interactive track maps, full animated race replays, weather correlation, track evolution, classifications and championship standings.
+- **Share & export:** telemetry export (CSV / Parquet / JSON), Post-Race Debrief PDFs and telemetry latent-space brag videos.
 
 **Quick Navigation:** [🚀 Quick Start](#-quick-start) · [🛠 Prerequisites & Requirements](#-prerequisites--system-requirements) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [✨ Key Features](#-key-features) · [📚 How to Use the Dashboard](#-how-to-use-the-dashboard) · [📁 Project Structure](#-project-structure) · [🧑‍💻 Development Workflow](#-contributing--development-workflow) · [⚠️ Troubleshooting](#%EF%B8%8F-known-limitations--troubleshooting) · [📜 Roadmap & Changelog](#-solved-issues--changelog)
 
