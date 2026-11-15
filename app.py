@@ -121,7 +121,7 @@ from src.ui.components import (
     _render_pit_loss_section, _render_weekend_progression_section,
     _render_dirty_air_section, _render_brag_video_section, _render_strategy_simulator_section,
     _render_driving_style_dna_section, _render_corner_geometry_section,
-    _render_microsector_section
+    _render_microsector_section, _render_launch_analysis_section
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -1178,6 +1178,20 @@ _render_corner_geometry_section(
     sess_key, sess, lap1, lap2 if (compare and driver2) else None,
     driver1, driver2 if compare else None, colour1, colour2, compare,
     same_circuit=_same_circuit, fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
+)
+
+# ── Start Line Reaction Time & Launch Telemetry Acceleration Analyzer (#200) ──
+# Standing-start launch analysis on Lap 1 (0–100 km/h, 0–200 km/h, reaction time,
+# clutch bite-point RPM drop, wheelspin & Turn 1 braking). Race / Sprint only.
+try:
+    _launch_session_type = str(sess.name)
+except Exception:
+    _launch_session_type = session_type
+_render_launch_analysis_section(
+    sess_key, sess, _all_laps1, _launch_session_type,
+    driver1, driver2 if compare else None, colour1, colour2, compare,
+    fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2,
+    session_obj2=sess2, laps_df2=_all_laps2, sess_k2=sess_key2
 )
 
 

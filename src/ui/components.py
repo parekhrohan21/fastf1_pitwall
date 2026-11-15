@@ -17,7 +17,8 @@ from src.data.loader import (
     _calculate_braking_metrics, _calculate_traction_metrics, _calculate_gear_shift_metrics,
     _calculate_speed_trap_metrics, _build_teammate_battle_data, _build_strategy_simulation,
     DNA_AXES, _calculate_driving_style_dna,
-    _build_corner_geometry_cached, _compare_corner_lines, _build_microsector_delta_cached
+    _build_corner_geometry_cached, _compare_corner_lines, _build_microsector_delta_cached,
+    _build_launch_analysis_data
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
@@ -28,7 +29,8 @@ from src.charts.plotly import (
     build_speed_trap_radar_fig, build_speed_trap_bar_fig, build_teammate_matrix_fig,
     build_pit_loss_fig, build_weekend_progression_fig, build_dirty_air_fig,
     build_latent_space_projection_fig, build_strategy_timeline_fig, build_deg_matrix_fig,
-    build_driving_style_dna_fig, build_corner_geometry_fig, build_microsector_streamgraph_fig
+    build_driving_style_dna_fig, build_corner_geometry_fig, build_microsector_streamgraph_fig,
+    build_launch_analysis_fig
 )
 from src.charts.video import generate_brag_video_frames, RESOLUTIONS
 
@@ -4186,3 +4188,324 @@ def _render_microsector_section(
         f"{short2}'s distance is aligned to {short1}'s at the sector lines (lap length {summ['lap_length_m']:,.0f} m) so corners line up. "
         "Bins within 1 ms count as even."
     )
+
+
+def _render_launch_analysis_section(
+    sess_k: str,
+    session_obj,
+    laps_df: pd.DataFrame | None,
+    session_type: str,
+    driver1: str,
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+    compare: bool = False,
+    fmt_func1=None,
+    fmt_func2=None,
+    session_obj2=None,
+    laps_df2: pd.DataFrame | None = None,
+    sess_k2: str | None = None,
+):
+    """Render Start Line Reaction Time & Launch Telemetry Acceleration Analyzer (#200, Race / Sprint only)."""
+    if str(session_type).strip() not in ("R", "S", "Race", "Sprint"):
+        return
+
+    st.markdown(
+        "<div class='section-title'>🚦 Start Line Reaction Time & Launch Telemetry Acceleration Analyzer</div>",
+        unsafe_allow_html=True,
+    )
+
+    if laps_df is None or (hasattr(laps_df, "empty") and laps_df.empty):
+        st.info("ℹ️ Lap 1 standing-start telemetry is not available for this session.")
+        return
+
+    plain_laps1 = pd.DataFrame(laps_df)
+    same_sess_compare = bool(compare and driver2 and session_obj2 is None)
+    data = _build_launch_analysis_data(
+        sess_k,
+        plain_laps1,
+        _sess_obj=session_obj,
+        driver1=driver1,
+        driver2=driver2 if same_sess_compare else None,
+        compare=same_sess_compare,
+    )
+    if not data:
+        st.info("ℹ️ Standing-start launch telemetry is not available for this session (e.g. rolling start or historical summary-only data).")
+        return
+
+    l1 = data.get("driver1_launch")
+    l2 = data.get("driver2_launch")
+
+    # Support cross-session comparison when Session 2 is also a Race/Sprint
+    if compare and driver2 and session_obj2 is not None and l2 is None:
+        try:
+            plain_laps2 = pd.DataFrame(laps_df2) if laps_df2 is not None else plain_laps1
+            data2 = _build_launch_analysis_data(
+                sess_k2 or f"{sess_k}_s2",
+                plain_laps2,
+                _sess_obj=session_obj2,
+                driver1=driver2,
+                driver2=None,
+                compare=False,
+            )
+            if data2:
+                l2 = data2.get("driver1_launch")
+        except Exception:
+            l2 = None
+
+    label1 = fmt_func1(driver1) if callable(fmt_func1) else str(driver1)
+    label2 = (
+        (fmt_func2(driver2) if callable(fmt_func2) else (fmt_func1(driver2) if callable(fmt_func1) else str(driver2)))
+        if (compare and driver2)
+        else ""
+    )
+    short1 = label1.split("·")[0].strip() if "·" in label1 else str(driver1)
+    short2 = label2.split("·")[0].strip() if (label2 and "·" in label2) else (str(driver2) if driver2 else "")
+    if compare and short1 == short2 and short2:
+        short1, short2 = f"{short1} (1)", f"{short2} (2)"
+
+    eff_col2 = "#9AA0A6" if (compare and str(colour1).strip().lower() == str(colour2).strip().lower()) else colour2
+
+    def _card_html(title: str, val: str, sub: str, accent: str = colour1) -> str:
+        return (
+            f"<div class='metric-card' style='border-top: 3px solid {accent}; padding: 12px 14px;'>"
+            f"<div class='metric-label'>{title}</div>"
+            f"<div class='metric-value' style='font-size: 21px;'>{val}</div>"
+            f"<div class='metric-sub'>{sub}</div>"
+            f"</div>"
+        )
+
+    # 1. KPI Metric Cards for Driver 1 (with head-to-head deltas when l2 is present)
+    if l1 is not None:
+        c1, c2, c3, c4, c5 = st.columns(5)
+
+        rt1 = l1.get("reaction_time_ms")
+        rt_val = f"{rt1:.0f} ms" if rt1 is not None else "N/A"
+        if l2 and rt1 is not None and l2.get("reaction_time_ms") is not None:
+            rt_diff = rt1 - l2["reaction_time_ms"]
+            rt_col = "#00d2be" if rt_diff <= 0 else "#ff4b4b"
+            rt_sub = f"<span style='color:{rt_col}; font-weight:700;'>{rt_diff:+.0f} ms vs {short2}</span> · {l1.get('pre_launch_rpm', 0):.0f} RPM"
+        else:
+            rt_sub = f"Pre-launch: {l1.get('pre_launch_rpm', 0):.0f} RPM"
+        c1.markdown(_card_html(f"Reaction Time ({short1})", rt_val, rt_sub, colour1), unsafe_allow_html=True)
+
+        t100 = l1.get("t_0_100_s")
+        d100 = l1.get("d_0_100_m")
+        t100_val = f"{t100:.2f} s" if t100 is not None else "N/A"
+        if l2 and t100 is not None and l2.get("t_0_100_s") is not None:
+            d_t100 = t100 - l2["t_0_100_s"]
+            col_100 = "#00d2be" if d_t100 <= 0 else "#ff4b4b"
+            t100_sub = f"<span style='color:{col_100}; font-weight:700;'>{d_t100:+.2f} s vs {short2}</span> · {d100 or 0:.1f} m"
+        else:
+            t100_sub = f"Dist: {d100:.1f} m · Mean {l1.get('mean_0_100_g', 0):.2f} G" if d100 is not None else "Initial traction phase"
+        c2.markdown(_card_html("0 → 100 km/h Launch", t100_val, t100_sub, colour1), unsafe_allow_html=True)
+
+        t200 = l1.get("t_0_200_s")
+        d200 = l1.get("d_0_200_m")
+        t200_val = f"{t200:.2f} s" if t200 is not None else "N/A"
+        if l2 and t200 is not None and l2.get("t_0_200_s") is not None:
+            d_t200 = t200 - l2["t_0_200_s"]
+            col_200 = "#00d2be" if d_t200 <= 0 else "#ff4b4b"
+            t200_sub = f"<span style='color:{col_200}; font-weight:700;'>{d_t200:+.2f} s vs {short2}</span> · {d200 or 0:.1f} m"
+        else:
+            s_100_200 = f" · 100–200: {l1['t_100_200_s']:.2f} s" if l1.get("t_100_200_s") is not None else ""
+            t200_sub = f"Dist: {d200:.1f} m{s_100_200}" if d200 is not None else "Reached T1 before 200 km/h"
+        c3.markdown(_card_html("0 → 200 km/h Pull", t200_val, t200_sub, colour1), unsafe_allow_html=True)
+
+        teff = l1.get("traction_efficiency_pct", 0.0)
+        teff_val = f"{teff:.1f}%"
+        teff_sub = (
+            f"Bite Thr: {l1.get('bite_point_throttle_pct', 0):.0f}% · "
+            f"RPM Drop: -{l1.get('rpm_drop', 0):.0f} · Peak {l1.get('peak_accel_g', 0):.2f} G"
+        )
+        c4.markdown(_card_html("Traction & Clutch Bite", teff_val, teff_sub, colour1), unsafe_allow_html=True)
+
+        pg = l1.get("positions_gained")
+        gp_p = l1.get("grid_position")
+        l1_p = l1.get("lap1_position")
+        if pg is not None:
+            pg_val = f"+{pg} Pos" if pg > 0 else (f"{pg} Pos" if pg < 0 else f"0 (Held P{l1_p})")
+        elif l1_p is not None:
+            pg_val = f"L1 P{l1_p}"
+        else:
+            pg_val = f"{l1.get('t1_peak_speed_kmh', 0):.0f} km/h"
+        pos_str = f"Grid P{gp_p} → L1 P{l1_p} · " if (gp_p is not None and l1_p is not None) else ""
+        t1_sub = f"{pos_str}T1 Brake: {l1.get('t1_brake_dist_m', 0):.0f} m ({l1.get('t1_peak_speed_kmh', 0):.0f} km/h)"
+        c5.markdown(_card_html("Lap 1 Gain & T1 Brake", pg_val, t1_sub, colour1), unsafe_allow_html=True)
+
+    # 2. Head-to-Head Launch Comparison Callout Banner
+    if compare and l1 is not None and l2 is not None:
+        bullets = []
+        if l1.get("reaction_time_ms") is not None and l2.get("reaction_time_ms") is not None:
+            rt_gap = l2["reaction_time_ms"] - l1["reaction_time_ms"]
+            w_rt = short1 if rt_gap >= 0 else short2
+            w_col = colour1 if rt_gap >= 0 else eff_col2
+            bullets.append(
+                f"<b>Reaction off the line:</b> <span style='color:{w_col}; font-weight:700;'>{w_rt}</span> "
+                f"reacted <b>{abs(rt_gap):.0f} ms</b> quicker ({l1['reaction_time_ms']:.0f} ms vs {l2['reaction_time_ms']:.0f} ms)"
+            )
+        if l1.get("t_0_100_s") is not None and l2.get("t_0_100_s") is not None:
+            g100 = l2["t_0_100_s"] - l1["t_0_100_s"]
+            w100 = short1 if g100 >= 0 else short2
+            wcol100 = colour1 if g100 >= 0 else eff_col2
+            bullets.append(
+                f"<b>0–100 km/h traction phase:</b> <span style='color:{wcol100}; font-weight:700;'>{w100}</span> "
+                f"by <b>{abs(g100):.2f} s</b> ({l1['t_0_100_s']:.2f} s vs {l2['t_0_100_s']:.2f} s)"
+            )
+        if l1.get("t_0_200_s") is not None and l2.get("t_0_200_s") is not None:
+            g200 = l2["t_0_200_s"] - l1["t_0_200_s"]
+            w200 = short1 if g200 >= 0 else short2
+            wcol200 = colour1 if g200 >= 0 else eff_col2
+            bullets.append(
+                f"<b>0–200 km/h acceleration:</b> <span style='color:{wcol200}; font-weight:700;'>{w200}</span> "
+                f"by <b>{abs(g200):.2f} s</b> ({l1['t_0_200_s']:.2f} s vs {l2['t_0_200_s']:.2f} s)"
+            )
+        if bullets:
+            st.markdown(
+                "<div style='background:var(--secondary-background-color); border-left:4px solid "
+                f"{colour1}; border-radius:8px; padding:10px 14px; margin:8px 0 12px; font-size:13px;'>"
+                + " &nbsp;·&nbsp; ".join(bullets)
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+
+    # 3. Interactive 3-Subplot Launch Telemetry Chart
+    if l1 is not None:
+        fig = build_launch_analysis_fig(
+            l1,
+            l2 if (compare and l2 is not None) else None,
+            driver1=short1,
+            driver2=short2 if (compare and l2 is not None) else None,
+            colour1=colour1,
+            colour2=eff_col2,
+        )
+        if fig is not None:
+            st.plotly_chart(
+                fig,
+                width="stretch",
+                key=f"launch_analysis_fig_{sess_k}_{driver1}_{driver2 if compare else 'single'}",
+                config={"displayModeBar": False},
+            )
+    else:
+        st.info(f"ℹ️ High-frequency Lap 1 launch telemetry is not available for {label1}; showing Opening-Lap Grid Leaderboard below.")
+
+    # 4. Field-Wide Standing Start & Opening-Lap Leaderboard Table
+    lb_rows = data.get("leaderboard") or []
+    if lb_rows:
+        summ = data.get("summary") or {}
+        caption_parts = []
+        if summ.get("best_rt_driver") and summ.get("best_rt_ms") is not None:
+            b_rt_lbl = fmt_func1(summ["best_rt_driver"]) if callable(fmt_func1) else summ["best_rt_driver"]
+            caption_parts.append(f"⚡ Fastest Reaction: **{b_rt_lbl}** ({summ['best_rt_ms']:.0f} ms)")
+        if summ.get("best_0_100_driver") and summ.get("best_0_100_s") is not None:
+            b_100_lbl = fmt_func1(summ["best_0_100_driver"]) if callable(fmt_func1) else summ["best_0_100_driver"]
+            caption_parts.append(f"🚀 Fastest 0–100 km/h: **{b_100_lbl}** ({summ['best_0_100_s']:.2f} s)")
+        if summ.get("best_0_200_driver") and summ.get("best_0_200_s") is not None:
+            b_200_lbl = fmt_func1(summ["best_0_200_driver"]) if callable(fmt_func1) else summ["best_0_200_driver"]
+            caption_parts.append(f"🏁 Fastest 0–200 km/h: **{b_200_lbl}** ({summ['best_0_200_s']:.2f} s)")
+        if summ.get("biggest_gainer_driver") and summ.get("biggest_gain_pos", 0) > 0:
+            b_gain_lbl = fmt_func1(summ["biggest_gainer_driver"]) if callable(fmt_func1) else summ["biggest_gainer_driver"]
+            caption_parts.append(f"📈 Top Lap 1 Mover: **{b_gain_lbl}** (+{summ['biggest_gain_pos']} pos)")
+        if caption_parts:
+            st.caption("  ·  ".join(caption_parts))
+
+        with st.expander("📋 Standing Start & Lap 1 Acceleration Leaderboard (Full Grid)", expanded=True):
+            rows_html = ""
+            for r in lb_rows:
+                drv_code = r["driver"]
+                drv_display = fmt_func1(drv_code) if callable(fmt_func1) else drv_code
+                is_d1 = (drv_code == driver1)
+                is_d2 = bool(compare and driver2 and session_obj2 is None and drv_code == driver2)
+                accent = colour1 if is_d1 else (eff_col2 if is_d2 else "transparent")
+                row_bg = f"{accent}1a" if (is_d1 or is_d2) else "transparent"
+                border_l = f"border-left: 3px solid {accent};" if (is_d1 or is_d2) else "border-left: 3px solid transparent;"
+
+                l1_p_str = f"P{r['lap1_pos']}" if r.get("lap1_pos") is not None else "—"
+                gp_str = f"P{r['grid_pos']}" if r.get("grid_pos") is not None else "—"
+                p_delta = r.get("pos_delta")
+                if p_delta is not None:
+                    if p_delta > 0:
+                        delta_html = f"<span style='color:#00d2be; font-weight:700;'>▲ +{p_delta}</span>"
+                    elif p_delta < 0:
+                        delta_html = f"<span style='color:#ff4b4b; font-weight:700;'>▼ {p_delta}</span>"
+                    else:
+                        delta_html = "<span style='opacity:0.6;'>— 0</span>"
+                else:
+                    delta_html = "<span style='opacity:0.5;'>—</span>"
+
+                cmp_name = str(r.get("compound") or "UNKNOWN").upper()
+                cmp_col = COMPOUND_COLOURS.get(cmp_name, "#888888")
+                cmp_short = cmp_name[0] if cmp_name in ("SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET") else "—"
+                tyre_html = (
+                    f"<span style='display:inline-block; width:18px; height:18px; line-height:18px; "
+                    f"border-radius:50%; background:{cmp_col}; color:#111; font-weight:800; font-size:10px; "
+                    f"text-align:center;'>{cmp_short}</span>"
+                )
+
+                rt_str = f"{r['reaction_time_ms']:.0f} ms" if r.get("reaction_time_ms") is not None else "—"
+                t100_str = (
+                    f"{r['t_0_100_s']:.2f} s <span style='opacity:0.6; font-size:11px;'>({r['d_0_100_m']:.0f}m)</span>"
+                    if (r.get("t_0_100_s") is not None and r.get("d_0_100_m") is not None)
+                    else "—"
+                )
+                t200_str = (
+                    f"{r['t_0_200_s']:.2f} s <span style='opacity:0.6; font-size:11px;'>({r['d_0_200_m']:.0f}m)</span>"
+                    if (r.get("t_0_200_s") is not None and r.get("d_0_200_m") is not None)
+                    else "—"
+                )
+                bite_str = (
+                    f"{r['bite_point_throttle_pct']:.0f}% / -{r['rpm_drop']:.0f}"
+                    if (r.get("bite_point_throttle_pct") is not None and r.get("rpm_drop") is not None)
+                    else "—"
+                )
+                teff_str = f"{r['traction_efficiency_pct']:.1f}%" if r.get("traction_efficiency_pct") is not None else "—"
+                t1b_str = (
+                    f"{r['t1_brake_dist_m']:.0f} m ({r['t1_peak_speed_kmh']:.0f} km/h)"
+                    if (r.get("t1_brake_dist_m") is not None and r.get("t1_peak_speed_kmh") is not None)
+                    else "—"
+                )
+                if r.get("lap1_time_s") is not None:
+                    gap_s = r.get("gap_l1_s")
+                    gap_txt = "Leader" if (gap_s is not None and gap_s <= 0.001) else (f"+{gap_s:.2f}s" if gap_s is not None else "")
+                    l1_time_str = f"{r['lap1_time_s']:.3f}s <span style='opacity:0.65; font-size:11px;'>({gap_txt})</span>"
+                else:
+                    l1_time_str = "—"
+
+                rows_html += (
+                    f"<tr style='background:{row_bg}; {border_l} border-bottom:1px solid rgba(128,128,128,0.12);'>"
+                    f"<td style='padding:7px 8px; font-weight:700; font-family:monospace;'>{l1_p_str}</td>"
+                    f"<td style='padding:7px 8px; font-weight:700;'>{drv_display}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{gp_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{delta_html}</td>"
+                    f"<td style='padding:7px 8px; text-align:center;'>{tyre_html}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{rt_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{t100_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{t200_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{bite_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{teff_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{t1b_str}</td>"
+                    f"<td style='padding:7px 8px; font-family:monospace;'>{l1_time_str}</td>"
+                    "</tr>"
+                )
+
+            table_html = (
+                "<div style='overflow-x:auto;'>"
+                "<table style='width:100%; border-collapse:collapse; font-size:12.5px;'>"
+                "<thead><tr style='border-bottom:2px solid rgba(128,128,128,0.25); text-transform:uppercase; font-size:10.5px; opacity:0.75; text-align:left;'>"
+                "<th style='padding:7px 8px;'>L1 Pos</th>"
+                "<th style='padding:7px 8px;'>Driver</th>"
+                "<th style='padding:7px 8px;'>Grid</th>"
+                "<th style='padding:7px 8px;'>Net +/-</th>"
+                "<th style='padding:7px 8px; text-align:center;'>Tyre</th>"
+                "<th style='padding:7px 8px;'>Reaction</th>"
+                "<th style='padding:7px 8px;'>0–100 km/h</th>"
+                "<th style='padding:7px 8px;'>0–200 km/h</th>"
+                "<th style='padding:7px 8px;'>Bite Thr / RPM Drop</th>"
+                "<th style='padding:7px 8px;'>Traction Eff.</th>"
+                "<th style='padding:7px 8px;'>T1 Brake</th>"
+                "<th style='padding:7px 8px;'>Lap 1 Time</th>"
+                "</tr></thead>"
+                f"<tbody>{rows_html}</tbody></table></div>"
+            )
+            st.markdown(table_html, unsafe_allow_html=True)
+

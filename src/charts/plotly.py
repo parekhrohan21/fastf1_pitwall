@@ -3294,3 +3294,266 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
         legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1),
     )
     return fig
+
+
+def build_launch_analysis_fig(
+    launch1: dict | None,
+    launch2: dict | None = None,
+    driver1: str = "Driver 1",
+    driver2: str | None = None,
+    colour1: str = "#FF8700",
+    colour2: str = "#00D2BE",
+) -> go.Figure | None:
+    """Build 3-panel standing-start launch telemetry chart (Speed, Throttle/Brake, RPM/Clutch Drop vs Time, #200)."""
+    if not launch1 or "trace" not in launch1:
+        return None
+
+    tr1 = launch1["trace"]
+    t1 = np.asarray(tr1.get("t_s", []), dtype=float)
+    spd1 = np.asarray(tr1.get("speed_kmh", []), dtype=float)
+    thr1 = np.asarray(tr1.get("throttle_pct", []), dtype=float)
+    rpm1 = np.asarray(tr1.get("rpm", []), dtype=float)
+    gear1 = np.asarray(tr1.get("gear", []), dtype=int)
+    dist1 = np.asarray(tr1.get("dist_m", []), dtype=float)
+    acc1 = np.asarray(tr1.get("accel_g", []), dtype=float)
+    if len(t1) < 4 or len(spd1) != len(t1):
+        return None
+
+    has_d2 = bool(launch2 and "trace" in launch2 and driver2)
+    if has_d2 and str(colour1).strip().lower() == str(colour2).strip().lower():
+        colour2 = "#9AA0A6"
+
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.06,
+        row_heights=[0.42, 0.28, 0.30],
+        subplot_titles=(
+            "Launch Speed Profile (km/h) & 100 / 200 km/h Milestones",
+            "Dual-Clutch Bite-Point & Throttle Modulation (%)",
+            "Engine RPM, Clutch Drop & Gear Shifts",
+        ),
+    )
+
+    # Compute head-to-head distance lead if Driver 2 is present on the same time grid
+    if has_d2:
+        tr2 = launch2["trace"]
+        t2 = np.asarray(tr2.get("t_s", []), dtype=float)
+        spd2 = np.asarray(tr2.get("speed_kmh", []), dtype=float)
+        thr2 = np.asarray(tr2.get("throttle_pct", []), dtype=float)
+        rpm2 = np.asarray(tr2.get("rpm", []), dtype=float)
+        gear2 = np.asarray(tr2.get("gear", []), dtype=int)
+        dist2 = np.asarray(tr2.get("dist_m", []), dtype=float)
+        acc2 = np.asarray(tr2.get("accel_g", []), dtype=float)
+        spd2_on_1 = np.interp(t1, t2, spd2) if len(t2) else np.zeros_like(t1)
+        dist2_on_1 = np.interp(t1, t2, dist2) if len(t2) else np.zeros_like(t1)
+        custom1 = np.column_stack([dist1, gear1, acc1, spd1 - spd2_on_1, dist1 - dist2_on_1])
+        hover1 = (
+            f"<b>{driver1}</b> · t = %{{x:.2f}} s<br>"
+            "Speed: <b>%{y:.1f} km/h</b> (Δ %{customdata[3]:+.1f} km/h)<br>"
+            "Distance from grid: %{customdata[0]:.1f} m (Lead: %{customdata[4]:+.1f} m)<br>"
+            "Gear: %{customdata[1]:.0f} · Long. Accel: %{customdata[2]:+.2f} G<extra></extra>"
+        )
+    else:
+        custom1 = np.column_stack([dist1, gear1, acc1])
+        hover1 = (
+            f"<b>{driver1}</b> · t = %{{x:.2f}} s<br>"
+            "Speed: <b>%{y:.1f} km/h</b><br>"
+            "Distance from grid: %{customdata[0]:.1f} m<br>"
+            "Gear: %{customdata[1]:.0f} · Long. Accel: %{customdata[2]:+.2f} G<extra></extra>"
+        )
+
+    # Row 1: Speed vs Time
+    fig.add_trace(
+        go.Scatter(
+            x=t1,
+            y=spd1,
+            mode="lines",
+            name=driver1,
+            line=dict(color=colour1, width=2.8),
+            customdata=custom1,
+            hovertemplate=hover1,
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Row 2: Throttle vs Time
+    fig.add_trace(
+        go.Scatter(
+            x=t1,
+            y=thr1,
+            mode="lines",
+            name=f"{driver1} Throttle",
+            showlegend=False,
+            line=dict(color=colour1, width=2.3),
+            customdata=np.column_stack([spd1, gear1]),
+            hovertemplate=(
+                f"<b>{driver1}</b> · t = %{{x:.2f}} s<br>"
+                "Throttle: <b>%{y:.0f}%</b> · Speed: %{customdata[0]:.0f} km/h · Gear %{customdata[1]:.0f}<extra></extra>"
+            ),
+        ),
+        row=2,
+        col=1,
+    )
+
+    # Row 3: RPM vs Time
+    fig.add_trace(
+        go.Scatter(
+            x=t1,
+            y=rpm1,
+            mode="lines",
+            name=f"{driver1} RPM",
+            showlegend=False,
+            line=dict(color=colour1, width=2.3),
+            customdata=np.column_stack([gear1, acc1, spd1]),
+            hovertemplate=(
+                f"<b>{driver1}</b> · t = %{{x:.2f}} s<br>"
+                "RPM: <b>%{y:.0f}</b> · Gear %{customdata[0]:.0f}<br>"
+                "Speed: %{customdata[2]:.0f} km/h · Long. Accel: %{customdata[1]:+.2f} G<extra></extra>"
+            ),
+        ),
+        row=3,
+        col=1,
+    )
+
+    # Secondary driver traces in Compare Mode
+    if has_d2 and len(t2) >= 4:
+        spd1_on_2 = np.interp(t2, t1, spd1)
+        dist1_on_2 = np.interp(t2, t1, dist1)
+        custom2 = np.column_stack([dist2, gear2, acc2, spd2 - spd1_on_2, dist2 - dist1_on_2])
+        fig.add_trace(
+            go.Scatter(
+                x=t2,
+                y=spd2,
+                mode="lines",
+                name=driver2,
+                line=dict(color=colour2, width=2.5, dash="dash"),
+                customdata=custom2,
+                hovertemplate=(
+                    f"<b>{driver2}</b> · t = %{{x:.2f}} s<br>"
+                    "Speed: <b>%{y:.1f} km/h</b> (Δ %{customdata[3]:+.1f} km/h)<br>"
+                    "Distance from grid: %{customdata[0]:.1f} m (Lead: %{customdata[4]:+.1f} m)<br>"
+                    "Gear: %{customdata[1]:.0f} · Long. Accel: %{customdata[2]:+.2f} G<extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=t2,
+                y=thr2,
+                mode="lines",
+                name=f"{driver2} Throttle",
+                showlegend=False,
+                line=dict(color=colour2, width=2.1, dash="dash"),
+                customdata=np.column_stack([spd2, gear2]),
+                hovertemplate=(
+                    f"<b>{driver2}</b> · t = %{{x:.2f}} s<br>"
+                    "Throttle: <b>%{y:.0f}%</b> · Speed: %{customdata[0]:.0f} km/h · Gear %{customdata[1]:.0f}<extra></extra>"
+                ),
+            ),
+            row=2,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=t2,
+                y=rpm2,
+                mode="lines",
+                name=f"{driver2} RPM",
+                showlegend=False,
+                line=dict(color=colour2, width=2.1, dash="dash"),
+                customdata=np.column_stack([gear2, acc2, spd2]),
+                hovertemplate=(
+                    f"<b>{driver2}</b> · t = %{{x:.2f}} s<br>"
+                    "RPM: <b>%{y:.0f}</b> · Gear %{customdata[0]:.0f}<br>"
+                    "Speed: %{customdata[2]:.0f} km/h · Long. Accel: %{customdata[1]:+.2f} G<extra></extra>"
+                ),
+            ),
+            row=3,
+            col=1,
+        )
+
+    # Reference milestone lines at 100 km/h and 200 km/h on Panel 1
+    for target_v, lbl in ((100.0, "100 km/h"), (200.0, "200 km/h")):
+        fig.add_hline(
+            y=target_v,
+            line=dict(color="rgba(160,160,160,0.45)", width=1, dash="dot"),
+            row=1,
+            col=1,
+        )
+
+    # Milestone diamond markers for 100 km/h and 200 km/h crossings
+    for l_dict, drv_lbl, col_hex in (
+        [(launch1, driver1, colour1)] + ([(launch2, driver2, colour2)] if has_d2 else [])
+    ):
+        t_mv = float(l_dict.get("t_move_s") or 0.0)
+        pts_x, pts_y, pts_txt = [], [], []
+        if l_dict.get("t_0_100_s") is not None:
+            pts_x.append(t_mv + float(l_dict["t_0_100_s"]))
+            pts_y.append(100.0)
+            pts_txt.append(f"{drv_lbl} 0–100: {l_dict['t_0_100_s']:.2f}s ({l_dict.get('d_0_100_m', 0):.1f}m)")
+        if l_dict.get("t_0_200_s") is not None:
+            pts_x.append(t_mv + float(l_dict["t_0_200_s"]))
+            pts_y.append(200.0)
+            pts_txt.append(f"{drv_lbl} 0–200: {l_dict['t_0_200_s']:.2f}s ({l_dict.get('d_0_200_m', 0):.1f}m)")
+        if pts_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=pts_x,
+                    y=pts_y,
+                    mode="markers",
+                    name=f"{drv_lbl} Milestones",
+                    showlegend=False,
+                    marker=dict(symbol="diamond", size=9, color=col_hex, line=dict(width=1.5, color="#ffffff")),
+                    text=pts_txt,
+                    hovertemplate="<b>%{text}</b><extra></extra>",
+                ),
+                row=1,
+                col=1,
+            )
+
+    # Turn 1 Braking vertical reference line (Driver 1)
+    t1_brk_s = launch1.get("t1_brake_time_s")
+    t1_mv_s = float(launch1.get("t_move_s") or 0.0)
+    if t1_brk_s is not None and 1.5 <= (t1_mv_s + float(t1_brk_s)) <= 10.0:
+        x_brk = t1_mv_s + float(t1_brk_s)
+        for r_idx in (1, 2, 3):
+            fig.add_vline(
+                x=x_brk,
+                line=dict(color="rgba(231, 76, 60, 0.65)", width=1.3, dash="dashdot"),
+                row=r_idx,
+                col=1,
+            )
+        fig.add_annotation(
+            x=x_brk,
+            y=1.0,
+            xref="x",
+            yref="y domain",
+            text=f"T1 Brake ({launch1.get('t1_brake_dist_m', 0):.0f} m)",
+            showarrow=False,
+            xanchor="right",
+            yanchor="top",
+            font=dict(size=10, color="#e74c3c"),
+            bgcolor="rgba(0,0,0,0.35)",
+        )
+
+    grid_col = "rgba(128,128,128,0.18)"
+    fig.update_xaxes(gridcolor=grid_col, zeroline=False, range=[0.0, 10.0])
+    fig.update_xaxes(title_text="Elapsed Time from Lights Out (s)", row=3, col=1)
+    fig.update_yaxes(gridcolor=grid_col, zeroline=False)
+    fig.update_yaxes(title_text="Speed (km/h)", row=1, col=1)
+    fig.update_yaxes(title_text="Throttle (%)", range=[-5, 106], row=2, col=1)
+    fig.update_yaxes(title_text="Engine RPM", row=3, col=1)
+    fig.update_layout(
+        height=660,
+        margin=dict(l=60, r=20, t=45, b=40),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="right", x=1),
+    )
+    return fig

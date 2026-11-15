@@ -63,6 +63,7 @@ sequence; the mapping is given in each record where one exists.
 | [031](#adr-031--zero-auth-multi-source-f1-data-pipeline-openf1--multiviewer--jolpica-f1) | Zero-auth multi-source F1 data pipeline (OpenF1 + MultiViewer + Jolpica-F1) | Free API Fallback |
 | [032](#adr-032--speed-scaled-curvature-smoothing-for-corner-geometry) | Speed-scaled curvature smoothing for corner geometry | #198 |
 | [033](#adr-033--micro-sector-deltas-anchored-to-official-timing) | Micro-sector deltas anchored to official timing | #199 |
+| [034](#adr-034--standing-start-launch-telemetry-and-first-crossing-interpolation) | Standing-start launch telemetry and first-crossing interpolation | #200 |
 
 ---
 
@@ -624,3 +625,23 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 - *Mean speed per bin as the winner*: biased towards the slow end of a bin because samples are evenly spaced in time, not distance.
 
 **Consequences & guardrails.** On cached 2025 and 2026 British GP and 2026 Miami GP race laps the lap gap and all three sector gaps match official timing to the millisecond. Compare Mode only, same circuit only; synthesised fallback traces are declined. The DRS channel is all zeros in some recent cached laps (and DRS is gone under the 2026 rules), so DRS bands simply do not appear there. `tests/test_microsector_delta.py` (9 tests).
+
+---
+
+## ADR-034 — Standing-start launch telemetry and first-crossing interpolation
+
+**Issue / PR:** #200 · `AGENT.md` Decision #51 · review notes in `src/data/loader.py`
+
+**Context.** Dissecting a race start on Lap 1 (reaction latency from lights out, 0–100 km/h and 0–200 km/h times and distances, clutch bite-point RPM drop, wheelspin modulation, and Turn 1 braking) faces three data hazards: (1) a full Lap 1 speed trace is non-monotonic because cars brake hard into Turn 1 and subsequent corners, so passing the full-lap `Speed` array to `np.interp` returns late-lap timestamps (15–60 s); (2) F1 car telemetry is sampled at ~3.7–4.2 Hz (~240 ms intervals), which is coarser than driver reaction differences (20–100 ms); and (3) `sess.get_circuit_info()` can fail offline if MultiViewer corner metadata is not cached.
+
+**Decision.**
+1. **Launch-pull windowing & first-crossing interpolation (`_interp_first_speed_crossing`):** Locate motion onset `idx_move` (first sample $> 1.5\text{ km/h}$ building to $\ge 40\text{ km/h}$) and Turn 1 braking onset `idx_t1_brake` (first brake application or deceleration $<-1.15\,g$ after reaching $\ge 110\text{ km/h}$). Scan strictly within `[idx_move, idx_pull_end]` for the first crossing of 60, 100 and 200 km/h and linearly interpolate both elapsed time and grid-referenced distance.
+2. **Sub-sample reaction time & motion onset (`_analyze_driver_launch`):** Back-project the initial speed ramp $dv/dt$ to $v = 0$ (`t_move_s`) and back-project the clutch-engagement RPM drop slope $d\text{RPM}/dt$ to the stationary pre-launch RPM plateau (`t_clutch_s`), combining both relative to the Lap 1 lights-out reference (`Time == 0`).
+3. **Cumulative wheelspin index:** Sum same-gear RPM flares ($d\text{RPM}/\text{RPM} - dv/v > 0.06$), pre-braking throttle-feather drops ($\ge 3\%$), and 1st-gear clutch slip excess into a monotonically increasing `wheelspin_index` (`0–100`) and `traction_efficiency_pct` (`100 - wheelspin_index`).
+4. **Offline-safe Turn 1 braking & selective network fetching (`_build_launch_analysis_data`):** Wrap `sess.get_circuit_info()` in `try/except` with telemetry-based Turn 1 brake detection fallback. Fetch Lap 1 telemetry for all 20 drivers when already in memory (native FastF1 `.ff1pkl` sessions) and only for selected/cached drivers on live OpenF1 sessions to avoid 20-driver rate-limit stalls.
+
+**Alternatives & trade-offs.**
+- *Whole-lap `np.interp(100.0, spd, t)`*: failed on real 2024 Bahrain GP data (returned 14.0 s for 0–100 km/h and 55.9 s for 0–200 km/h because `np.interp` requires monotonic x).
+- *Averaging (`np.mean`) wheelspin event scores*: adding a second smaller throttle-feather event lowered the average score (caught by `test_wheelspin_and_throttle_feather_reduce_traction_efficiency`); replaced with cumulative summation.
+
+**Consequences & guardrails.** Validated on cached 2024 Bahrain GP, 2024 Chinese GP and 2023 Monaco GP race telemetry (2024 Bahrain: VER 0–100 in 2.69 s / 39.9 m, 0–200 in 5.11 s / 151.2 m; PER 0–200 in 4.94 s vs SAI 5.38 s). Gated to Race and Sprint sessions; declines `Synthetic` fallback traces and rolling Safety Car starts ($\min v > 25\text{ km/h}$). `tests/test_launch_analysis.py` (8 tests).
