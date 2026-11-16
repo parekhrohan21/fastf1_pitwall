@@ -1182,7 +1182,9 @@ _render_corner_geometry_section(
 
 # ── Start Line Reaction Time & Launch Telemetry Acceleration Analyzer (#200) ──
 # Standing-start launch analysis on Lap 1 (0–100 km/h, 0–200 km/h, reaction time,
-# clutch bite-point RPM drop, wheelspin & Turn 1 braking). Race / Sprint only.
+# clutch bite-point RPM drop, wheelspin & Turn 1 braking). Race / Sprint only;
+# reads sess.name from the loaded session (not the sidebar) and passes sess2 /
+# _all_laps2 so cross-session Race/Sprint comparisons work seamlessly.
 try:
     _launch_session_type = str(sess.name)
 except Exception:

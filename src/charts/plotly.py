@@ -3296,6 +3296,7 @@ def build_microsector_streamgraph_fig(md: dict | None, driver1: str, driver2: st
     return fig
 
 
+# CHANGE (#200): 3-panel standing-start launch telemetry chart on a 0-10 s lights-out clock.
 def build_launch_analysis_fig(
     launch1: dict | None,
     launch2: dict | None = None,
@@ -3319,6 +3320,7 @@ def build_launch_analysis_fig(
     if len(t1) < 4 or len(spd1) != len(t1):
         return None
 
+    # Teammates share the same team colour; fall back to neutral grey for Driver 2 so traces stay distinct.
     has_d2 = bool(launch2 and "trace" in launch2 and driver2)
     if has_d2 and str(colour1).strip().lower() == str(colour2).strip().lower():
         colour2 = "#9AA0A6"

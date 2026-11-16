@@ -4190,6 +4190,7 @@ def _render_microsector_section(
     )
 
 
+# CHANGE (#200): Race / Sprint standing-start launch KPI cards, 3-panel chart, and Lap 1 leaderboard.
 def _render_launch_analysis_section(
     sess_k: str,
     session_obj,
@@ -4207,6 +4208,7 @@ def _render_launch_analysis_section(
     sess_k2: str | None = None,
 ):
     """Render Start Line Reaction Time & Launch Telemetry Acceleration Analyzer (#200, Race / Sprint only)."""
+    # Practice and Qualifying have no standing start; gate on both short codes and full session names.
     if str(session_type).strip() not in ("R", "S", "Race", "Sprint"):
         return
 

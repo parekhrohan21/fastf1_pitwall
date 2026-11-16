@@ -8213,6 +8213,9 @@ def _build_microsector_delta_cached(cache_key: str, tel1_df: pd.DataFrame, tel2_
 
 
 # ── Start Line Reaction Time & Launch Telemetry Acceleration Analyzer (#200) ──
+# CHANGE (#200): Dissects standing starts on Lap 1 of Race and Sprint sessions
+# (reaction latency from lights out, 0-100/200 km/h splits, clutch bite-point
+# RPM drop, wheelspin modulation, Turn 1 braking, and Lap 1 position delta).
 #
 # Review notes (#200)
 # -------------------
@@ -8382,6 +8385,7 @@ def _analyze_driver_launch(
         dist_raw = np.cumsum((spd / 3.6) * dt_step)
 
     # 2. Verify standing-start signature (car must start from rest / near-rest <= 25 km/h)
+    # Rolling / Safety Car starts begin > 50 km/h and are rejected so they never skew launch metrics.
     early_mask = t_raw <= (t_raw[0] + 6.0)
     if not early_mask.any() or float(np.nanmin(spd[early_mask])) > 25.0:
         return None
@@ -8389,6 +8393,7 @@ def _analyze_driver_launch(
         return None
 
     # 3. Locate launch motion onset (idx_move): first sample > 1.5 km/h that builds into a real launch (> 40 km/h)
+    # Requiring >= 40 km/h within 12 samples (~3 s) ignores 1-2 km/h GPS/wheel-speed jitter while waiting on the grid.
     idx_move = None
     for i in range(len(spd)):
         if spd[i] > 1.5 and t_raw[i] <= t_raw[0] + 10.0:
@@ -8399,7 +8404,8 @@ def _analyze_driver_launch(
     if idx_move is None:
         return None
 
-    # Back-project speed ramp to v = 0 for sub-sample motion onset timestamp t_move_s
+    # Back-project speed ramp to v = 0 for sub-sample motion onset timestamp t_move_s.
+    # Floor dv/dt at 18 km/h/s (~0.5 g) so a slow initial sample interval does not push t_move_s too far backward.
     if idx_move > 0 and idx_move + 1 < len(spd):
         dt_mv = max(float(t_raw[idx_move + 1] - t_raw[idx_move]), 0.05)
         dv_dt = max(float(spd[idx_move + 1] - spd[idx_move]) / dt_mv, 18.0)
@@ -8413,6 +8419,7 @@ def _analyze_driver_launch(
         d_move_m = float(dist_raw[idx_move])
 
     # 4. Pre-launch RPM, clutch-drop RPM decay, and Reaction Time (ms from lights out)
+    # Releasing the clutch paddle loads the engine at -3,000 to -7,000 RPM/s ~80 ms before wheel speed rises.
     pre_slice_end = max(idx_move + 1, 2)
     pre_launch_rpm = float(np.nanmax(rpm[:pre_slice_end])) if len(rpm[:pre_slice_end]) else 0.0
     if idx_move > 0 and idx_move + 1 < len(rpm) and pre_launch_rpm > 4000.0:
@@ -8424,7 +8431,8 @@ def _analyze_driver_launch(
     else:
         t_clutch_s = max(0.04, t_move_s - 0.08)
 
-    # Reaction time is referenced to lights out (t = 0 on Lap 1 when stationary phase starts near 0)
+    # Reaction time is referenced to lights out (t = 0 on Lap 1 when stationary phase starts near 0);
+    # clamped to [120, 950] ms to bound ~4 Hz sensor quantisation noise.
     lights_out_ref_s = 0.0 if (0.0 <= t_raw[0] <= 1.2 and t_move_s <= 2.5) else float(t_raw[max(0, idx_move - 1)])
     raw_rt_s = 0.5 * ((t_clutch_s - lights_out_ref_s) + max(0.08, (t_move_s - lights_out_ref_s) - 0.08))
     reaction_time_ms = float(np.clip(raw_rt_s * 1000.0, 120.0, 950.0))
@@ -8538,6 +8546,7 @@ def _analyze_driver_launch(
             if rpm[k] > expected_rpm + 2200.0 and k > idx_move + 1:
                 slip_scores.append(min(20.0, (rpm[k] - expected_rpm - 2200.0) / 110.0))
 
+    # Cumulative slip penalty from 4.0% baseline so multiple wheelspin events strictly increase wheelspin_index.
     wheelspin_index = float(np.clip(4.0 + float(np.sum(slip_scores)), 0.0, 100.0))
     traction_efficiency_pct = float(np.clip(100.0 - wheelspin_index, 0.0, 100.0))
 
@@ -8720,7 +8729,8 @@ def _build_launch_analysis_data(
         gap_l1_s = (lap1_s - leader_l1_s) if (lap1_s is not None and leader_l1_s is not None) else None
         compound = str(row.get("Compound") or "UNKNOWN").upper()
 
-        # Fetch telemetry for target drivers always; for the rest of the grid when in-memory / cached
+        # Fetch telemetry for target drivers always; for the rest of the grid only when already in memory/cached
+        # so live OpenF1 sessions do not stall making 20 sequential car_data + location requests.
         allow_net = (drv in target_drivers) or (not is_free_sess)
         tel_df = _extract_driver_lap1_telemetry(_sess_obj, drv, allow_network_fetch=allow_net)
         launch_info = _analyze_driver_launch(

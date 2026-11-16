@@ -660,6 +660,9 @@ Each chart section follows the same pattern:
 | Corner Exit Traction & Throttle Pick-Up (3-subplot) | Plotly subplots | `_calculate_traction_metrics` | `build_traction_exit_fig` | `_render_traction_exit_section` and `render_maps_block` (`with map_tab5`). 3 subplots: Throttle (%) with pick-up/full/hesitation markers, Speed (km/h), Longitudinal Acceleration ($G$) vs distance relative to apex. |
 | Gear Shift Strategy & RPM Power Band (2-subplot) | Plotly subplots | `_calculate_gear_shift_metrics` | `build_gear_shift_fig` | `_render_gear_analysis_section`. 2 subplots: Engine RPM vs Track Distance with shift markers & Horizontal gear distribution (% distance in gears 1-8). |
 | Driver Driving Style DNA Spider Radar (6-axis) | Plotly polar radar + HTML | `_calculate_driving_style_dna`, `_classify_driving_style` | `build_driving_style_dna_fig` + `_render_driving_style_dna_section` | `tel1`, `tel2` DataFrames + `sess.get_circuit_info()`. 6 normalised (0–100) axes (Trail-Braking, Throttle Aggression, Steering/Trajectory Smoothness, RPM Exploitation, Apex Commitment, High-Speed Aero Confidence) + archetype badges. |
+| Corner Geometry & Minimum-Radius Apex Analysis | Plotly scatter + HTML | `_build_corner_geometry`, `_compare_corner_lines`, `_build_corner_geometry_cached` | `build_corner_geometry_fig` + `_render_corner_geometry_section` | `tel1`, `tel2` X/Y traces + `sess.get_circuit_info()`. 2 m arc-length resampled curvature radius, geometric vs official apex offset, Compare Mode lateral offsets, and > 6.5 g low-confidence flags. |
+| Start Line Reaction Time & Launch Telemetry Acceleration Analyzer | Plotly 3-subplot + HTML | `_analyze_driver_launch`, `_build_launch_analysis_data` | `build_launch_analysis_fig` + `_render_launch_analysis_section` | Lap 1 car telemetry + `sess.results` (`GridPosition`) + `sess.laps` (`Position`) (Race / Sprint only). Sub-sample reaction latency, 0–100/200 km/h splits, clutch RPM drop, wheelspin efficiency, Turn 1 braking, and full-grid Opening-Lap Launch Leaderboard. |
+| Micro-Sector Speed Delta & Dominance Timeline | Plotly 3-subplot + HTML | `_build_microsector_delta`, `_build_microsector_delta_cached` | `build_microsector_streamgraph_fig` + `_render_microsector_section` | `tel1`, `tel2` DataFrames + official `LapTime` / `Sector*Time` + `corners_df` (Compare Mode, same circuit). Speed-delta ribbon, running gap (ms), and 50 m micro-sector gains with corner/DRS bands. |
 | Tyre Stint Strategy & Pit Window Simulator | Plotly subplots + HTML | `_build_strategy_simulation`, `_build_compound_deg_models`, `_optimise_strategies` | `build_strategy_timeline_fig`, `build_deg_matrix_fig` + `_render_strategy_simulator_section` | `sess.laps` (Race / Sprint only). Zero-fuel compound pace curves, exhaustive 1/2-stop solver, re-optimisation from any lap, and ±3-lap undercut risk table. |
 | Speed Trap Radar Profile (4-axis) | Plotly polar radar | `_calculate_speed_trap_metrics` | `build_speed_trap_radar_fig` | `_render_speed_trap_section`. 4 polar axes (ST, I1, I2, FL) with driver overlays and grid maximum baseline. |
 | Speed Trap / PU Benchmarks (Grouped Bars) | Plotly grouped bar | `_calculate_speed_trap_metrics` | `build_speed_trap_bar_fig` | `_render_speed_trap_section`. Compares timing trap velocities across constructors or power units (Max vs Mean). |
@@ -1878,7 +1881,28 @@ Constructs a stacked 3-row Plotly figure sharing an aligned X-axis (Track Distan
 
 ---
 
-*Last updated: October 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
+## 36. Start Line Reaction Time & Launch Telemetry Acceleration Analyzer Architecture
+
+### Motivation & Background
+
+Race starts frequently decide track position into Turn 1 before aerodynamic pace even settles. Dissecting a Formula 1 standing start requires isolating the initial acceleration pull on Lap 1 from lights out to Turn 1 braking (`0` to `200+ km/h`) while accounting for ~4 Hz car telemetry sampling intervals and non-monotonic post-Turn 1 speeds.
+
+### Data Layer (`_interp_first_speed_crossing`, `_analyze_driver_launch`, `_build_launch_analysis_data` — `src/data/loader.py`)
+
+- **Cache Decorator**: `@st.cache_data(show_spinner=False, ttl=3600)` on `_build_launch_analysis_data(sess_k, laps_df, _sess_obj=None, driver1="", driver2=None, compare=False)`.
+- **Standing-Start & Synthetic Guardrails**: Rejects traces flagged `Synthetic == True` and rolling/Safety Car starts where early minimum speed exceeds `25 km/h`.
+- **Sub-Sample Reaction Time & Launch Onset**: Detects motion onset `idx_move` (`Speed > 1.5 km/h` building to `>= 40 km/h`) and back-projects both the initial speed ramp `dv/dt` to `v = 0` and the clutch-engagement RPM drop slope `d(RPM)/dt` to the pre-launch limiter plateau relative to the Lap 1 lights-out reference (`Time == 0`).
+- **First-Crossing Interpolation**: Detects Turn 1 braking onset `idx_t1_brake` (`Brake == True` or `accel_g < -1.15 g` after reaching `>= 110 km/h`) and calls `_interp_first_speed_crossing` strictly within `[idx_move, idx_pull_end]` for `60`, `100`, and `200 km/h` times and distances.
+- **Clutch Bite-Point & Wheelspin Efficiency**: Computes `pre_launch_rpm`, `clutch_dip_rpm`, `rpm_drop`, `bite_point_throttle_pct`, `peak_accel_g`, and cumulative `wheelspin_index` / `traction_efficiency_pct` across 1st–4th gear.
+
+### Chart & UI Layers (`build_launch_analysis_fig` — `src/charts/plotly.py`, `_render_launch_analysis_section` — `src/ui/components.py`)
+
+- **3-Subplot Time-Aligned Figure**: Shared `0.0–10.0 s` elapsed time axis from lights out showing Speed (with `100 / 200 km/h` milestone diamonds and Turn 1 braking vline), Throttle (%), and Engine RPM, with `#9AA0A6` fallback when teammates share a livery colour.
+- **UI**: Gated to Race and Sprint sessions (`R`, `S`, `Race`, `Sprint`); renders 5 KPI cards, Compare Mode launch advantage callouts, the Plotly figure, and a full-grid **Standing Start & Lap 1 Acceleration Leaderboard**.
+
+---
+
+*Last updated: November 2026. Keep this document in sync when adding new sections, helpers, or architectural patterns.*
 
 
 
