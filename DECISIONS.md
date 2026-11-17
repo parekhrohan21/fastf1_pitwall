@@ -64,6 +64,7 @@ sequence; the mapping is given in each record where one exists.
 | [032](#adr-032--speed-scaled-curvature-smoothing-for-corner-geometry) | Speed-scaled curvature smoothing for corner geometry | #198 |
 | [033](#adr-033--micro-sector-deltas-anchored-to-official-timing) | Micro-sector deltas anchored to official timing | #199 |
 | [034](#adr-034--standing-start-launch-telemetry-and-first-crossing-interpolation) | Standing-start launch telemetry and first-crossing interpolation | #200 |
+| [035](#adr-035--unified-disk-cache-shared-session-resource-and-lazy-telemetry) | Unified disk cache, shared session resource and lazy telemetry | #203 |
 
 ---
 
@@ -645,3 +646,19 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 - *Averaging (`np.mean`) wheelspin event scores*: adding a second smaller throttle-feather event lowered the average score (caught by `test_wheelspin_and_throttle_feather_reduce_traction_efficiency`); replaced with cumulative summation.
 
 **Consequences & guardrails.** Validated on cached 2024 Bahrain GP, 2024 Chinese GP and 2023 Monaco GP race telemetry (2024 Bahrain: VER 0–100 in 2.69 s / 39.9 m, 0–200 in 5.11 s / 151.2 m; PER 0–200 in 4.94 s vs SAI 5.38 s). Gated to Race and Sprint sessions; declines `Synthetic` fallback traces and rolling Safety Car starts ($\min v > 25\text{ km/h}$). `tests/test_launch_analysis.py` (8 tests).
+
+---
+
+## ADR-035 — Unified disk cache, shared session resource and lazy telemetry
+
+**Issue / PR:** #203 · `AGENT.md` Decision #52 · review notes in `src/data/loader.py`
+
+**Context.** `CACHE_DIR` previously pointed to `src/data/cache` while `README.md`, `AGENT.md`, and `Dockerfile` mounted `./cache:/app/cache`. In addition, `load_session` re-parsed `.ff1pkl` files per browser session with `telemetry=True` upfront, `load_schedule` ran uncached on every rerun, `matplotlib` + `src.charts.video` imported eagerly at startup, and heavy interactive sections triggered full-page reruns.
+
+**Decision.**
+1. **Unified cache root:** `CACHE_DIR` defaults to repo-root `./cache` (overridable via `FASTF1_CACHE_DIR`), keeping `src/data/cache` (`LEGACY_CACHE_DIR`) as a read-only fallback for both `.ff1pkl` and `free_api_cache` lookups.
+2. **Shared session & schedule caching:** `load_session` is wrapped in `@st.cache_resource(max_entries=8, ttl=3600)` so multiple browser sessions share the same parsed `Session`; `load_schedule` is wrapped in `@st.cache_data(ttl=3600)`.
+3. **Laps-first + lazy telemetry:** `app.py` calls `load_session(..., load_telemetry=False)` and upgrades the session via thread-safe `ensure_session_telemetry()` (guarded by `_TELEMETRY_LOCK`) only when reaching telemetry sections.
+4. **Lazy imports & fragment isolation:** `matplotlib` / `src.charts.matplotlib` and `src.charts.video` are imported only where rendered; 6 interactive heavy sections (`Teammate Battle`, `Grid Heatmap`, `Race Control Feed`, `Track Map`, `Brag Video`, `Weekend Progression`) run inside `@st.fragment`.
+
+**Consequences & guardrails.** Measured on 2024 Bahrain GP (warm cache): cold startup imports dropped from `8.734 s` to `0.365 s`, laps-first `load_session` dropped from `1.288 s` to `0.594 s`, and second-user `@st.cache_resource` hits take `0.000078 s`. `tests/test_cache_and_perf.py` (6 tests).

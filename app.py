@@ -78,8 +78,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import matplotlib
-import matplotlib.pyplot as plt
+# CHANGE (#203): Defer importing matplotlib and src.charts.matplotlib until the
+# Telemetry Charts section so cold-start / landing renders skip font-cache & mpl setup.
 
 # Streamlit Page Config MUST be run first before any other Streamlit widgets!
 st.set_page_config(
@@ -92,7 +92,7 @@ st.set_page_config(
 # Modular imports
 from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
-    load_schedule, load_session, clear_session_cache, livetiming_rejects_requests, f1_sign_in_error, format_laptime, driver_colour, hex_to_rgb,
+    load_schedule, load_session, ensure_session_telemetry, clear_session_cache, livetiming_rejects_requests, f1_sign_in_error, format_laptime, driver_colour, hex_to_rgb,
     _build_driver_labels, get_telemetry_cached, _format_classification_time,
     _map_driver_id_to_number, _get_session_winner, _get_default_gp_index,
     get_constructor_colour, is_same_team, _build_constructor_standings,
@@ -125,9 +125,8 @@ from src.ui.components import (
 )
 from src.charts.plotly import (
     _lap_history_fig, _fuel_pace_fig, _stint_fig, _gap_chart_fig,
-    build_tyre_deg_fig, build_undercut_chart, _add_flag_zones
+    _speed_map_fig, _input_map_fig, build_tyre_deg_fig, build_undercut_chart, _add_flag_zones
 )
-from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart, AVAILABLE_CHANNELS
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 # Every user control lives here. Values are re-read on each rerun, but nothing
@@ -345,7 +344,9 @@ if load_btn:
             try:
                 # load_session tries the local cache, then the free APIs (and F1
                 # live timing if signed in); an empty lap table counts as a failure
-                sess = load_session(year, gp, session_type)
+                # CHANGE (#203): Load laps-first (load_telemetry=False); heavy car/pos
+                # telemetry is fetched lazily by ensure_session_telemetry() below.
+                sess = load_session(year, gp, session_type, load_telemetry=False)
                 if not hasattr(sess, "laps") or sess.laps is None or sess.laps.empty:
                     raise ValueError("No lap data available for this session.")
                 st.session_state["session"] = sess
@@ -379,7 +380,7 @@ if load_btn:
     if compare_sessions and not live_mode:
         with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~15–30 s)"):
             try:
-                sess2 = load_session(year2, gp2, session_type2)
+                sess2 = load_session(year2, gp2, session_type2, load_telemetry=False)
                 if not hasattr(sess2, "laps") or sess2.laps is None or sess2.laps.empty:
                     raise ValueError("No lap data available for this session.")
                 st.session_state["session2"] = sess2
@@ -614,14 +615,19 @@ if compare and driver2:
 # Car data (speed, throttle, brake, RPM, gear, DRS) for the selected lap(s),
 # used by braking, gears, era comparison and the telemetry charts. inject_styles
 # runs again so the page accent colour follows Driver 1's team.
+# CHANGE (#203): Lazily populate car & position telemetry onto the shared session
+# object(s) only when telemetry sections are reached.
+with st.spinner("Loading car & position telemetry…"):
+    ensure_session_telemetry(sess)
+    if sess2 is not None:
+        ensure_session_telemetry(sess2)
+
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
 
 colour1 = driver_colour(sess, driver1)
 inject_styles(colour1)
 colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver2 else "#27F4D2"
-
-matplotlib.rcParams.update(MATPLOTLIB_THEME)
 
 # ── Lap Summary ───────────────────────────────────────────────────────────────
 # Headline cards for each selected lap.
@@ -1221,6 +1227,13 @@ if tel1 is None:
     st.stop()
 
 # ── Telemetry Channel Filter ──────────────────────────────────────────────────
+# CHANGE (#203): Lazy-import matplotlib & src.charts.matplotlib only when
+# Telemetry Charts render so cold-start / landing skips Matplotlib setup.
+import matplotlib
+import matplotlib.pyplot as plt
+from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart, AVAILABLE_CHANNELS
+matplotlib.rcParams.update(MATPLOTLIB_THEME)
+
 # Note the stop just above: without Driver 1 telemetry the run ends there, so
 # every section below (including the field-wide ones) is skipped.
 selected_channels = st.multiselect(
@@ -1379,28 +1392,35 @@ _render_dirty_air_section(
 )
 
 # ── Automated Session Brag Video (Issue #171) ──────────────────────────────
-# Highlight clip for Driver 1 built from telemetry latent-space moments. Driver 2 is only
-# offered for the Pole Position Duel when it comes from the same session (sess2 is None).
-try:
-    _brag_lap_no = int(lap1["LapNumber"]) if lap1 is not None else None
-except Exception:
-    _brag_lap_no = None
-_render_brag_video_section(
-    sess, _all_laps1, driver1, _brag_lap_no, sess_key, colour1, _fmt_driver1,
-    driver2 if compare and sess2 is None else None, colour2, _fmt_driver2
-)
+# CHANGE (#203): Isolate Brag Video controls inside @st.fragment so changing
+# mode/resolution/FPS or generating a clip does not rerun the whole page.
+@st.fragment
+def _frag_brag_video():
+    try:
+        _brag_lap_no = int(lap1["LapNumber"]) if lap1 is not None else None
+    except Exception:
+        _brag_lap_no = None
+    _render_brag_video_section(
+        sess, _all_laps1, driver1, _brag_lap_no, sess_key, colour1, _fmt_driver1,
+        driver2 if compare and sess2 is None else None, colour2, _fmt_driver2
+    )
+
+_frag_brag_video()
 
 # ── Weekend Multi-Session Progression Tracker (Issue #156) ─────────────────
-# Driver 1 across every session of the loaded event. The event name comes from the
-# loaded session (not the sidebar selector, which may have changed since loading).
-# Circuit length is read from Driver 1's loaded telemetry so mileage can be shown in km.
-try:
-    _wk_event = str(sess.event["EventName"])
-    _wk_len_km = float(tel1["Distance"].max()) / 1000.0 if tel1 is not None and "Distance" in tel1.columns else None
-except Exception:
-    _wk_event, _wk_len_km = None, None
-if _wk_event:
-    _render_weekend_progression_section(year1, _wk_event, driver1, colour1, _fmt_driver1, _wk_len_km)
+# CHANGE (#203): Isolate Weekend Progression inside @st.fragment so clicking the
+# on-demand load button only updates this section.
+@st.fragment
+def _frag_weekend_progression():
+    try:
+        _wk_event = str(sess.event["EventName"])
+        _wk_len_km = float(tel1["Distance"].max()) / 1000.0 if tel1 is not None and "Distance" in tel1.columns else None
+    except Exception:
+        _wk_event, _wk_len_km = None, None
+    if _wk_event:
+        _render_weekend_progression_section(year1, _wk_event, driver1, colour1, _fmt_driver1, _wk_len_km)
+
+_frag_weekend_progression()
 
 # ── Ideal Lap vs Actual Lap ───────────────────────────────────────────────────
 # Each driver's best sectors combined into a theoretical lap, against their
@@ -1424,39 +1444,45 @@ else:
                               [colour1] + ([colour2] if compare and driver2 else []), _fmt_driver1)
 
 # ── Intra-Team Teammate Battle & Qualifying Delta Matrix ───────────────────
-# Teammates paired by constructor. In session-compare mode Session 2 gets its
-# own tab with only Driver 2 highlighted.
-st.markdown("<div class='section-title'>Intra-Team Teammate Battle & Qualifying Delta Matrix</div>", unsafe_allow_html=True)
-if sess2 is not None:
-    tab_tb1, tab_tb2 = st.tabs([f"Session 1 Teammate Battles ({year1})", f"Session 2 Teammate Battles ({year2})"])
-    with tab_tb1:
+# CHANGE (#203): Isolate interactive Qualifying/Race toggle inside @st.fragment.
+@st.fragment
+def _frag_teammate_battle():
+    st.markdown("<div class='section-title'>Intra-Team Teammate Battle & Qualifying Delta Matrix</div>", unsafe_allow_html=True)
+    if sess2 is not None:
+        tab_tb1, tab_tb2 = st.tabs([f"Session 1 Teammate Battles ({year1})", f"Session 2 Teammate Battles ({year2})"])
+        with tab_tb1:
+            _render_teammate_battle_section(
+                sess_key, _all_laps1, _sess_obj=sess,
+                highlight_driver1=driver1, highlight_driver2=driver2 if compare else None,
+                colour1=colour1, colour2=colour2 if compare else None,
+                compare=compare, fmt_func=_fmt_driver1
+            )
+        with tab_tb2:
+            _render_teammate_battle_section(
+                sess_key2, _all_laps2, _sess_obj=sess2,
+                highlight_driver1=driver2, highlight_driver2=None,
+                colour1=colour2, colour2=None,
+                compare=False, fmt_func=_fmt_driver2
+            )
+    else:
         _render_teammate_battle_section(
             sess_key, _all_laps1, _sess_obj=sess,
             highlight_driver1=driver1, highlight_driver2=driver2 if compare else None,
             colour1=colour1, colour2=colour2 if compare else None,
             compare=compare, fmt_func=_fmt_driver1
         )
-    with tab_tb2:
-        _render_teammate_battle_section(
-            sess_key2, _all_laps2, _sess_obj=sess2,
-            highlight_driver1=driver2, highlight_driver2=None,
-            colour1=colour2, colour2=None,
-            compare=False, fmt_func=_fmt_driver2
-        )
-else:
-    _render_teammate_battle_section(
-        sess_key, _all_laps1, _sess_obj=sess,
-        highlight_driver1=driver1, highlight_driver2=driver2 if compare else None,
-        colour1=colour1, colour2=colour2 if compare else None,
-        compare=compare, fmt_func=_fmt_driver1
-    )
 
+_frag_teammate_battle()
 
 
 # ── Multi-Driver Grid Analysis & Heatmaps ───────────────────────────────────────
-# Sector, pace and top-speed matrices across the grid, Session 1 only.
-st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
-_render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
+# CHANGE (#203): Isolate heatmap mode/driver multiselect inside @st.fragment.
+@st.fragment
+def _frag_grid_heatmap():
+    st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
+    _render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
+
+_frag_grid_heatmap()
 
 
 
@@ -1482,41 +1508,45 @@ else:
         _export_figs["Gap to Leader"] = _gtl_fig
 
 # ── Race Control Feed ─────────────────────────────────────────────────────────────
-# Filterable log of the race control messages built near the top of the script.
-st.markdown("<div class='section-title'>Race Control Feed</div>", unsafe_allow_html=True)
+# CHANGE (#203): Isolate Race Control filter inside @st.fragment.
+@st.fragment
+def _frag_race_control():
+    st.markdown("<div class='section-title'>Race Control Feed</div>", unsafe_allow_html=True)
 
-if _rc_messages is None or _rc_messages.empty:
-    st.info("Race control messages are not available for this session.")
-else:
-    # Flag type colour badge map
-    _FLAG_BADGE = {
-        "SAFETY CAR":         ("🟠", "#FF8C00"),
-        "VIRTUAL SAFETY CAR": ("🟡", "#FFD700"),
-        "RED FLAG":           ("🔴", "#DC0000"),
-        "YELLOW FLAG":        ("🟡", "#FFC800"),
-        "CLEAR":              ("🟢", "#39B54A"),
-        "INVESTIGATION":      ("🔵", "#5B8DEF"),
-        "INFO":               ("⚪", "#888888"),
-    }
-    # Searchable filter
-    _rc_filter_options = ["All"] + sorted(_rc_messages["FlagType"].unique().tolist())
-    _rc_filter = st.selectbox("Filter by event type", _rc_filter_options, key="rc_filter")
-    _rc_display = _rc_messages if _rc_filter == "All" else _rc_messages[_rc_messages["FlagType"] == _rc_filter]
+    if _rc_messages is None or _rc_messages.empty:
+        st.info("Race control messages are not available for this session.")
+    else:
+        # Flag type colour badge map
+        _FLAG_BADGE = {
+            "SAFETY CAR":         ("🟠", "#FF8C00"),
+            "VIRTUAL SAFETY CAR": ("🟡", "#FFD700"),
+            "RED FLAG":           ("🔴", "#DC0000"),
+            "YELLOW FLAG":        ("🟡", "#FFC800"),
+            "CLEAR":              ("🟢", "#39B54A"),
+            "INVESTIGATION":      ("🔵", "#5B8DEF"),
+            "INFO":               ("⚪", "#888888"),
+        }
+        # Searchable filter
+        _rc_filter_options = ["All"] + sorted(_rc_messages["FlagType"].unique().tolist())
+        _rc_filter = st.selectbox("Filter by event type", _rc_filter_options, key="rc_filter")
+        _rc_display = _rc_messages if _rc_filter == "All" else _rc_messages[_rc_messages["FlagType"] == _rc_filter]
 
-    # Build display columns
-    _rc_cols = [c for c in ["LapNumber", "FlagType", "Message", "Category", "Scope", "Sector"] if c in _rc_display.columns]
-    _rc_df = _rc_display[_rc_cols].copy()
-    if "LapNumber" in _rc_df.columns:
-        _rc_df["LapNumber"] = _rc_df["LapNumber"].apply(lambda x: f"Lap {int(x)}" if pd.notna(x) else "—")
-    if "FlagType" in _rc_df.columns:
-        _rc_df["FlagType"] = _rc_df["FlagType"].apply(
-            lambda ft: f"{_FLAG_BADGE.get(ft, ('⚪', '#888888'))[0]} {ft}"
+        # Build display columns
+        _rc_cols = [c for c in ["LapNumber", "FlagType", "Message", "Category", "Scope", "Sector"] if c in _rc_display.columns]
+        _rc_df = _rc_display[_rc_cols].copy()
+        if "LapNumber" in _rc_df.columns:
+            _rc_df["LapNumber"] = _rc_df["LapNumber"].apply(lambda x: f"Lap {int(x)}" if pd.notna(x) else "—")
+        if "FlagType" in _rc_df.columns:
+            _rc_df["FlagType"] = _rc_df["FlagType"].apply(
+                lambda ft: f"{_FLAG_BADGE.get(ft, ('⚪', '#888888'))[0]} {ft}"
+            )
+        st.dataframe(
+            _rc_df,
+            width="stretch",
+            hide_index=True,
         )
-    st.dataframe(
-        _rc_df,
-        width="stretch",
-        hide_index=True,
-    )
+
+_frag_race_control()
 
 
 # ── Race Position Chart ───────────────────────────────────────────────────────
@@ -1539,24 +1569,25 @@ else:
         _export_figs["Position History"] = _pos_fig
 
 # ── Track Map ─────────────────────────────────────────────────────────────────
-# Speed-coloured circuit map for the selected lap(s). In driver-compare mode
-# the second driver's line is overlaid; in session-compare mode each session
-# gets its own tab.
-st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
+# CHANGE (#203): Isolate Track Map tabs, corner selectors & race replay inside
+# @st.fragment so map interactions never rerun the full 29-section page.
+@st.fragment
+def _frag_track_map():
+    st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
+    if sess2 is not None:
+        session_map_tabs = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
+        with session_map_tabs[0]:
+            render_maps_block(sess, sess_key, driver1, colour1, lap1, "sess1", fmt_func=_fmt_driver1)
+        with session_map_tabs[1]:
+            render_maps_block(sess2, sess_key2, driver2, colour2, lap2, "sess2", fmt_func=_fmt_driver2)
+    else:
+        render_maps_block(sess, sess_key, driver1, colour1, lap1, "single",
+                          other_driver=(driver2 if compare else None),
+                          other_colour=(colour2 if compare else None),
+                          other_lap=(lap2 if compare else None),
+                          fmt_func=_fmt_driver1)
 
-
-if sess2 is not None:
-    session_map_tabs = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
-    with session_map_tabs[0]:
-        render_maps_block(sess, sess_key, driver1, colour1, lap1, "sess1", fmt_func=_fmt_driver1)
-    with session_map_tabs[1]:
-        render_maps_block(sess2, sess_key2, driver2, colour2, lap2, "sess2", fmt_func=_fmt_driver2)
-else:
-    render_maps_block(sess, sess_key, driver1, colour1, lap1, "single",
-                      other_driver=(driver2 if compare else None),
-                      other_colour=(colour2 if compare else None),
-                      other_lap=(lap2 if compare else None),
-                      fmt_func=_fmt_driver1)
+_frag_track_map()
 
 
 # ── Championship Standings & Classification ───────────────────────────────────

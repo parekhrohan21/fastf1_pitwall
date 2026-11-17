@@ -19,12 +19,19 @@ from curl_cffi import requests as curl_requests
 from src.ui.styles import TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP
 
 # ── FastF1 & Free API disk caches ────────────────────────────────────────────
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+# CHANGE (#203): Unify CACHE_DIR with ./cache (matching README, AGENT.md, and
+# Dockerfile's -v "$PWD/cache:/app/cache"), with FASTF1_CACHE_DIR env override.
+# Keep src/data/cache (LEGACY_CACHE_DIR) as a read-only fallback so existing
+# local caches continue to hit without re-downloading.
 ROOT_CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "cache"))
+LEGACY_CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
+CACHE_DIR = os.path.abspath(os.environ.get("FASTF1_CACHE_DIR") or ROOT_CACHE_DIR)
 FREE_API_CACHE_DIR = os.path.join(CACHE_DIR, "free_api_cache")
+LEGACY_FREE_API_CACHE_DIR = os.path.join(LEGACY_CACHE_DIR, "free_api_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(FREE_API_CACHE_DIR, exist_ok=True)
 fastf1.Cache.enable_cache(CACHE_DIR)
+_TELEMETRY_LOCK = threading.Lock()
 
 # ── Optional F1 account sign-in (only used when credentials are provided) ────
 # Since October 2026 livetiming.formula1.com returns HTTP 401 unless an F1TV
@@ -394,13 +401,16 @@ def _free_api_get_json(url: str, timeout: int = 15, use_cache: bool = True, retr
     global _OPENF1_LAST_REQ_TS
     cache_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
     cache_path = os.path.join(FREE_API_CACHE_DIR, f"{cache_key}.json")
+    legacy_cache_path = os.path.join(LEGACY_FREE_API_CACHE_DIR, f"{cache_key}.json")
 
-    if use_cache and os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    if use_cache:
+        for candidate in (cache_path, legacy_cache_path):
+            if os.path.exists(candidate):
+                try:
+                    with open(candidate, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except Exception:
+                    pass
 
     is_openf1 = "openf1.org" in url
     last_err = None
@@ -2083,10 +2093,10 @@ def _load_jolpica_session(
 
 
 def _find_cached_fastf1_dir(year: int, gp: str, session_type: str) -> str | None:
-    """Return the cache root (CACHE_DIR or ROOT_CACHE_DIR) if a complete .ff1pkl cache exists for this session."""
+    """Return the cache root (CACHE_DIR, ROOT_CACHE_DIR, or LEGACY_CACHE_DIR) if a complete .ff1pkl cache exists."""
     gp_clean = str(gp).replace(" ", "_")
     canon = _SESSION_CODE_TO_CANONICAL.get(session_type, session_type).replace(" ", "_")
-    for c_root in (CACHE_DIR, ROOT_CACHE_DIR):
+    for c_root in (CACHE_DIR, ROOT_CACHE_DIR, LEGACY_CACHE_DIR):
         if not os.path.isdir(c_root):
             continue
         pattern = os.path.join(c_root, str(year), f"*{gp_clean}*", f"*{canon}", "_extended_timing_data.ff1pkl")
@@ -2095,6 +2105,9 @@ def _find_cached_fastf1_dir(year: int, gp: str, session_type: str) -> str | None
     return None
 
 
+# CHANGE (#203): Cache season schedule across Streamlit reruns so sidebar
+# interactions never re-fetch or re-parse the calendar.
+@st.cache_data(show_spinner=False, ttl=3600)
 def load_schedule(year: int) -> pd.DataFrame:
     """Load season schedule with automatic fallback to Jolpica-F1 & OpenF1 (free, no sign-in)."""
     try:
@@ -2156,12 +2169,27 @@ def load_schedule(year: int) -> pd.DataFrame:
     raise ValueError(f"Could not load {year} schedule from FastF1, Jolpica-F1, or OpenF1.")
 
 
-def load_session(year: int, gp: str, session_type: str = "R"):
+# CHANGE (#203): Share parsed Session objects across browser sessions via
+# @st.cache_resource (bounded to 8 entries / 1 hour) and support laps-first
+# loading (load_telemetry=False) paired with lazy ensure_session_telemetry().
+#
+# Review notes (#203)
+# -------------------
+# - CACHE_DIR now defaults to ./cache (matching README, AGENT.md, and Docker's
+#   /app/cache volume) with FASTF1_CACHE_DIR override and read-only fallback
+#   to LEGACY_CACHE_DIR (src/data/cache) so existing local caches remain usable.
+# - load_session() is wrapped in @st.cache_resource(max_entries=8, ttl=3600) so
+#   a second browser session loading the same session reuses the parsed object
+#   without re-reading .ff1pkl files; clear_session_cache() calls .clear().
+# - ensure_session_telemetry() uses _TELEMETRY_LOCK so concurrent Streamlit
+#   threads cannot race when upgrading a laps-only FastF1 Session to full telemetry.
+@st.cache_resource(show_spinner=False, max_entries=8, ttl=3600)
+def load_session(year: int, gp: str, session_type: str = "R", load_telemetry: bool = True):
     """Load an F1 session using free, no-sign-in data sources with automatic fallback.
 
     Loading priority:
-      1. Local pre-cached FastF1 `.ff1pkl` data in `./src/data/cache` or `./cache`
-         (loads offline in < 1 s).
+      1. Local pre-cached FastF1 `.ff1pkl` data in `./cache` (or `FASTF1_CACHE_DIR` /
+         legacy `./src/data/cache`; loads offline in < 1 s).
       2. OpenF1 API (`https://api.openf1.org/v1`) + MultiViewer Circuit API + Jolpica-F1
          for 2023–present sessions (100% free, no sign-in required, full 6-channel
          telemetry, 3D track coordinates, stints, pit stops, weather & race control).
@@ -2175,21 +2203,24 @@ def load_session(year: int, gp: str, session_type: str = "R"):
         except Exception:
             return False
 
+    load_plan = (
+        [(True, True, True), (True, True, False), (False, True, False), (False, False, False)]
+        if load_telemetry
+        else [(False, True, True), (False, True, False), (False, False, False)]
+    )
+
     # Tier 1: Local pre-cached FastF1 session (.ff1pkl) in either cache directory
     cached_root = _find_cached_fastf1_dir(year, gp, session_type)
     if cached_root is not None:
         try:
             fastf1.Cache.enable_cache(cached_root)
             sess = fastf1.get_session(year, gp, session_type)
-            for tel_flag, weath_flag, msg_flag in [
-                (True, True, True),
-                (True, True, False),
-                (False, True, False),
-                (False, False, False),
-            ]:
+            for tel_flag, weath_flag, msg_flag in load_plan:
                 try:
                     sess.load(telemetry=tel_flag, laps=True, weather=weath_flag, messages=msg_flag)
                     if has_laps(sess):
+                        sess._pitwall_telemetry_loaded = bool(tel_flag)
+                        sess._pitwall_cache_root = cached_root
                         _PATCH_STATUS["last_data_source"] = f"Local FastF1 Cache ({os.path.basename(cached_root)})"
                         fastf1.Cache.enable_cache(CACHE_DIR)
                         return sess
@@ -2215,6 +2246,7 @@ def load_session(year: int, gp: str, session_type: str = "R"):
         try:
             free_sess = _load_openf1_session(year, gp, session_type, event_row=event_row, load_extras=True)
             if has_laps(free_sess):
+                free_sess._pitwall_telemetry_loaded = True
                 return free_sess
         except Exception as exc:
             logging.warning(f"OpenF1 session load fallback error: {exc}")
@@ -2223,6 +2255,7 @@ def load_session(year: int, gp: str, session_type: str = "R"):
     try:
         jolpica_sess = _load_jolpica_session(year, gp, session_type, event_row=event_row)
         if has_laps(jolpica_sess):
+            jolpica_sess._pitwall_telemetry_loaded = True
             return jolpica_sess
     except Exception as exc:
         logging.warning(f"Jolpica session load fallback error: {exc}")
@@ -2231,14 +2264,12 @@ def load_session(year: int, gp: str, session_type: str = "R"):
     if f1_credentials_configured():
         try:
             sess = fastf1.get_session(year, gp, session_type)
-            for tel_flag, weath_flag, msg_flag in [
-                (True, True, True),
-                (True, True, False),
-                (False, False, False),
-            ]:
+            for tel_flag, weath_flag, msg_flag in load_plan:
                 try:
                     sess.load(telemetry=tel_flag, laps=True, weather=weath_flag, messages=msg_flag)
                     if has_laps(sess):
+                        sess._pitwall_telemetry_loaded = bool(tel_flag)
+                        sess._pitwall_cache_root = CACHE_DIR
                         _PATCH_STATUS["last_data_source"] = "FastF1 LiveTiming (Authenticated)"
                         return sess
                 except Exception:
@@ -2247,6 +2278,28 @@ def load_session(year: int, gp: str, session_type: str = "R"):
             pass
 
     raise ValueError("No lap timing data is available for this session yet.")
+
+
+def ensure_session_telemetry(sess) -> bool:
+    """Lazily load car and position telemetry onto a laps-first FastF1 Session if not already loaded (#203)."""
+    if sess is None or isinstance(sess, FreeF1Session):
+        return True
+    if getattr(sess, "_pitwall_telemetry_loaded", False):
+        return True
+    with _TELEMETRY_LOCK:
+        if getattr(sess, "_pitwall_telemetry_loaded", False):
+            return True
+        cache_root = getattr(sess, "_pitwall_cache_root", None) or CACHE_DIR
+        try:
+            fastf1.Cache.enable_cache(cache_root)
+            sess.load(telemetry=True, laps=True, weather=True, messages=True)
+            sess._pitwall_telemetry_loaded = True
+            return True
+        except Exception as exc:
+            logging.warning(f"Lazy telemetry load failed: {exc}")
+            return False
+        finally:
+            fastf1.Cache.enable_cache(CACHE_DIR)
 
 
 # ── Live Timing SignalR Recorder Management ───────────────────────────────────

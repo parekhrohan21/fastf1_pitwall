@@ -32,7 +32,7 @@ from src.charts.plotly import (
     build_driving_style_dna_fig, build_corner_geometry_fig, build_microsector_streamgraph_fig,
     build_launch_analysis_fig
 )
-from src.charts.video import generate_brag_video_frames, RESOLUTIONS
+# CHANGE (#203): Defer importing src.charts.video (Pillow / imageio) until _render_brag_video_section runs.
 
 def _render_constructor_standings(standings_list, highlight_teams: list, highlight_colours: list):
     """Render constructor standings as a styled HTML table."""
@@ -3332,6 +3332,7 @@ def _render_brag_video_section(
     fmt_func2=None,
 ) -> None:
     """Render the Brag Video controls, generated clip, download button and latent-space inspector."""
+    from src.charts.video import generate_brag_video_frames, RESOLUTIONS
     st.markdown("<div class='section-title'>🎬 Brag Video — Telemetry Latent Space Highlights</div>", unsafe_allow_html=True)
     st.markdown(
         "<div style='font-size:11px; opacity:0.55; margin:-6px 0 14px;'>"
@@ -3396,6 +3397,7 @@ def _generate_brag_result(sess_obj, laps_df, driver, lap_num, sess_k, mode, aspe
                           colour, colour2, label, label2, driver2) -> dict:
     """Pick the lap(s) for ``mode``, build latent data + moments and render the clip."""
     try:
+        from src.charts.video import generate_brag_video_frames
         all_laps = sess_obj.laps
         def fastest(drv):
             return all_laps.pick_drivers(drv).pick_fastest()

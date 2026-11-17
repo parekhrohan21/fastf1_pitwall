@@ -108,7 +108,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
 | **`imageio`** & **`imageio-ffmpeg`** | `≥ 2.34.0` / `≥ 0.5.1` | H.264 MP4 encoding for the Brag Video (optional: without them the clip falls back to an animated GIF built with Pillow). |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**216 unit/integration tests across 27 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**222 unit/integration tests across 28 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -119,7 +119,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 
 **No account or sign-in is required.** Pit Wall works out of the box using a multi-source, zero-authentication data pipeline (`src/data/loader.py`):
 
-1. **Local FastF1 Cache (`./src/data/cache` & `./cache`)**: Instant offline loading (< 1 s) for any previously cached session.
+1. **Local FastF1 Cache (`./cache` — overridable via `FASTF1_CACHE_DIR`, with read-only fallback to `./src/data/cache`)**: Instant offline loading (< 1 s) for any previously cached session, aligned with Docker's `-v "$PWD/cache:/app/cache"` volume mount. If you have an older local cache in `src/data/cache/`, you can optionally consolidate it with `mv src/data/cache/* cache/`.
 2. **OpenF1 API (`https://api.openf1.org/v1`) + MultiViewer Circuit API (`https://api.multiviewer.app/api/v1/circuits`) + Jolpica-F1 (`https://api.jolpi.ca/ergast/f1`)**: 100% free, no-sign-in primary engine for **2023–present** sessions — serving full 6-channel car telemetry (`Speed`, `RPM`, `nGear`, `Throttle`, `Brake`, `DRS`), 3D track coordinates (`X`, `Y`, `Z`), corner numbers/angles, tyre stints, pit stops, weather, race control messages, and classifications.
 3. **Jolpica-F1 Historical Engine (`https://api.jolpi.ca/ergast/f1`)**: 100% free, no-sign-in fallback for **2018–2022** historical seasons (schedules, classifications, lap-by-lap timings, pit stops, and championship standings).
 4. **Optional FastF1 Direct Live-Timing Auth (`F1_USERNAME` / `F1_PASSWORD`)**: If you optionally have an F1TV Access subscription and configure credentials in `.streamlit/secrets.toml` or environment variables, FastF1 can also authenticate directly against `livetiming.formula1.com`.
@@ -129,7 +129,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | `F1_USERNAME` / `F1_PASSWORD` | `.streamlit/secrets.toml`, Streamlit Cloud secrets or environment variables | **Optional.** F1 account credentials if you wish to use authenticated `livetiming.formula1.com` alongside the default free OpenF1/Jolpica APIs. |
 | `F1_PROXY` | Environment variable or `.streamlit/secrets.toml` (`http://user:pass@proxy:port`) | **Optional.** Routes HTTP/HTTPS requests through an external proxy behind restrictive corporate firewalls. |
 
-Session telemetry and free API responses are automatically cached in `./src/data/cache` (and `./cache`), which are created on first run and gitignored. Delete these folders to force a fresh re-download.
+Session telemetry and free API responses are automatically cached in `./cache` (matching Docker's `/app/cache` mount; override with `FASTF1_CACHE_DIR`), which is created on first run and gitignored. Older entries in `./src/data/cache` are still read automatically as a fallback. Delete these folders to force a fresh re-download.
 
 ---
 
@@ -192,7 +192,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112), Commits `dbe8b59`, `a669c45`, `32160d7`): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode and full light-mode contrast overrides for BaseWeb selectboxes, virtualised dropdown popovers, checkboxes, toggles, and expanders.
 - **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Displays the active data source in the sidebar diagnostics panel and probes both free APIs and upstream servers (`livetiming_rejects_requests`).
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **216 automated pytest unit and integration tests** across 27 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **222 automated pytest unit and integration tests** across 28 dedicated modules.
 
 ---
 
@@ -253,7 +253,8 @@ fastf1_pitwall/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, driving style DNA, teammate matrix,
 │                               # pit loss breakdown, weekend progression, dirty air, brag video, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (216 tests across 27 dedicated modules)
+├── tests/                      # Automated Pytest suite (222 tests across 28 dedicated modules)
+│   ├── test_cache_and_perf.py          # Unified ./cache dir, @st.cache_resource session sharing & lazy telemetry
 │   ├── test_launch_analysis.py         # Standing-start reaction time, 0-100/200 km/h, clutch RPM drop & launch chart
 │   ├── test_free_api_fallback.py       # Zero-auth OpenF1 / MultiViewer / Jolpica-F1 session & telemetry adapters
 │   ├── test_corner_geometry.py         # Curvature radius, geometric apex vs marker, line deltas & radius map
@@ -338,7 +339,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **216 unit and integration tests** across 27 test modules must pass cleanly.
+All **222 unit and integration tests** across 28 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -415,7 +416,6 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 | **[#206](https://github.com/parekhrohan21/fastf1_pitwall/issues/206)** | `bug: Gap to Leader chart fails to render with NameError: name '_build_gap_data' is not defined` | Bug · Gap to Leader | `_build_gap_data` is missing from the loader imports in `src/ui/components.py`. | Open |
 | **[#205](https://github.com/parekhrohan21/fastf1_pitwall/issues/205)** | `bug: Ideal Lap vs Actual Lap crashes with NameError ('_fmt_sec') and blocks all downstream charts from rendering` | Bug · Ideal Lap | `_fmt_sec` is not defined or imported in `src/ui/components.py`; the crash stops every section below it from rendering. | Open |
 | **[#204](https://github.com/parekhrohan21/fastf1_pitwall/issues/204)** | `Charts issue in the website` | Bug · Umbrella | Umbrella report for charts missing on the website; the specific causes are tracked in #205–#210. | Open |
-| **[#203](https://github.com/parekhrohan21/fastf1_pitwall/issues/203)** | `perf: speed up app load time on Streamlit (fix cache location, lazy loading, shared session cache)` | Performance | Make the FastF1 cache persistent (code writes `src/data/cache`, docs and Docker mount `./cache`), load only the data each view needs, and share loaded sessions across reruns. | Open |
 
 ---
 
@@ -423,6 +423,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#203](https://github.com/parekhrohan21/fastf1_pitwall/issues/203)** | `perf: speed up app load time on Streamlit (fix cache location, lazy loading, shared session cache)` | Performance | Unified `CACHE_DIR` to `./cache` (matching Docker `/app/cache`, with `FASTF1_CACHE_DIR` override and `src/data/cache` read fallback), shared parsed sessions across users via `@st.cache_resource(max_entries=8)` (`load_session`), cached `load_schedule`, added laps-first loading + `ensure_session_telemetry()`, lazy-imported `matplotlib` and `src.charts.video`, and isolated 6 interactive heavy sections in `@st.fragment`. |
 | **[#200](https://github.com/parekhrohan21/fastf1_pitwall/issues/200)** | `feat: Start Line Reaction Time & Launch Telemetry Acceleration Analyzer` | Race Start Dynamics | Standing-start Lap 1 analyzer (`_analyze_driver_launch`, `_build_launch_analysis_data`, `build_launch_analysis_fig`, `_render_launch_analysis_section`): sub-sample reaction time latency (ms from lights out), first-crossing 0–100 km/h and 0–200 km/h times and distances, clutch bite-point throttle hold and RPM drop, wheelspin / traction efficiency, Turn 1 braking distance, 3-panel time-aligned launch telemetry chart, and full-grid Opening-Lap Launch Leaderboard. |
 | **[c4c6e3d](https://github.com/parekhrohan21/fastf1_pitwall/commit/c4c6e3d)** / **[fe4b215](https://github.com/parekhrohan21/fastf1_pitwall/commit/fe4b215)** / **[64980df](https://github.com/parekhrohan21/fastf1_pitwall/commit/64980df)** | `docs(readme): open bugs, live-session estimated traces and inline code comments` | Documentation | Listed open bugs #204–#210 and perf issue #203 in the roadmap and troubleshooting table; documented estimated traces during live sessions, low-confidence corner geometry rows and the first-load data source; added step-by-step comments to the corner geometry (#198) and micro-sector (#199) code in `loader.py`, `plotly.py` and `components.py`, and explained the optional F1 sign-in helpers, the curl_cffi request patch, `livetiming_rejects_requests`, the session-load error handling in `app.py`, the light-mode CSS selectors in `styles.py`, and every test in `test_corner_geometry.py` / `test_microsector_delta.py`. |
 | **[#199](https://github.com/parekhrohan21/fastf1_pitwall/issues/199)** | `feat: Micro-Sector Speed Delta & Dominance Streamgraph Timeline` | Track Analytics | Three-panel distance-aligned streamgraph (`build_microsector_streamgraph_fig`): speed-delta ribbon, running gap and 50 m micro-sector time gains with corner/DRS zone shading; per-sector dominance tallies and KPI cards (`_build_microsector_delta`, `_render_microsector_section`), anchored to official lap and sector times. |
