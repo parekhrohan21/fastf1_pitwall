@@ -2959,9 +2959,15 @@ def _render_pit_loss_section(
 
     # Helper for compound badge
     def _comp_badge_html(cmp_code: str) -> str:
-        col = COMPOUND_COLOURS.get(str(cmp_code).upper(), "#888888")
-        letter = str(cmp_code)[:1].upper() if cmp_code else "?"
-        return f"<span style='display:inline-block; padding:1px 5px; border-radius:3px; font-size:11px; font-weight:700; background:{col}22; color:{col}; border:1px solid {col}55;'>{letter}</span>"
+        # COMPOUND_COLOURS maps each compound to {"fill", "text", "letter"} — extract the hex fill, not the dict.
+        pal = COMPOUND_COLOURS.get(str(cmp_code).upper(), COMPOUND_COLOURS["UNKNOWN"])
+        col = pal["fill"]
+        letter = pal.get("letter") or (str(cmp_code)[:1].upper() if cmp_code else "?")
+        return (
+            f"<span style='display:inline-block; padding:1px 5px; border-radius:3px; "
+            f"font-size:11px; font-weight:700; background:{col}22; color:{col}; "
+            f"border:1px solid {col}55;'>{letter}</span>"
+        )
 
     # ── Head-to-Head Sector Warm-up Cards ─────────────────────────────────────────
     if is_compare_view:
@@ -3008,31 +3014,33 @@ def _render_pit_loss_section(
                         s2_b = _s_badge("S2", s.get("out_lap_s2_delta_s"))
                         s3_b = _s_badge("S3", s.get("out_lap_s3_delta_s"))
 
-                        stops_detail_html += f"""
-                        <div style='background:rgba(255,255,255,0.02); border:1px solid rgba(128,128,128,0.12); border-radius:6px; padding:8px 10px; margin-top:8px;'>
-                          <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>
-                            <span style='font-weight:600; font-size:12px;'>Stop {s_num} (Lap {in_l})</span>
-                            <span>{old_badge} → {new_badge}</span>
-                          </div>
-                          <div style='font-size:12px; opacity:0.85; margin-bottom:4px;'>
-                            Pit Lane Transit: <b>{t_transit}</b> | Net Loss: <b>{t_net}</b>
-                          </div>
-                          <div style='font-size:11px; opacity:0.75; margin-bottom:6px;'>
-                            In-Lap Push: <b>{t_in_d}</b> | Out-Lap Warm-up: <b>{t_out_d}</b>
-                          </div>
-                          <div style='display:flex; gap:6px;'>
-                            {s1_b} {s2_b} {s3_b}
-                          </div>
-                        </div>
-                        """
+                        # Keep HTML unindented (no >= 4-space leading whitespace after newlines) so
+                        # Streamlit's CommonMark parser never renders the stop card as a raw code block.
+                        stops_detail_html += (
+                            "<div style='background:rgba(255,255,255,0.02); border:1px solid rgba(128,128,128,0.12); "
+                            "border-radius:6px; padding:8px 10px; margin-top:8px;'>"
+                            "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>"
+                            f"<span style='font-weight:600; font-size:12px;'>Stop {s_num} (Lap {in_l})</span>"
+                            f"<span>{old_badge} → {new_badge}</span>"
+                            "</div>"
+                            "<div style='font-size:12px; opacity:0.85; margin-bottom:4px;'>"
+                            f"Pit Lane Transit: <b>{t_transit}</b> | Net Loss: <b>{t_net}</b>"
+                            "</div>"
+                            "<div style='font-size:11px; opacity:0.75; margin-bottom:6px;'>"
+                            f"In-Lap Push: <b>{t_in_d}</b> | Out-Lap Warm-up: <b>{t_out_d}</b>"
+                            "</div>"
+                            f"<div style='display:flex; gap:6px;'>{s1_b} {s2_b} {s3_b}</div>"
+                            "</div>"
+                        )
 
                     st.markdown(
-                        f"""<div style='background:rgba(255,255,255,0.03); border-left:4px solid {accent}; border-radius:8px; padding:12px 14px; margin-bottom:14px;'>
-                          <div style='font-size:15px; font-weight:700; color:{accent};'>{d_label} ({driver_disp_name})</div>
-                          <div style='font-size:11px; opacity:0.6; margin-bottom:4px;'>{team_name} • {len(d_stops)} Pit Stop(s)</div>
-                          {stops_detail_html}
-                        </div>""",
-                        unsafe_allow_html=True
+                        f"<div style='background:rgba(255,255,255,0.03); border-left:4px solid {accent}; "
+                        "border-radius:8px; padding:12px 14px; margin-bottom:14px;'>"
+                        f"<div style='font-size:15px; font-weight:700; color:{accent};'>{d_label} ({driver_disp_name})</div>"
+                        f"<div style='font-size:11px; opacity:0.6; margin-bottom:4px;'>{team_name} • {len(d_stops)} Pit Stop(s)</div>"
+                        f"{stops_detail_html}"
+                        "</div>",
+                        unsafe_allow_html=True,
                     )
 
     # ── Full-Grid Pit Stop Efficiency Leaderboard Table ───────────────────────────
@@ -4438,11 +4446,13 @@ def _render_launch_analysis_section(
                     delta_html = "<span style='opacity:0.5;'>—</span>"
 
                 cmp_name = str(r.get("compound") or "UNKNOWN").upper()
-                cmp_col = COMPOUND_COLOURS.get(cmp_name, "#888888")
-                cmp_short = cmp_name[0] if cmp_name in ("SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET") else "—"
+                cmp_pal = COMPOUND_COLOURS.get(cmp_name, COMPOUND_COLOURS["UNKNOWN"])
+                cmp_col = cmp_pal["fill"]
+                cmp_txt = cmp_pal["text"]
+                cmp_short = cmp_pal.get("letter") or "—"
                 tyre_html = (
                     f"<span style='display:inline-block; width:18px; height:18px; line-height:18px; "
-                    f"border-radius:50%; background:{cmp_col}; color:#111; font-weight:800; font-size:10px; "
+                    f"border-radius:50%; background:{cmp_col}; color:{cmp_txt}; font-weight:800; font-size:10px; "
                     f"text-align:center;'>{cmp_short}</span>"
                 )
 
