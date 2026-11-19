@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from src.ui.styles import TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP
 from src.data.loader import (
-    hex_to_rgb, _team_logo, _team_colour, format_laptime, driver_colour,
+    hex_to_rgb, _team_logo, _team_colour, format_laptime, _fmt_sec, driver_colour,
     _build_driver_labels, _format_classification_time, _map_driver_id_to_number,
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
