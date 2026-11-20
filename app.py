@@ -74,14 +74,16 @@ Session-2 inputs fall back to Session 1 (``_all_laps2 if _all_laps2 is not None
 else _all_laps1``), so both modes share one code path. Field-wide sections
 render one tab per session in session-compare mode.
 """
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
+import streamlit as st              # web UI framework: every widget, chart and layout call
+import pandas as pd                 # tables of laps, results and telemetry
+import numpy as np                  # numeric helpers used by a few inline calculations
+import plotly.graph_objects as go   # interactive charts (most figures are built in src/charts/plotly.py)
 # CHANGE (#203): Defer importing matplotlib and src.charts.matplotlib until the
 # Telemetry Charts section so cold-start / landing renders skip font-cache & mpl setup.
 
 # Streamlit Page Config MUST be run first before any other Streamlit widgets!
+# It sets the browser tab title and icon, uses the full screen width, and opens
+# the sidebar by default.
 st.set_page_config(
     page_title="Pitwall · F1 Live Telemetry & Insights",
     page_icon="🏎️",
@@ -89,7 +91,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Modular imports
+# Modular imports. app.py only arranges the page; the real work is imported:
+#   styles      -> CSS theme, team and tyre colours
+#   loader      -> downloading sessions and the cached data builders (_build_*)
+#   components  -> ready-made page sections (_render_*)
+#   plotly      -> chart builders used directly in this file
 from src.ui.styles import inject_styles, _toggle_theme, TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP, MATPLOTLIB_THEME
 from src.data.loader import (
     load_schedule, load_session, ensure_session_telemetry, clear_session_cache, livetiming_rejects_requests, f1_sign_in_error, format_laptime, driver_colour, hex_to_rgb,
@@ -132,10 +138,13 @@ from src.charts.plotly import (
 # Every user control lives here. Values are re-read on each rerun, but nothing
 # is fetched until Load is pressed. Session names come from the event schedule
 # (Session1–Session5), so sprint weekends list their real session formats.
-# Inject design system & dark/light theme CSS early on every render
+# Inject design system & dark/light theme CSS early on every render.
+# Orange (#FF8700) is the default accent until a driver is picked, after which
+# inject_styles runs again with that driver's team colour.
 inject_styles("#FF8700")
 
 with st.sidebar:
+    # "Back to rohanparekh.uk" link and the Pit Wall title block
     st.markdown(
         "<a href='http://rohanparekh.uk' target='_top' class='back-home-link'>"
         "<span>👈</span>"
@@ -152,9 +161,13 @@ with st.sidebar:
     )
     st.markdown("<hr style='margin:0 0 16px'>", unsafe_allow_html=True)
 
+    # Seasons 2026 down to 2018 (newest first); 2018 is the oldest season with
+    # usable lap timing data.
     _years = list(range(2026, 2017, -1))
     year = st.selectbox("Season", _years, index=0, label_visibility="visible")
 
+    # Download (or read from cache) that season's race calendar. Without it no
+    # Grand Prix can be picked, so a failure stops the page here.
     with st.spinner("Loading calendar…"):
         try:
             schedule = load_schedule(year)
@@ -164,16 +177,20 @@ with st.sidebar:
             _render_footer()
             st.stop()
 
+    # Pre-select the most recent Grand Prix that has already happened
     _def_gp_idx = _get_default_gp_index(schedule, gp_names)
     gp = st.selectbox("Grand Prix", gp_names, index=_def_gp_idx)
 
+    # Session names shown in the menu -> the short codes FastF1 expects
     _session_code_map = {
         "Practice 1": "FP1", "Practice 2": "FP2", "Practice 3": "FP3",
         "Qualifying": "Q", "Sprint Qualifying": "SQ", "Sprint Shootout": "SS",
         "Sprint": "S", "Race": "R"
     }
 
-    # Determine dynamic sessions for primary session selection
+    # Determine dynamic sessions for primary session selection: read the event's
+    # Session1..Session5 columns so sprint weekends list Sprint / Sprint
+    # Qualifying instead of FP2 / FP3. A standard weekend is the fallback.
     gp_row = schedule[schedule["EventName"] == gp]
     if not gp_row.empty:
         row = gp_row.iloc[0]
@@ -185,11 +202,14 @@ with st.sidebar:
     else:
         primary_sessions = ["Practice 1", "Practice 2", "Practice 3", "Qualifying", "Race"]
 
+    # Default to the Race (or the last session of the weekend if there is none)
     _def_sess_idx = primary_sessions.index("Race") if "Race" in primary_sessions else len(primary_sessions) - 1
     session_label = st.selectbox("Session", primary_sessions, index=_def_sess_idx)
-    session_type = _session_code_map.get(session_label, session_label)
+    session_type = _session_code_map.get(session_label, session_label)  # e.g. "Race" -> "R"
 
     # --- Session 2 Selector ---
+    # Optional second session (any season / GP / session) for cross-session
+    # comparison. The variables stay None when the box is unticked.
     compare_sessions = st.checkbox("Compare with another session", value=False, key="compare_sessions_chk")
     year2 = None
     gp2 = None
@@ -223,6 +243,7 @@ with st.sidebar:
         else:
             secondary_sessions = ["Practice 1", "Practice 2", "Practice 3", "Qualifying", "Race"]
 
+        # Default Session 2 to the same session type as Session 1 when it exists
         if session_label in secondary_sessions:
             _def_sess_idx2 = secondary_sessions.index(session_label)
         else:
@@ -233,18 +254,23 @@ with st.sidebar:
 
     st.markdown("<hr style='margin:16px 0'>", unsafe_allow_html=True)
 
+    # Theme button: the label names the mode you would switch TO; clicking runs
+    # _toggle_theme, which flips st.session_state["dark_mode"].
     mode_label = "☀️  Light Mode" if st.session_state.get("dark_mode", True) else "🌙  Dark Mode"
     st.button(mode_label, key="theme_toggle", on_click=_toggle_theme, use_container_width=True)
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+    # Live timing mode: instead of downloading a finished session, read a file
+    # that a background recorder fills with F1's live SignalR feed.
     live_mode = st.toggle("🔴 Real-Time Live Timing Mode", value=False, key="live_mode_toggle")
 
-    live_filename = "live_timing.txt"
-    auto_refresh_sec = 0
+    live_filename = "live_timing.txt"   # where the recorder writes the live feed
+    auto_refresh_sec = 0                # 0 = never auto-refresh the page
 
     if live_mode:
         with st.expander("📡 Live Streamer Controls", expanded=True):
             live_filename = st.text_input("Live Timing File", value="live_timing.txt", key="live_filename_input")
+            # Start / Stop buttons control the background recorder process
             col_rec1, col_rec2 = st.columns(2)
             if col_rec1.button("▶ Start Stream", use_container_width=True):
                 res = start_live_recorder(live_filename)
@@ -259,14 +285,18 @@ with st.sidebar:
                 else:
                     st.warning(res["message"])
 
+            # How often the page reloads itself to pick up new live data
             auto_refresh_choice = st.selectbox("Auto-Refresh Rate", ["OFF", "5s", "10s", "15s", "30s"], index=0, key="auto_refresh_choice")
             if auto_refresh_choice != "OFF":
                 auto_refresh_sec = int(auto_refresh_choice.replace("s", ""))
 
+            # Recorder health: running or idle, packets received, file size
             live_status = get_live_recorder_status(live_filename)
             st.caption(f"Status: {'Active Stream' if live_status['active'] else 'Idle'} | Packets: {live_status['line_count']:,} | Size: {live_status['size_bytes']/1024:.1f} KB")
 
     st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+    # Nothing is downloaded until this is clicked; load_btn is True only on the
+    # rerun triggered by the click.
     load_btn = st.button("⬇️  Load Session(s)", use_container_width=True)
 
     # ── Diagnostics expander ──────────────────────────────────────────────────
@@ -288,11 +318,14 @@ with st.sidebar:
         else:
             st.write("None recorded.")
             
+        # Pings OpenF1, Jolpica-F1, MultiViewer and F1 live timing, and prints
+        # each HTTP status so you can see which data source is reachable.
         if st.button("Run Connection Test"):
             with st.spinner("Testing connection..."):
                 res = test_curl_cffi_request()
                 st.code(res)
 
+    # Data credits at the bottom of the sidebar
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
         "<div style='font-size:10px; opacity:0.5; letter-spacing:0.5px; text-align:center;'>"
