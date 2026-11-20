@@ -697,6 +697,8 @@ st.markdown("<div class='section-title'>Lap Summary</div>", unsafe_allow_html=Tr
 
 
 
+# Two drivers -> two cards side by side; one driver -> a single card. Each card
+# shows headshot, team, lap time, sectors, tyre and weather for that lap.
 if compare and lap2 is not None:
     s1, s2 = st.columns(2)
     with s1:
@@ -712,6 +714,8 @@ st.markdown("<div class='section-title'>Session Statistics</div>", unsafe_allow_
 
 
 
+# Grid, finish, status, best lap, race pace and top speed for each driver; with
+# two drivers each column gets a coloured name heading.
 if compare and driver2:
     s1, s2 = st.columns(2)
     with s1:
@@ -732,6 +736,8 @@ st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_ht
 
 
 
+# Legend labels reused by many sections below: "VER" normally, "VER (2026)"
+# when comparing two sessions.
 if sess2 is not None:
     label1 = f"{driver1} ({year1})"
     label2 = f"{driver2} ({year2})"
@@ -739,12 +745,15 @@ else:
     label1 = driver1
     label2 = driver2
 
+# (label, colour, lap-history table) per driver, plus the selected lap of each
+# so the chart can highlight it.
 _hist_pairs = [(label1, colour1, _build_lap_history(driver1, sess_key, _all_laps1))]
 _hist_laps  = [lap1]
 if compare and driver2:
     _hist_pairs.append((label2, colour2, _build_lap_history(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1)))
     _hist_laps.append(lap2)
 
+# No lap times for anyone (e.g. a session with no timed laps): show a note
 _all_none = all(p[2] is None or p[2].empty for p in _hist_pairs)
 if _all_none:
     st.info("Lap time history not available for this session.")
@@ -781,6 +790,7 @@ else:
     else:
         _hist_pairs_filtered = _hist_pairs
 
+    # Draw the chart (flag periods shaded) and keep it for the PDF export
     _lap_hist_fig_obj = _lap_history_fig(_hist_pairs_filtered, _hist_laps, rc_messages=_rc_messages)
     _export_figs["Lap Time History"] = _lap_hist_fig_obj
     st.plotly_chart(_lap_hist_fig_obj, width="stretch", config={"displayModeBar": False})
@@ -814,6 +824,7 @@ with _fuel_col:
 
 
 
+# Each lap's time minus the fuel effect x laps of fuel still on board, per driver
 _fuel_pairs = [
     (
         label1, colour1,
@@ -838,9 +849,9 @@ else:
     for _pc, (drv, col, df) in zip(_pace_cols, _fuel_pairs):
         if df is None or df.empty:
             continue
-        _best_raw  = df["LapTimeSec"].min()
-        _best_adj  = df["FuelAdjSec"].min()
-        _avg_adj   = df["FuelAdjSec"].median()
+        _best_raw  = df["LapTimeSec"].min()      # fastest lap as timed
+        _best_adj  = df["FuelAdjSec"].min()      # fastest lap after fuel correction
+        _avg_adj   = df["FuelAdjSec"].median()   # typical corrected pace (median ignores outliers)
         _pc.markdown(
             f"<div class='metric-card' style='--accent:{col};'>"
             f"<div class='metric-label'>{drv} — Fuel-Adj Pace</div>"
@@ -864,6 +875,8 @@ else:
             "</div>",
             unsafe_allow_html=True
         )
+        # Session compare: one tab per session; otherwise one table with the
+        # selected driver(s) highlighted
         if sess2 is not None:
             tab_l1, tab_l2 = st.tabs([f"Session 1 Leaderboard ({year1})", f"Session 2 Leaderboard ({year2})"])
             with tab_l1:
@@ -895,6 +908,7 @@ st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow
 
 
 
+# Per driver: list of stints (compound, first lap, last lap)
 _stint_data = [(label1, _build_stints(driver1, sess_key, _all_laps1))]
 if compare and driver2:
     _stint_data.append((label2, _build_stints(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1)))
@@ -917,6 +931,7 @@ st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_ht
 
 
 
+# Per driver: list of stops (lap, stop duration, tyres before/after), or None
 _pit_d1 = _build_pit_stops(driver1, sess_key, _all_laps1)
 _pit_d2 = _build_pit_stops(driver2, sess_key2 if sess_key2 else sess_key, _all_laps2 if _all_laps2 is not None else _all_laps1) if compare and driver2 else None
 
@@ -924,6 +939,7 @@ if _pit_d1 is None and _pit_d2 is None:
     st.info("Pit stop data is not available for this session "
             "(Race and Sprint sessions only).")
 else:
+    # One HTML table per driver, wrapped together in a single card
     _pit_html = ""
     if _pit_d1:
         _pit_html += _render_pit_table(_pit_d1, colour1, label1)
@@ -954,6 +970,8 @@ if compare and driver2 and _pit_d1 and _pit_d2:
     _laps_source2 = _all_laps2 if _all_laps2 is not None else _all_laps1
     _laps_driver2 = _laps_source2[_laps_source2['Driver'] == driver2]
 
+    # Pair each of Driver 1's stops with Driver 2's first stop within 3 laps:
+    # those are stops made in response to each other.
     battles = []
     for p1 in _pit_d1:
         _u_lap1 = p1['lap']
@@ -971,10 +989,14 @@ if compare and driver2 and _pit_d1 and _pit_d2:
         _u_lap1 = battle[0]['lap']
         _u_lap2 = battle[1]['lap']
         
+        # Compare the gap one lap before the first stop with the gap two laps
+        # after the second, once both cars are back up to speed
         w_start = min(_u_lap1, _u_lap2) - 1
         w_end = max(_u_lap1, _u_lap2) + 2
         
         try:
+            # "Time" = session clock when each driver finished that lap, so the
+            # difference is the on-track gap (positive = Driver 1 behind)
             t1_start = _laps_driver1[_laps_driver1['LapNumber'] == w_start]['Time'].iloc[0]
             t2_start = _laps_driver2[_laps_driver2['LapNumber'] == w_start]['Time'].iloc[0]
             gap_start = (t1_start - t2_start).total_seconds()
@@ -985,10 +1007,12 @@ if compare and driver2 and _pit_d1 and _pit_d2:
             
             first_pitter = label1 if _u_lap1 < _u_lap2 else (label2 if _u_lap2 < _u_lap1 else "Simultaneous")
             
+            # Undercut works if whoever stopped first gained time over the window
             net_change = gap_start - gap_end
             success = "Successful" if (_u_lap1 < _u_lap2 and net_change > 0) or (_u_lap2 < _u_lap1 and net_change < 0) else "Failed"
             success_color = "#52E252" if success == "Successful" else "#E8002D"
             
+            # Result cards, then a chart of the gap through the pit window
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Aggressor (Pitted First)", first_pitter)
             col2.metric(f"Gap at Lap {w_start}", f"{abs(gap_start):.2f}s", f"{'Behind' if gap_start > 0 else 'Ahead'}")
@@ -998,6 +1022,7 @@ if compare and driver2 and _pit_d1 and _pit_d2:
             st.plotly_chart(build_undercut_chart(_laps_driver1, _laps_driver2, label1, label2, colour1, colour2, w_start, w_end, _u_lap1, _u_lap2), width="stretch", config={"displayModeBar": False})
             
         except Exception as e:
+            # a lap in the window is missing (e.g. retirement or red flag)
             st.warning("Could not calculate undercut gap due to missing telemetry on the battle laps.")
 
 
@@ -1040,7 +1065,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Fuel Decoupler Controls
+# Fuel Decoupler Controls: a toggle, and (when on) a slider for how much faster
+# the car gets per lap as fuel burns off. Off = fit raw lap times.
 col_fuel1, col_fuel2 = st.columns([1.8, 2.2])
 with col_fuel1:
     decouple_fuel = st.toggle(
@@ -1062,6 +1088,7 @@ with col_fuel2:
     else:
         fuel_burn_rate = 0.0
 
+# Per-stint degradation fits for each driver: fuel-corrected or raw
 if decouple_fuel:
     _deg_d1 = _build_fuel_decoupled_tyre_deg(driver1, _all_laps1, fuel_effect=fuel_burn_rate)
     _deg_d2 = _build_fuel_decoupled_tyre_deg(driver2, _all_laps2 if _all_laps2 is not None else _all_laps1, fuel_effect=fuel_burn_rate) if compare and driver2 else None
@@ -1072,6 +1099,8 @@ else:
 if not _deg_d1 and not _deg_d2:
     st.info("Insufficient stint telemetry (minimum 4 consecutive green-flag laps per stint) to model tyre degradation.")
 else:
+    # Chart of lap time vs tyre age with fitted lines; table_rows holds one row
+    # per stint (driver, compound, laps, seconds lost per lap)
     fig_deg, table_rows = build_tyre_deg_fig(
         _deg_d1, _deg_d2, driver1, driver2, colour1, colour2, compare,
         show_fuel_corrected=decouple_fuel
@@ -1091,7 +1120,8 @@ else:
 
     st.plotly_chart(fig_deg, width="stretch", config={"displayModeBar": False})
 
-    # Summary Table
+    # Summary Table: one row per stint with a coloured compound dot. Green rate
+    # = lap times got quicker over the stint; red = they got slower.
     table_html = ""
     for idx, row in enumerate(table_rows):
         row_bg = "rgba(255,255,255,0.03)" if idx % 2 == 0 else "transparent"
@@ -1160,11 +1190,16 @@ else:
 # setting above and seeds pit loss from the circuit's measured grid median net
 # pit loss computed by the Pit Lane Transit Loss section.
 try:
+    # Typical time lost by a pit stop at this circuit, measured by the Pit Lane
+    # Transit section above. NameError: that section failed before setting
+    # _transit_data, so the simulator uses its own default.
     _strat_pit_loss = None
     try:
         _strat_pit_loss = (_transit_data or {}).get("summary", {}).get("grid_median_pit_loss")
     except NameError:
         _strat_pit_loss = None
+    # Session type from the loaded session ("Race"), not the sidebar, which may
+    # have been changed without reloading
     try:
         _strat_session_type = str(sess.name)
     except Exception:
