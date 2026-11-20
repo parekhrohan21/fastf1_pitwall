@@ -574,13 +574,6 @@ _fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labe
 _export_figs = {}  # {"Lap Time History": figure, ...}, filled in as sections render
 
 
-
-
-
-
-
-
-
 # ── Session header ────────────────────────────────────────────────────────────
 # Back link, then the event banner (circuit, flag, round, session, date). In
 # session-compare mode both sessions' banners sit side by side.
@@ -641,10 +634,6 @@ with col_b:
             )
 
 
-
-
-
-
 # Lap pickers ("Fastest" or a lap number). lap1 / lap2 are the chosen lap rows
 # that most sections below analyse; laps1 / laps2 are all of that driver's laps.
 col_c, col_d = st.columns([1, 1] if compare else [1, 2])
@@ -667,7 +656,6 @@ if compare and driver2:
         "Chart View", ["Overlapping", "Separate"], horizontal=True, index=0,
         help="Overlapping: both drivers on same axes | Separate: individual side-by-side charts",
     )
-
 
 
 # ── Telemetry ─────────────────────────────────────────────────────────────────
@@ -696,7 +684,6 @@ colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver
 st.markdown("<div class='section-title'>Lap Summary</div>", unsafe_allow_html=True)
 
 
-
 # Two drivers -> two cards side by side; one driver -> a single card. Each card
 # shows headshot, team, lap time, sectors, tyre and weather for that lap.
 if compare and lap2 is not None:
@@ -711,7 +698,6 @@ else:
 # ── Session Statistics ────────────────────────────────────────────────────────
 # Per-driver aggregates across the whole session, not just the selected lap.
 st.markdown("<div class='section-title'>Session Statistics</div>", unsafe_allow_html=True)
-
 
 
 # Grid, finish, status, best lap, race pace and top speed for each driver; with
@@ -732,8 +718,6 @@ else:
 # periods shaded. Labels carry the year in session-compare mode so the legend
 # stays unambiguous across seasons.
 st.markdown("<div class='section-title'>Lap Time History</div>", unsafe_allow_html=True)
-
-
 
 
 # Legend labels reused by many sections below: "VER" normally, "VER (2026)"
@@ -822,8 +806,6 @@ with _fuel_col:
     )
 
 
-
-
 # Each lap's time minus the fuel effect x laps of fuel still on board, per driver
 _fuel_pairs = [
     (
@@ -905,9 +887,6 @@ else:
 st.markdown("<div class='section-title'>Tyre Stint Timeline</div>", unsafe_allow_html=True)
 
 
-
-
-
 # Per driver: list of stints (compound, first lap, last lap)
 _stint_data = [(label1, _build_stints(driver1, sess_key, _all_laps1))]
 if compare and driver2:
@@ -921,14 +900,10 @@ else:
     st.plotly_chart(_stint_fig_obj, width="stretch", config={"displayModeBar": False})
 
 
-
-
 # ── Pit Stop Summary ──────────────────────────────────────────────────────────
 # Derived from lap PitIn/PitOut times, so only Race and Sprint sessions produce
 # data. _pit_d1 / _pit_d2 are reused by the undercut simulator below.
 st.markdown("<div class='section-title'>Pit Stop Summary</div>", unsafe_allow_html=True)
-
-
 
 
 # Per driver: list of stops (lap, stop duration, tyres before/after), or None
@@ -1303,7 +1278,6 @@ _render_launch_analysis_section(
 )
 
 
-
 # ── Multi-Year Historical Lap Comparison ─────────────────────────────────
 # Only when both compared laps have telemetry — built for session-compare
 # across seasons. Both laps are aligned on a shared distance grid.
@@ -1399,7 +1373,6 @@ else:
                 st.info("Select at least one telemetry channel to display.")
 
 
-
 # ── Export Telemetry ──────────────────────────────────────────────────────────
 # Download the selected laps' telemetry as CSV, Parquet or JSON.
 render_telemetry_export_panel(
@@ -1454,8 +1427,6 @@ if compare and driver2:
 # From here on, sections are field-wide: they read the whole lap table rather
 # than the selected laps, and render one tab per session in session-compare mode.
 st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_allow_html=True)
-
-
 
 
 # Every driver's fastest lap, ranked; selected drivers highlighted
@@ -1546,8 +1517,6 @@ _frag_weekend_progression()
 st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_allow_html=True)
 
 
-
-
 # Session compare: one tab per session; otherwise one view with both drivers
 if sess2 is not None:
     tab_id1, tab_id2 = st.tabs([f"Session 1 Ideal Laps ({year1})", f"Session 2 Ideal Laps ({year2})"])
@@ -1606,7 +1575,6 @@ def _frag_grid_heatmap():
     _render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
 
 _frag_grid_heatmap()
-
 
 
 # ── Gap to Leader ─────────────────────────────────────────────────────────────
@@ -1724,8 +1692,6 @@ _frag_track_map()
 # classification, with the selected drivers and their teams highlighted.
 st.markdown("<hr style='margin:24px 0 16px; border-style: solid; opacity:0.15;'>", unsafe_allow_html=True)
 st.markdown("<div class='section-title'>Championship Standings & Classification</div>", unsafe_allow_html=True)
-
-
 
 
 if sess2 is not None:
