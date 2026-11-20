@@ -1261,6 +1261,8 @@ if tel1 is not None:
     )
 
 # ── Driver Driving Style DNA & Apex Aggression Spider Radar (#197) ──────────
+# Scores six driving traits (0-100) from the lap's telemetry and draws them on
+# a radar chart with a driving-style label; needs Driver 1 telemetry.
 st.markdown("<div class='section-title'>🧬 Driver Driving Style DNA & Apex Aggression Spider Radar</div>", unsafe_allow_html=True)
 if tel1 is not None:
     _render_driving_style_dna_section(
@@ -1273,6 +1275,7 @@ if tel1 is not None:
 # Line deltas only make sense on one circuit, so a session compare against a
 # different Grand Prix shows Driver 1 alone.
 st.markdown("<div class='section-title'>📐 Corner Geometry & Minimum-Radius Apex Analysis</div>", unsafe_allow_html=True)
+# True when there is one session, or both sessions are at the same Grand Prix
 try:
     _same_circuit = sess2 is None or sess2.event["EventName"] == sess.event["EventName"]
 except Exception:
@@ -1305,6 +1308,8 @@ _render_launch_analysis_section(
 # Only when both compared laps have telemetry — built for session-compare
 # across seasons. Both laps are aligned on a shared distance grid.
 if compare and tel1 is not None and tel2 is not None:
+    # Labels like "2025 VER · Verstappen", and each lap time in seconds (None
+    # when the lap has no official time)
     _era_label1 = f"{year1} {_fmt_driver1(driver1)}"
     _era_label2 = f"{year2} {_fmt_driver2(driver2)}"
     _lap1_sec = lap1["LapTime"].total_seconds() if lap1 is not None and hasattr(lap1, "LapTime") and pd.notna(lap1["LapTime"]) else None
@@ -1318,6 +1323,7 @@ if compare and tel1 is not None and tel2 is not None:
 
 st.markdown("<div class='section-title'>Telemetry</div>", unsafe_allow_html=True)
 
+# No car data for Driver 1's lap: nothing below can be drawn, so end the page
 if tel1 is None:
     st.warning("No telemetry available for the selected lap.")
     _render_footer()
@@ -1329,7 +1335,7 @@ if tel1 is None:
 import matplotlib
 import matplotlib.pyplot as plt
 from src.charts.matplotlib import style_ax, build_chart, build_delta_chart, build_time_delta_chart, AVAILABLE_CHANNELS
-matplotlib.rcParams.update(MATPLOTLIB_THEME)
+matplotlib.rcParams.update(MATPLOTLIB_THEME)  # dark/light colours for the static charts
 
 # Note the stop just above: without Driver 1 telemetry the run ends there, so
 # every section below (including the field-wide ones) is skipped.
@@ -1343,6 +1349,7 @@ selected_channels = st.multiselect(
 # ── Overlapping ───────────────────────────────────────────────────────────────
 # All drivers on shared axes. Also the single-driver view.
 if chart_mode == "Overlapping" or not compare:
+    # (label, colour, telemetry) for each driver to draw on the shared axes
     drv_list = [(label1, colour1, tel1)]
     if compare and tel2 is not None:
         drv_list.append((label2, colour2, tel2))
@@ -1356,6 +1363,8 @@ if chart_mode == "Overlapping" or not compare:
         else:
             title += f"  ·  {driver1}"
 
+    # Static Matplotlib chart, one row per selected channel. plt.close frees
+    # the figure's memory, which would otherwise build up on every rerun.
     fig = build_chart(drv_list, title, selected_channels=selected_channels)
     if fig is not None:
         st.pyplot(fig, width="stretch")
@@ -1366,6 +1375,8 @@ if chart_mode == "Overlapping" or not compare:
 # ── Separate ──────────────────────────────────────────────────────────────────
 # Side-by-side charts, one per driver.
 else:
+    # Left column = Driver 1, right column = Driver 2; each chart's title is
+    # that driver's label and lap time
     lc, rc = st.columns(2)
     for col_ctx, drv_lbl, driver, tel, colour, lap_obj in [
         (lc, label1, driver1, tel1, colour1, lap1),
@@ -1410,12 +1421,15 @@ if compare and chart_mode == "Overlapping" and tel1 is not None and tel2 is not 
     if "Speed" in tel1.columns and "Speed" in tel2.columns:
         st.markdown("<div class='section-title'>Speed Delta</div>", unsafe_allow_html=True)
 
+        # Speed difference along the lap, shaded by whichever driver is faster
         fig_d = build_delta_chart(tel1, tel2, colour1, colour2, label1, label2)
         st.pyplot(fig_d, width='stretch')
         plt.close(fig_d)
 
 if compare and chart_mode == "Overlapping" and lap1 is not None and lap2 is not None:
     st.markdown("<div class='section-title'>Time Delta (Continuous)</div>", unsafe_allow_html=True)
+    # Running time gap along the lap (laps passed Driver 2 first so the line
+    # reads as Driver 2 relative to Driver 1)
     fig_td = build_time_delta_chart(lap2, lap1, colour2, colour1, label2, label1)
     if fig_td:
         st.pyplot(fig_td, width='stretch')
@@ -1426,6 +1440,7 @@ if compare and chart_mode == "Overlapping" and lap1 is not None and lap2 is not 
 # Grands Prix is refused inside the renderer.
 if compare and driver2:
     st.markdown("<div class='section-title'>🧩 Micro-Sector Speed Delta & Dominance Timeline</div>", unsafe_allow_html=True)
+    # same check as Corner Geometry: one session, or both at the same Grand Prix
     try:
         _same_circuit_ms = sess2 is None or sess2.event["EventName"] == sess.event["EventName"]
     except Exception:
@@ -1443,6 +1458,7 @@ st.markdown("<div class='section-title'>Fastest Laps Leaderboard</div>", unsafe_
 
 
 
+# Every driver's fastest lap, ranked; selected drivers highlighted
 if sess2 is not None:
     tab_lb1, tab_lb2 = st.tabs([f"Session 1 Leaderboard ({year1})", f"Session 2 Leaderboard ({year2})"])
     with tab_lb1:
@@ -1493,6 +1509,8 @@ _render_dirty_air_section(
 # mode/resolution/FPS or generating a clip does not rerun the whole page.
 @st.fragment
 def _frag_brag_video():
+    # Builds a shareable highlight clip of Driver 1's lap. A Driver 2 from the
+    # same session can join (e.g. pole duel); one from another session cannot.
     try:
         _brag_lap_no = int(lap1["LapNumber"]) if lap1 is not None else None
     except Exception:
@@ -1502,13 +1520,16 @@ def _frag_brag_video():
         driver2 if compare and sess2 is None else None, colour2, _fmt_driver2
     )
 
-_frag_brag_video()
+_frag_brag_video()  # draw the section now; later clicks inside it rerun only this function
 
 # ── Weekend Multi-Session Progression Tracker (Issue #156) ─────────────────
 # CHANGE (#203): Isolate Weekend Progression inside @st.fragment so clicking the
 # on-demand load button only updates this section.
 @st.fragment
 def _frag_weekend_progression():
+    # Loads every session of this Grand Prix for Driver 1 (on button press) to
+    # show pace and mileage across the weekend. Lap length in km comes from
+    # Driver 1's telemetry and is used to convert laps into distance.
     try:
         _wk_event = str(sess.event["EventName"])
         _wk_len_km = float(tel1["Distance"].max()) / 1000.0 if tel1 is not None and "Distance" in tel1.columns else None
@@ -1527,6 +1548,7 @@ st.markdown("<div class='section-title'>Ideal Lap vs Actual Lap</div>", unsafe_a
 
 
 
+# Session compare: one tab per session; otherwise one view with both drivers
 if sess2 is not None:
     tab_id1, tab_id2 = st.tabs([f"Session 1 Ideal Laps ({year1})", f"Session 2 Ideal Laps ({year2})"])
     with tab_id1:
@@ -1544,6 +1566,8 @@ else:
 # CHANGE (#203): Isolate interactive Qualifying/Race toggle inside @st.fragment.
 @st.fragment
 def _frag_teammate_battle():
+    # Each team's two drivers compared (qualifying or race pace), with the
+    # selected drivers highlighted; one tab per session in session compare
     st.markdown("<div class='section-title'>Intra-Team Teammate Battle & Qualifying Delta Matrix</div>", unsafe_allow_html=True)
     if sess2 is not None:
         tab_tb1, tab_tb2 = st.tabs([f"Session 1 Teammate Battles ({year1})", f"Session 2 Teammate Battles ({year2})"])
@@ -1576,6 +1600,8 @@ _frag_teammate_battle()
 # CHANGE (#203): Isolate heatmap mode/driver multiselect inside @st.fragment.
 @st.fragment
 def _frag_grid_heatmap():
+    # Pick 3-20 drivers to compare sector times, lap-by-lap pace or top speed
+    # as colour-coded heatmaps
     st.markdown("<div class='section-title'>Multi-Driver Grid Analysis & Heatmaps</div>", unsafe_allow_html=True)
     _render_grid_heatmap_section(sess, _all_laps1, all_drivers1, sess_key, fmt_func=_fmt_driver1)
 
@@ -1588,6 +1614,7 @@ _frag_grid_heatmap()
 # Session 1 figure is registered for PDF export.
 st.markdown("<div class='section-title'>Gap to Leader</div>", unsafe_allow_html=True)
 
+# The renderer returns the figure so it can be added to the PDF export
 if sess2 is not None:
     tab_g1, tab_g2 = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
     with tab_g1:
@@ -1613,7 +1640,7 @@ def _frag_race_control():
     if _rc_messages is None or _rc_messages.empty:
         st.info("Race control messages are not available for this session.")
     else:
-        # Flag type colour badge map
+        # Flag type colour badge map: (emoji, colour) for each kind of message
         _FLAG_BADGE = {
             "SAFETY CAR":         ("🟠", "#FF8C00"),
             "VIRTUAL SAFETY CAR": ("🟡", "#FFD700"),
@@ -1623,12 +1650,13 @@ def _frag_race_control():
             "INVESTIGATION":      ("🔵", "#5B8DEF"),
             "INFO":               ("⚪", "#888888"),
         }
-        # Searchable filter
+        # Searchable filter: "All" or one message type
         _rc_filter_options = ["All"] + sorted(_rc_messages["FlagType"].unique().tolist())
         _rc_filter = st.selectbox("Filter by event type", _rc_filter_options, key="rc_filter")
         _rc_display = _rc_messages if _rc_filter == "All" else _rc_messages[_rc_messages["FlagType"] == _rc_filter]
 
-        # Build display columns
+        # Build display columns: keep the useful ones, show "Lap 12" instead of
+        # 12, and put the emoji badge in front of each flag type
         _rc_cols = [c for c in ["LapNumber", "FlagType", "Message", "Category", "Scope", "Sector"] if c in _rc_display.columns]
         _rc_df = _rc_display[_rc_cols].copy()
         if "LapNumber" in _rc_df.columns:
@@ -1650,6 +1678,7 @@ _frag_race_control()
 # Running order lap by lap.
 st.markdown("<div class='section-title'>Race Position</div>", unsafe_allow_html=True)
 
+# Running order chart; the Session 1 figure is kept for the PDF export
 if sess2 is not None:
     tab_p1, tab_p2 = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
     with tab_p1:
@@ -1670,6 +1699,9 @@ else:
 # @st.fragment so map interactions never rerun the full 29-section page.
 @st.fragment
 def _frag_track_map():
+    # Speed map, mini-sector dominance, pedal inputs, corner analysis and the
+    # animated race replay, in tabs. Each session gets its own key prefix
+    # ("sess1", "sess2", "single") so Streamlit widget IDs never clash.
     st.markdown("<div class='section-title'>Track Map</div>", unsafe_allow_html=True)
     if sess2 is not None:
         session_map_tabs = st.tabs([f"Session 1 ({year1})", f"Session 2 ({year2})"])
@@ -1699,14 +1731,16 @@ st.markdown("<div class='section-title'>Championship Standings & Classification<
 if sess2 is not None:
     tab_cls1, tab_cls2 = st.tabs([f"Session 1 Standings & Results ({year1})", f"Session 2 Standings & Results ({year2})"])
     with tab_cls1:
-        # Session 1 Constructors Standings
+        # Session 1 Constructors Standings: championship table after this round,
+        # with Driver 1's team highlighted
         r1 = _get_round(sess)
         standings1 = _build_constructor_standings(year1, r1)
         team1 = sess.get_driver(driver1).get("TeamName", "") if driver1 else ""
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-bottom: 8px; opacity: 0.85;'>🏆 Constructors' Championship Standings</div>", unsafe_allow_html=True)
         _render_constructor_standings(standings1, [team1], [colour1])
         
-        # Session 1 Classification
+        # Session 1 Classification: official results, plus each driver's
+        # championship points so far
         st.markdown("<div style='font-size: 15px; font-weight: 700; margin-top: 18px; margin-bottom: 8px; opacity: 0.85;'>🏁 Official Session Classification</div>", unsafe_allow_html=True)
         _cls1 = _build_final_classification(sess_key, sess.results)
         standings_d1 = _build_driver_standings(year1, r1)
@@ -1726,7 +1760,8 @@ if sess2 is not None:
         standings_d2 = _build_driver_standings(year2, r2)
         _render_final_classification(_cls2, [driver2], [colour2], _fmt_driver2, standings_d2, laps_df=_all_laps2)
 else:
-    # Single Session constructors standings
+    # Single Session constructors standings: both selected drivers' teams are
+    # highlighted (one team if they are teammates)
     r = _get_round(sess)
     standings = _build_constructor_standings(year, r)
     team1 = sess.get_driver(driver1).get("TeamName", "") if driver1 else ""
@@ -1747,10 +1782,10 @@ else:
 
 # ── PDF Debrief Export & Footer ───────────────────────────────────────────────
 # Added last, once the sections above have populated _export_figs.
+# The sidebar "Generate PDF Report" button bundles the figures in _export_figs.
+# Not offered in live mode, where the data is still changing.
 with st.sidebar:
     if not live_mode and "driver1" in locals() and "driver2" in locals():
         render_export_section(f"{year} {gp} {session_label}", driver1, driver2 if compare else None, _export_figs)
 
-_render_footer()
-
-
+_render_footer()  # credits and links at the bottom of the page
