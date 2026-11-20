@@ -343,6 +343,8 @@ with st.sidebar:
 # then st.stop() ends the run. Session 2 loads only in session-compare mode and never
 # in live mode. sess / sess2 / sess_key / sess_key2 are then read back from
 # state — they are the source of truth for everything below.
+# First visit in this browser tab: create empty slots so the reads below never
+# raise KeyError. They survive every later rerun.
 if "session" not in st.session_state:
     st.session_state["session"] = None
     st.session_state["sess_key"] = None
@@ -354,11 +356,15 @@ if "year1" not in st.session_state:
 if "year2" not in st.session_state:
     st.session_state["year2"] = _years[0] if _years else 2026
 
+# Cache keys such as "2026_British Grand Prix_R". Cached builders use them to
+# tell sessions apart, so each session's results are computed once.
 sess_key = f"{year}_{gp}_{session_type}"
 sess_key2 = f"{year2}_{gp2}_{session_type2}" if compare_sessions else None
 
 if load_btn:
     if live_mode:
+        # Live mode: build a session from the recorded live-timing file. The key
+        # is prefixed "LIVE_" so cached results never mix with a finished session.
         with st.spinner(f"Loading Live Stream Data from '{live_filename}'…"):
             live_sess, err_msg = load_live_session(year, gp, session_type, live_filename)
             if err_msg or live_sess is None or not hasattr(live_sess, "laps") or live_sess.laps is None or live_sess.laps.empty:
@@ -410,6 +416,7 @@ if load_btn:
                 _render_footer()
                 st.stop()
 
+    # Session 2 is loaded the same way, only in session-compare mode
     if compare_sessions and not live_mode:
         with st.spinner(f"Loading Session 2: {gp2} {year2} {session_label2}…  (first load ~15–30 s)"):
             try:
@@ -440,10 +447,14 @@ if load_btn:
                 _render_footer()
                 st.stop()
     else:
+        # Compare box unticked: forget any Session 2 from an earlier load
         st.session_state["session2"] = None
         st.session_state["sess_key2"] = None
         st.session_state["year2"] = None
 
+# Read the loaded session(s) back from state. These, not the sidebar widgets,
+# decide what the rest of the page shows (the sidebar may have been changed
+# without pressing Load again).
 sess = st.session_state.get("session")
 sess2 = st.session_state.get("session2")
 sess_key = st.session_state.get("sess_key")
@@ -451,6 +462,7 @@ sess_key2 = st.session_state.get("sess_key2")
 year1 = st.session_state.get("year1")
 year2 = st.session_state.get("year2")
 
+# Live mode banner at the top of the page (recorder status and refresh timer)
 if live_mode:
     live_status = get_live_recorder_status(live_filename)
     render_live_status_banner(live_status, auto_refresh_sec > 0, auto_refresh_sec)
@@ -459,6 +471,7 @@ if live_mode:
 # Nothing loaded yet: show the landing page and stop. Every section below can
 # assume `sess` is a loaded session.
 if sess is None:
+    # Back link, then a welcome card with four feature tiles
     st.markdown(
         "<a href='http://rohanparekh.uk' target='_top' class='back-home-link main-back-home'>"
         "<span>👈</span>"
@@ -494,6 +507,7 @@ if sess is None:
 # In that case clear both the FastF1 cache and session state, so the user is not
 # stuck re-running against a broken session.
 try:
+    # Three-letter driver codes (e.g. "VER") that set a lap in each session
     all_drivers1 = sorted(sess.laps["Driver"].dropna().unique().tolist())
     if not all_drivers1:
         raise ValueError("Empty drivers list for Session 1")
@@ -540,7 +554,7 @@ _all_laps2: pd.DataFrame = pd.DataFrame(sess2.laps.copy()) if sess2 is not None 
 # ── Race Control Messages ──────────────────────────────────────────────────────
 # Built once and shared: flag and safety car periods are shaded on Lap Time
 # History and Gap to Leader, and the full log renders in Race Control Feed.
-_rc_messages = _build_race_control_messages(sess_key, sess)
+_rc_messages = _build_race_control_messages(sess_key, sess)  # table: lap, flag type, message
 
 # ── Driver name labels (built once per session) ───────────────────────────────
 # 'VER · Verstappen'-style display labels for selectbox format_func and legends.
@@ -548,6 +562,8 @@ _drv_labels1: dict = _build_driver_labels(sess)
 _drv_labels2: dict = _build_driver_labels(sess2) if sess2 is not None else None
 
 # Build closures that capture the labels dicts — avoids NameError from loader.py globals
+# _fmt_driver1("VER") -> "VER · Verstappen". Driver 2's formatter falls back to
+# Session 1's names when there is no second session.
 _fmt_driver1 = _make_fmt_driver(_drv_labels1)
 _fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labels1)
 
@@ -555,7 +571,7 @@ _fmt_driver2 = _make_fmt_driver(_drv_labels2 or _drv_labels1, fallback=_drv_labe
 # Plotly figures are registered here as their sections render (Lap Time History,
 # Tyre Stints, Gap to Leader, Position History) and bundled into the sidebar PDF
 # debrief at the very end of the script.
-_export_figs = {}
+_export_figs = {}  # {"Lap Time History": figure, ...}, filled in as sections render
 
 
 
@@ -565,6 +581,9 @@ _export_figs = {}
 
 
 
+# ── Session header ────────────────────────────────────────────────────────────
+# Back link, then the event banner (circuit, flag, round, session, date). In
+# session-compare mode both sessions' banners sit side by side.
 st.markdown(
     "<a href='http://rohanparekh.uk' target='_top' class='back-home-link main-back-home'>"
     "<span>👈</span>"
@@ -593,6 +612,7 @@ else:
 st.markdown("<div class='section-title'>Driver Selection</div>", unsafe_allow_html=True)
 col_a, col_b = st.columns([1, 1])
 with col_a:
+    # Winner (or fastest driver in practice) is pre-selected as Driver 1
     _p1_drv1 = _get_session_winner(sess, all_drivers1)
     _def_d1_idx = all_drivers1.index(_p1_drv1) if _p1_drv1 in all_drivers1 else 0
     driver1 = st.selectbox(
@@ -601,6 +621,8 @@ with col_a:
     )
 with col_b:
     if sess2 is not None:
+        # Session compare: always comparing; default to the same driver in
+        # Session 2 (e.g. VER 2025 vs VER 2026) when they took part.
         compare = True
         _def_d2_idx = all_drivers2.index(driver1) if driver1 in all_drivers2 else 0
         driver2 = st.selectbox(
@@ -608,10 +630,11 @@ with col_b:
             format_func=_fmt_driver2,
         )
     else:
+        # Driver compare within one session is optional
         compare = st.checkbox("Compare with Driver 2", value=False)
         driver2 = None
         if compare:
-            remaining = [d for d in all_drivers1 if d != driver1]
+            remaining = [d for d in all_drivers1 if d != driver1]  # can't compare a driver with themselves
             driver2 = st.selectbox(
                 "Driver 2", remaining, key="d2",
                 format_func=_fmt_driver1,
@@ -622,6 +645,8 @@ with col_b:
 
 
 
+# Lap pickers ("Fastest" or a lap number). lap1 / lap2 are the chosen lap rows
+# that most sections below analyse; laps1 / laps2 are all of that driver's laps.
 col_c, col_d = st.columns([1, 1] if compare else [1, 2])
 with col_c:
     lap1, laps1 = lap_selector(sess, driver1, "_1", _fmt_driver1)
@@ -634,7 +659,8 @@ with col_d:
     else:
         lap2 = laps2 = None
 
-# Chart mode toggle
+# Chart mode toggle: only offered with two drivers; one driver always uses the
+# Overlapping layout.
 chart_mode = "Overlapping"
 if compare and driver2:
     chart_mode = st.radio(
@@ -655,9 +681,12 @@ with st.spinner("Loading car & position telemetry…"):
     if sess2 is not None:
         ensure_session_telemetry(sess2)
 
+# Car data for the chosen laps (None if unavailable); Driver 2 only when comparing
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
 
+# Team colour for each driver, used by every chart and card. The page accent is
+# re-themed to Driver 1's team; teal is a placeholder when there is no Driver 2.
 colour1 = driver_colour(sess, driver1)
 inject_styles(colour1)
 colour2 = driver_colour(sess2 if sess2 is not None else sess, driver2) if driver2 else "#27F4D2"
