@@ -1401,13 +1401,18 @@ def build_weather_correlation_fig(
     driver_laps = weather_data.get("driver_laps", {})
     stats = weather_data.get("stats", {})
 
-    if laps_w_df is None or laps_w_df.empty:
+    # CHANGE (#210): Still plot driver lap-time pace traces when TrackTemp weather
+    # data is empty (e.g. 2018-2022 Jolpica-F1 sessions); only return None if both
+    # weather and driver lap pace are absent.
+    has_weather = laps_w_df is not None and not laps_w_df.empty
+    has_driver_laps = any(df is not None and not df.empty for df in driver_laps.values())
+    if not has_weather and not has_driver_laps:
         return None
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     # 1. Plot Track Temperature on Secondary Y-axis
-    if "TrackTemp" in laps_w_df.columns and not laps_w_df["TrackTemp"].isna().all():
+    if has_weather and "TrackTemp" in laps_w_df.columns and not laps_w_df["TrackTemp"].isna().all():
         fig.add_trace(
             go.Scatter(
                 x=laps_w_df["LapNumber"],
@@ -1458,7 +1463,7 @@ def build_weather_correlation_fig(
         )
 
     # 4. Highlight wet laps shading if rainfall was detected
-    if "Rainfall" in laps_w_df.columns:
+    if has_weather and "Rainfall" in laps_w_df.columns:
         wet_df = laps_w_df[laps_w_df["Rainfall"] == True]
         if not wet_df.empty:
             for _, r_row in wet_df.iterrows():

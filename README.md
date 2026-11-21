@@ -108,7 +108,7 @@ The application is built on a modern, high-performance telemetry analytics stack
 | **`fpdf2`** & **`Pillow`** | `≥ 2.7.5` / `≥ 10.0.0` | Broadcast-quality Post-Race Debrief PDF generation engine with high-DPI figure captures. |
 | **`kaleido`** | `≥ 0.2.1` | Static image rendering engine for Plotly figures during report compilation. |
 | **`imageio`** & **`imageio-ffmpeg`** | `≥ 2.34.0` / `≥ 0.5.1` | H.264 MP4 encoding for the Brag Video (optional: without them the clip falls back to an animated GIF built with Pillow). |
-| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**222 unit/integration tests across 28 dedicated modules**). |
+| **`pytest`** & **`pytest-mock`** | `≥ 8.0.0` / `≥ 3.12.0` | Automated test suite execution (**226 unit/integration tests across 29 dedicated modules**). |
 
 > [!IMPORTANT]
 > **Streamlit Version Warning**: The dashboard strictly utilizes Streamlit's modern `width='stretch'` / `width='content'` parameterization. Running on older Streamlit versions (< 1.44.0) will cause deprecation warnings or layout rendering errors. Always use the pinned dependencies in `requirements.txt`.
@@ -194,7 +194,7 @@ Issue numbers link directly to the corresponding GitHub issue and Pull Request. 
 - **Dynamic Constructor Theming & Light/Dark Mode** ([Issue #112](https://github.com/parekhrohan21/fastf1_pitwall/issues/112), Commits `dbe8b59`, `a669c45`, `32160d7`): Automatically recolours cards, banners, and charts to match team liveries, with an instant toggle between midnight dark mode and light mode and full light-mode contrast overrides for BaseWeb selectboxes, virtualised dropdown popovers, checkboxes, toggles, and expanders.
 - **Connection Diagnostics & Anti-Bot Bypass** ([Issue #100](https://github.com/parekhrohan21/fastf1_pitwall/issues/100), [Issue #105](https://github.com/parekhrohan21/fastf1_pitwall/issues/105), Commit `abc2b87`): TLS impersonation (`curl_cffi`) and sidebar diagnostics to bypass CloudFront/Cloudflare 403 blocks. Displays the active data source in the sidebar diagnostics panel and probes both free APIs and upstream servers (`livetiming_rejects_requests`).
 - **Modular Architecture & Code Hygiene** ([Issue #82](https://github.com/parekhrohan21/fastf1_pitwall/issues/82), [Issue #164](https://github.com/parekhrohan21/fastf1_pitwall/issues/164), [Issue #177](https://github.com/parekhrohan21/fastf1_pitwall/issues/177)): Refactored into clean `src/` modules (`src/data/`, `src/charts/`, `src/ui/`), purged duplicate code from `app.py`, and added comprehensive architectural commentary detailing the 11-stage render pipeline.
-- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **222 automated pytest unit and integration tests** across 28 dedicated modules.
+- **Automated Pytest Test Suite** ([Issue #83](https://github.com/parekhrohan21/fastf1_pitwall/issues/83)): Comprehensive test coverage with **226 automated pytest unit and integration tests** across 29 dedicated modules.
 
 ---
 
@@ -255,7 +255,8 @@ fastf1_pitwall/
 │       ├── styles.py           # CSS design system, team/compound constants, PWA manifest & dark/light toggler
 │       └── components.py       # Reusable UI sections, KPI metric cards, map tabs, strategy simulator, driving style DNA, teammate matrix,
 │                               # pit loss breakdown, weekend progression, dirty air, brag video, traction sections & telemetry export panels
-├── tests/                      # Automated Pytest suite (222 tests across 28 dedicated modules)
+├── tests/                      # Automated Pytest suite (226 tests across 29 dedicated modules)
+│   ├── test_chart_fixes_204.py         # Regression tests for #204/#205-#210 (imports, chart keys, tel cache, weather fallback)
 │   ├── test_cache_and_perf.py          # Unified ./cache dir, @st.cache_resource session sharing & lazy telemetry
 │   ├── test_launch_analysis.py         # Standing-start reaction time, 0-100/200 km/h, clutch RPM drop & launch chart
 │   ├── test_free_api_fallback.py       # Zero-auth OpenF1 / MultiViewer / Jolpica-F1 session & telemetry adapters
@@ -341,7 +342,7 @@ Before staging or committing any code, always run the pytest automated test suit
 ```bash
 python3.11 -m pytest tests/
 ```
-All **222 unit and integration tests** across 28 test modules must pass cleanly.
+All **226 unit and integration tests** across 29 test modules must pass cleanly.
 
 Then run a python syntax compilation check across all source modules:
 ```bash
@@ -395,7 +396,7 @@ git fetch -p
 | **F1 `livetiming.formula1.com` HTTP 401/403** | Since October 2026 `livetiming.formula1.com` requires a paid F1TV login for unauthenticated requests. | ✅ **Handled automatically with zero sign-in required.** `load_session()` transparently routes 2023–present sessions through the free **OpenF1 API + MultiViewer Circuit API + Jolpica-F1** and 2018–2022 sessions through **Jolpica-F1**, while preserving local `.ff1pkl` caches. |
 | **Track maps / Corner Geometry show estimated data during a live session** | While any F1 session is live, OpenF1 returns HTTP 401 to unauthenticated users until the session ends. Pit Wall then falls back to estimated lap traces interpolated between the circuit's corner markers (tagged `Synthetic`). | Expected. The 📐 Corner Geometry section shows an info message instead of corner shapes. Reload the session after the live session finishes, or configure `F1_USERNAME` / `F1_PASSWORD` for direct live timing. |
 | **Corner Geometry rows marked ⚠ low confidence** | Car position is sampled at ~4 Hz (~20 m apart at top speed), so very fast direction changes (e.g. Jeddah T7–T8) cannot be resolved; their radius would imply more than 6.5 g. | Treat those rows as indicative only. Apex-to-marker offsets are most meaningful when compared between drivers or laps, and the lateral gap between two lines is a relative comparison only (track edges are not available). |
-| **Gap to Leader, Race Position or later sections missing** | Open bugs [#206](https://github.com/parekhrohan21/fastf1_pitwall/issues/206), [#207](https://github.com/parekhrohan21/fastf1_pitwall/issues/207) and [#208](https://github.com/parekhrohan21/fastf1_pitwall/issues/208): a `NameError` or duplicate chart ID stops Streamlit partway down the page, so every section below it is skipped. (The Ideal Lap crash, [#205](https://github.com/parekhrohan21/fastf1_pitwall/issues/205), is fixed in [`1438372`](https://github.com/parekhrohan21/fastf1_pitwall/commit/1438372).) | Not fixed yet. The sections above the failing one (telemetry, corner geometry, micro-sectors, Ideal Lap) still work. See the Active Roadmap below. |
+| **Gap to Leader, Race Position or later sections missing** | Formerly open bugs [#204](https://github.com/parekhrohan21/fastf1_pitwall/issues/204)–[#210](https://github.com/parekhrohan21/fastf1_pitwall/issues/210). | ✅ **Resolved** — Imported `_fmt_sec`, `_build_gap_data`, and `_build_position_data` in `components.py`, added unique `key=` arguments to all `st.plotly_chart` calls across Track Map / Traction / Session-Compare tabs, fixed `sess_key2 or sess_key` in `get_telemetry_cached`, and allowed `build_weather_correlation_fig` to plot pace when `TrackTemp` is absent. |
 | **Verify API connectivity or TLS status** | Network firewall or CDN blocking. | Expand **🛠️ Diagnostics & Debug Info** at the bottom of the sidebar and click **Run Connection Test** to verify connectivity. |
 | **Plotly deprecation warning on `use_container_width`** | Running an older codebase version. | The codebase uses `width='stretch'` / `width='content'` throughout. Update to the latest version of the repository. |
 | **Top bar keeps the old theme** | Browser cached stylesheet edge case. | Toggle the dark/light mode button in the sidebar once more — CSS injection re-applies on every rerun. |
@@ -409,14 +410,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 ### 🔮 Active Roadmap & Open Issues
 
-| Issue | Title | Category | Scope & Planned Capability | Status |
-|:---:|---|---|---|:---:|
-| **[#210](https://github.com/parekhrohan21/fastf1_pitwall/issues/210)** | `bug: Track Temperature & Weather Impact Correlation chart is not shown for Jolpica-F1 historical sessions (2018-2022)` | Bug · Weather | 2018–2022 sessions loaded through Jolpica-F1 have no weather data, so the section shows its cards but no chart and no notice. Fix: show a "no weather data" message (or chart pace alone). | Open |
-| **[#209](https://github.com/parekhrohan21/fastf1_pitwall/issues/209)** | `bug: Telemetry & Delta charts do not update when changing lap number or comparing drivers (get_telemetry_cached key collision)` | Bug · Telemetry | Reported as an `st.cache_data` key that ignores the lap. Current `get_telemetry_cached` keys `st.session_state` by session, driver **and** lap number, so this needs re-checking against the reported steps. | Needs re-check |
-| **[#208](https://github.com/parekhrohan21/fastf1_pitwall/issues/208)** | `bug: Track Map 'Traction & Exit' tab crashes with StreamlitDuplicateElementId and blocks Standings & PDF Export` | Bug · Track Map | `_render_traction_exit_section` runs twice on one page (standalone section and Track Map tab) with an un-keyed `st.plotly_chart`. Fix: pass a unique `key`. | Open |
-| **[#207](https://github.com/parekhrohan21/fastf1_pitwall/issues/207)** | `bug: Race Position chart fails to render with NameError: name '_build_position_data' is not defined` | Bug · Race Position | `_build_position_data` is missing from the loader imports in `src/ui/components.py`. | Open |
-| **[#206](https://github.com/parekhrohan21/fastf1_pitwall/issues/206)** | `bug: Gap to Leader chart fails to render with NameError: name '_build_gap_data' is not defined` | Bug · Gap to Leader | `_build_gap_data` is missing from the loader imports in `src/ui/components.py`. | Open |
-| **[#204](https://github.com/parekhrohan21/fastf1_pitwall/issues/204)** | `Charts issue in the website` | Bug · Umbrella | Umbrella report for charts missing on the website; the specific causes are tracked in #205–#210. | Open |
+All tracked chart, performance, and feature issues (#1–#210) are currently resolved!
 
 ---
 
@@ -424,6 +418,7 @@ All development on FastF1 Pit Wall is tracked transparently via GitHub Issues an
 
 | Issue / PR | Title | Category | Key Capability Delivered |
 |:---:|---|---|---|
+| **[#204](https://github.com/parekhrohan21/fastf1_pitwall/issues/204)** / **[#206](https://github.com/parekhrohan21/fastf1_pitwall/issues/206)**–**[#210](https://github.com/parekhrohan21/fastf1_pitwall/issues/210)** | `fix: resolve all website chart rendering crashes and missing charts (#204, #206–#210)` | Bug Fix · Charts | Imported `_build_gap_data` (#206) and `_build_position_data` (#207) in `src/ui/components.py`; added unique `key=` parameters to `st.plotly_chart` in `_render_traction_exit_section`, `render_maps_block`, `_render_gap_to_leader_section`, `_render_position_section`, `_render_teammate_battle_section`, `_render_pit_loss_section`, `_render_braking_analysis_section`, and `_render_gear_analysis_section` (#208); fixed `sess_key2 or sess_key` for Driver 2 in `get_telemetry_cached` (#209); enabled `build_weather_correlation_fig` to render driver pace traces with an info notice when `TrackTemp` is unavailable on 2018–2022 Jolpica-F1 sessions (#210); added 4 regression tests in `tests/test_chart_fixes_204.py`. |
 | **[27a0828](https://github.com/parekhrohan21/fastf1_pitwall/commit/27a0828)** / **[499b6d5](https://github.com/parekhrohan21/fastf1_pitwall/commit/499b6d5)** / **[dd4a842](https://github.com/parekhrohan21/fastf1_pitwall/commit/dd4a842)** / **[6280183](https://github.com/parekhrohan21/fastf1_pitwall/commit/6280183)** | `docs(app): plain-language comments throughout app.py` | Code Hygiene & Docs | Explained every block of `app.py` in plain language, from imports and sidebar controls through session loading, driver and lap pickers, each analysis section, telemetry charts, field-wide sections and fragments, to the PDF export, so anyone opening the file can follow what each part does and why. Comment-only: the module's AST is unchanged and all 222 tests pass. Excess blank lines were also collapsed ([`5fa8b77`](https://github.com/parekhrohan21/fastf1_pitwall/commit/5fa8b77)). |
 | **[#205](https://github.com/parekhrohan21/fastf1_pitwall/issues/205)** ([`1438372`](https://github.com/parekhrohan21/fastf1_pitwall/commit/1438372)) | `bug: Ideal Lap vs Actual Lap crashes with NameError ('_fmt_sec') and blocks all downstream charts from rendering` | Bug Fix · Ideal Lap | Imported the `_fmt_sec` time formatter from `src.data.loader` into `src/ui/components.py`, so the Ideal Lap vs Actual Lap section renders again and no longer stops every section below it. |
 | **[0fe0e6a](https://github.com/parekhrohan21/fastf1_pitwall/commit/0fe0e6a)** | `fix(ui): extract COMPOUND_COLOURS fill hex and unindent pit stop card HTML` | Bug Fix · Pit Lane Transit Loss | The tyre compound badges read the hex `fill` colour from the `COMPOUND_COLOURS` palette (they were given the whole colour dictionary), and the per-stop cards are built from unindented HTML so Streamlit's Markdown parser no longer shows them as raw code blocks. |

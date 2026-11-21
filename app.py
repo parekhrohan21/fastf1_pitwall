@@ -670,8 +670,10 @@ with st.spinner("Loading car & position telemetry…"):
         ensure_session_telemetry(sess2)
 
 # Car data for the chosen laps (None if unavailable); Driver 2 only when comparing
+# CHANGE (#209): Fall back to sess_key when sess_key2 is None (single-session
+# driver compare mode) so Driver 2 telemetry is never cached under key "tel_None_...".
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
-tel2 = get_telemetry_cached(driver2, lap2, sess_key2) if (compare and driver2 and lap2 is not None) else None
+tel2 = get_telemetry_cached(driver2, lap2, sess_key2 or sess_key) if (compare and driver2 and lap2 is not None) else None
 
 # Team colour for each driver, used by every chart and card. The page accent is
 # re-themed to Driver 1's team; teal is a placeholder when there is no Driver 2.

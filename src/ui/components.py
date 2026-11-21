@@ -9,6 +9,7 @@ from src.data.loader import (
     _get_session_winner, _get_default_gp_index, get_constructor_colour,
     is_same_team, _build_constructor_standings, get_driver_standings_points,
     _build_driver_standings, _build_final_classification, _get_telemetry_for_map,
+    _build_gap_data, _build_position_data,
     _build_grid_heatmap_data, _build_consistency_analysis,
     _build_weather_correlation_data, _build_track_evolution_data,
     _build_multi_year_comparison, _build_weekend_progression_data, _build_dirty_air_analysis,
@@ -906,7 +907,8 @@ def _render_gap_to_leader_section(sess_k, laps_df, session_obj, highlight_driver
     colours = [highlight_colours[highlight_drivers.index(d)] for d in highlight]
 
     gtl_fig = _gap_chart_fig(gtl_data, highlight, colours, session_obj.laps, rc_messages=rc_messages)
-    st.plotly_chart(gtl_fig, width="stretch", config={"displayModeBar": False})
+    # CHANGE (#208): unique key prevents StreamlitDuplicateElementId in Session-Compare Mode tabs
+    st.plotly_chart(gtl_fig, width="stretch", key=f"gap_to_leader_{sess_k}", config={"displayModeBar": False})
 
     # Show quick stats below the chart
     stat_cols = st.columns(len(highlight))
@@ -1013,7 +1015,8 @@ def _render_position_section(sess_k, laps_df, highlight_drivers, highlight_colou
         hoverlabel=dict(bgcolor="rgba(20,20,20,0.85)", font_size=12),
     )
 
-    st.plotly_chart(pos_fig, width="stretch", config={"displayModeBar": False})
+    # CHANGE (#208): unique key prevents StreamlitDuplicateElementId in Session-Compare Mode tabs
+    st.plotly_chart(pos_fig, width="stretch", key=f"race_position_{sess_k}", config={"displayModeBar": False})
     return pos_fig
 
 
@@ -1038,7 +1041,7 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
             if warning_msg:
                 st.warning(warning_msg)
             if fig:
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                st.plotly_chart(fig, width="stretch", key=f"speed_map_{sess_k}_{key_suffix}", config={"displayModeBar": False})
         else:
             st.info("Load a session to view track dominance map.")
             
@@ -1050,16 +1053,16 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {colour}; margin-bottom: 8px;'>{fmt_func(driver) if fmt_func else driver}</div>", unsafe_allow_html=True)
                     fig1, w1 = _input_map_fig(lap, driver, colour, sess_k)
                     if w1: st.warning(w1)
-                    if fig1: st.plotly_chart(fig1, width="stretch", config={"displayModeBar": False})
+                    if fig1: st.plotly_chart(fig1, width="stretch", key=f"input_map_d1_{sess_k}_{key_suffix}", config={"displayModeBar": False})
                 with col_inp2:
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {other_colour}; margin-bottom: 8px;'>{fmt_func(other_driver) if fmt_func else other_driver}</div>", unsafe_allow_html=True)
                     fig2, w2 = _input_map_fig(other_lap, other_driver, other_colour, sess_k)
                     if w2: st.warning(w2)
-                    if fig2: st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
+                    if fig2: st.plotly_chart(fig2, width="stretch", key=f"input_map_d2_{sess_k}_{key_suffix}", config={"displayModeBar": False})
             else:
                 fig1, w1 = _input_map_fig(lap, driver, colour, sess_k)
                 if w1: st.warning(w1)
-                if fig1: st.plotly_chart(fig1, width="stretch", config={"displayModeBar": False})
+                if fig1: st.plotly_chart(fig1, width="stretch", key=f"input_map_single_{sess_k}_{key_suffix}", config={"displayModeBar": False})
         else:
             st.info("Load a session to view driver inputs map.")
             
@@ -1075,7 +1078,7 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                         st.session_state[replay_key] = fig_rep
             
             if replay_key in st.session_state and st.session_state[replay_key] is not None:
-                st.plotly_chart(st.session_state[replay_key], width="stretch")
+                st.plotly_chart(st.session_state[replay_key], width="stretch", key=f"replay_chart_{sess_k}_{key_suffix}")
         else:
             st.info("Load a session to view animated replay.")
             
@@ -1137,7 +1140,7 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                     st.write(f"DRS Activated: **{'Yes' if stats2.get('drs_active') else 'No'}**")
 
             if fig_corner:
-                st.plotly_chart(fig_corner, width="stretch", config={"displayModeBar": False})
+                st.plotly_chart(fig_corner, width="stretch", key=f"corner_chart_{sess_k}_{key_suffix}", config={"displayModeBar": False})
         else:
             st.info("Load a session to view corner analysis.")
 
@@ -1538,7 +1541,11 @@ def _render_weather_correlation_section(
 
     fig = build_weather_correlation_fig(weather_data, colors_map, labels_map)
     if fig is not None:
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", key=f"weather_corr_{sess_k}")
+        if t_min is None or t_max is None:
+            st.info("ℹ️ Track temperature telemetry is unavailable for this session (e.g. 2018–2022 Jolpica-F1 historical data); showing driver lap pace only.")
+    else:
+        st.info("ℹ️ Weather and lap pace correlation data is not available for this session.")
 
 
 # Review notes (#154), merged from the former code_review_issue_154.md:
@@ -2082,7 +2089,7 @@ def _render_braking_analysis_section(
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
     if fig:
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", key=f"braking_efficiency_chart_{sess_k}", config={"displayModeBar": False})
 
 
 # Review notes (#155), merged from the former code_review_issue_155.md:
@@ -2236,7 +2243,8 @@ def _render_traction_exit_section(
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
     if fig:
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        # CHANGE (#208): key_suffix scopes the standalone section vs Track Map Tab 5 chart IDs
+        st.plotly_chart(fig, width="stretch", key=f"traction_exit_chart_{sess_k}_{key_suffix}", config={"displayModeBar": False})
 
 
 def _render_gear_analysis_section(
@@ -2327,7 +2335,7 @@ def _render_gear_analysis_section(
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
     if fig:
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", key=f"gear_shift_chart_{sess_k}", config={"displayModeBar": False})
 
 
 # ── Speed Trap & Intermediate Velocity Radar Breakdown ─────────────────────
@@ -2659,7 +2667,7 @@ def _render_teammate_battle_section(
     chart_mode = "Race Pace" if "Race" in mode_sel else "Qualifying"
     fig = build_teammate_matrix_fig(battle_data, mode=chart_mode)
     if fig:
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", key=f"teammate_matrix_{sess_k}", config={"displayModeBar": False})
 
     # Intra-Team Head-to-Head Classified Matrix Table
     st.markdown("##### Intra-Team Head-to-Head Classified Matrix")
@@ -2955,7 +2963,7 @@ def _render_pit_loss_section(
         compare=is_compare_view
     )
     if fig:
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", key=f"pit_loss_chart_{driver1}_{driver2 or 'single'}_{int(is_compare_view)}", config={"displayModeBar": False})
 
     # Helper for compound badge
     def _comp_badge_html(cmp_code: str) -> str:
