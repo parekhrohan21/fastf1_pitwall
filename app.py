@@ -672,6 +672,8 @@ with st.spinner("Loading car & position telemetry…"):
 # Car data for the chosen laps (None if unavailable); Driver 2 only when comparing
 # CHANGE (#209): Fall back to sess_key when sess_key2 is None (single-session
 # driver compare mode) so Driver 2 telemetry is never cached under key "tel_None_...".
+# (Driver 1 and Driver 2 already get separate entries because the cache key
+# also includes the driver code and lap number.)
 tel1 = get_telemetry_cached(driver1, lap1, sess_key)
 tel2 = get_telemetry_cached(driver2, lap2, sess_key2 or sess_key) if (compare and driver2 and lap2 is not None) else None
 
@@ -1222,6 +1224,9 @@ if tel1 is not None:
 # Measures throttle application aggression, hesitation lifts, and traction drive.
 st.markdown("<div class='section-title'>Corner Exit Traction & Throttle Pick-Up Analysis</div>", unsafe_allow_html=True)
 if tel1 is not None:
+    # key_suffix is left at its default "main". The Track Map's "Traction & Exit"
+    # tab draws the same chart again with key_suffix "maptab_...", so the two
+    # copies get different chart IDs (#208).
     _render_traction_exit_section(
         sess_key, sess, lap1, lap2, driver1, driver2, colour1, colour2, compare,
         fmt_func1=_fmt_driver1, fmt_func2=_fmt_driver2
