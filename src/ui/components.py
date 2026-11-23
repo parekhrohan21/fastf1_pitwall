@@ -1041,6 +1041,8 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
             if warning_msg:
                 st.warning(warning_msg)
             if fig:
+                # unique key (#208): session key + key_suffix ("single" / "sess1" / "sess2")
+                # keeps each Track Map's charts distinct when two sessions are shown in tabs
                 st.plotly_chart(fig, width="stretch", key=f"speed_map_{sess_k}_{key_suffix}", config={"displayModeBar": False})
         else:
             st.info("Load a session to view track dominance map.")
@@ -1053,6 +1055,7 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {colour}; margin-bottom: 8px;'>{fmt_func(driver) if fmt_func else driver}</div>", unsafe_allow_html=True)
                     fig1, w1 = _input_map_fig(lap, driver, colour, sess_k)
                     if w1: st.warning(w1)
+                    # d1 / d2 in the key: the two drivers' input maps sit side by side
                     if fig1: st.plotly_chart(fig1, width="stretch", key=f"input_map_d1_{sess_k}_{key_suffix}", config={"displayModeBar": False})
                 with col_inp2:
                     st.markdown(f"<div style='font-size: 14px; font-weight: bold; color: {other_colour}; margin-bottom: 8px;'>{fmt_func(other_driver) if fmt_func else other_driver}</div>", unsafe_allow_html=True)
@@ -1078,6 +1081,8 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                         st.session_state[replay_key] = fig_rep
             
             if replay_key in st.session_state and st.session_state[replay_key] is not None:
+                # the replay figure is built once on button press and kept in session
+                # state, so later reruns redraw it without rebuilding the animation
                 st.plotly_chart(st.session_state[replay_key], width="stretch", key=f"replay_chart_{sess_k}_{key_suffix}")
         else:
             st.info("Load a session to view animated replay.")
@@ -1140,6 +1145,7 @@ def render_maps_block(session_obj, sess_k: str, driver: str, colour: str, lap, k
                     st.write(f"DRS Activated: **{'Yes' if stats2.get('drs_active') else 'No'}**")
 
             if fig_corner:
+                # unique key (#208), same scheme as the other Track Map tabs
                 st.plotly_chart(fig_corner, width="stretch", key=f"corner_chart_{sess_k}_{key_suffix}", config={"displayModeBar": False})
         else:
             st.info("Load a session to view corner analysis.")
@@ -1542,9 +1548,13 @@ def _render_weather_correlation_section(
     fig = build_weather_correlation_fig(weather_data, colors_map, labels_map)
     if fig is not None:
         st.plotly_chart(fig, width="stretch", key=f"weather_corr_{sess_k}")
+        # CHANGE (#210): no track temperature (t_min / t_max unset), e.g. 2018-2022
+        # sessions from Jolpica-F1 which carry no weather data. The chart still
+        # shows lap pace, so say why the temperature line is missing.
         if t_min is None or t_max is None:
             st.info("ℹ️ Track temperature telemetry is unavailable for this session (e.g. 2018–2022 Jolpica-F1 historical data); showing driver lap pace only.")
     else:
+        # neither weather nor lap times: explain the gap instead of leaving it blank
         st.info("ℹ️ Weather and lap pace correlation data is not available for this session.")
 
 
@@ -2089,6 +2099,7 @@ def _render_braking_analysis_section(
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
     if fig:
+        # unique key (#208): stops this chart clashing with another plotly_chart of the same shape
         st.plotly_chart(fig, width="stretch", key=f"braking_efficiency_chart_{sess_k}", config={"displayModeBar": False})
 
 
@@ -2335,6 +2346,7 @@ def _render_gear_analysis_section(
         fmt_func1=fmt_func1, fmt_func2=fmt_func2
     )
     if fig:
+        # unique key (#208), see the braking chart above
         st.plotly_chart(fig, width="stretch", key=f"gear_shift_chart_{sess_k}", config={"displayModeBar": False})
 
 
@@ -2667,6 +2679,7 @@ def _render_teammate_battle_section(
     chart_mode = "Race Pace" if "Race" in mode_sel else "Qualifying"
     fig = build_teammate_matrix_fig(battle_data, mode=chart_mode)
     if fig:
+        # unique key (#208): session compare draws one matrix per session tab
         st.plotly_chart(fig, width="stretch", key=f"teammate_matrix_{sess_k}", config={"displayModeBar": False})
 
     # Intra-Team Head-to-Head Classified Matrix Table
@@ -2963,6 +2976,8 @@ def _render_pit_loss_section(
         compare=is_compare_view
     )
     if fig:
+        # unique key (#208) built from the drivers and view mode, since this
+        # renderer is not given the session key
         st.plotly_chart(fig, width="stretch", key=f"pit_loss_chart_{driver1}_{driver2 or 'single'}_{int(is_compare_view)}", config={"displayModeBar": False})
 
     # Helper for compound badge
