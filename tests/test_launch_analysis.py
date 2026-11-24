@@ -95,6 +95,8 @@ def _make_standing_start_tel(
 
 def test_first_crossing_interpolation_ignores_later_lap_deceleration():
     """0-100 and 0-200 km/h interpolation finds the initial launch pull even when Turn 1 drops back below 100 km/h."""
+    # Because _make_standing_start_tel brakes down to 85 km/h into Turn 1 and re-accelerates,
+    # naive whole-lap np.interp would return >14 s instead of the ~2.5 s / ~5.2 s initial pull.
     tel = _make_standing_start_tel(t_react_s=0.30, accel_mps2=11.0)
     res = _analyze_driver_launch(tel, driver="VER", grid_pos=1, lap1_pos=1, lap1_time_s=96.5)
     assert res is not None
@@ -258,6 +260,7 @@ def test_build_launch_analysis_fig_single_and_compare():
     fig_cmp = build_launch_analysis_fig(l1, l2, driver1="VER", driver2="PER", colour1="#3671C6", colour2="#3671C6")
     assert isinstance(fig_cmp, go.Figure)
     assert len(fig_cmp.data) == 8  # 6 channel traces + 2 milestone marker traces
+    # Passing identical Red Bull team colours must switch Driver 2's trace colour to neutral grey (#9AA0A6).
     line_colours = {t.line.color for t in fig_cmp.data if hasattr(t, "line") and t.line and t.line.color}
     assert "#9AA0A6" in line_colours
     assert build_launch_analysis_fig(None) is None

@@ -1409,9 +1409,12 @@ def build_weather_correlation_fig(
     if not has_weather and not has_driver_laps:
         return None
 
+    # Dual-axis layout: primary y-axis holds driver lap times (s); secondary y-axis
+    # holds Track Temperature (°C) when weather sensors exist (omitted cleanly on
+    # 2018-2022 Jolpica-F1 sessions where TrackTemp is empty, #210).
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # 1. Plot Track Temperature on Secondary Y-axis
+    # 1. Plot Track Temperature on Secondary Y-axis (only when non-null sensor samples exist)
     if has_weather and "TrackTemp" in laps_w_df.columns and not laps_w_df["TrackTemp"].isna().all():
         fig.add_trace(
             go.Scatter(
@@ -3325,11 +3328,13 @@ def build_launch_analysis_fig(
     if len(t1) < 4 or len(spd1) != len(t1):
         return None
 
-    # Teammates share the same team colour; fall back to neutral grey for Driver 2 so traces stay distinct.
+    # 1. Disambiguate teammate colours: teammates share a team hex, so fall back to
+    #    neutral grey for Driver 2 to keep both launch traces visually distinct.
     has_d2 = bool(launch2 and "trace" in launch2 and driver2)
     if has_d2 and str(colour1).strip().lower() == str(colour2).strip().lower():
         colour2 = "#9AA0A6"
 
+    # 2. Build 3-row shared-time layout on a common 0-10 s lights-out clock.
     fig = make_subplots(
         rows=3,
         cols=1,
@@ -3343,7 +3348,8 @@ def build_launch_analysis_fig(
         ),
     )
 
-    # Compute head-to-head distance lead if Driver 2 is present on the same time grid
+    # 3. Resample Driver 2's speed and grid distance onto Driver 1's sample timestamps
+    #    so hovering Driver 1 shows the instantaneous speed delta and metres lead (positive = D1 ahead).
     if has_d2:
         tr2 = launch2["trace"]
         t2 = np.asarray(tr2.get("t_s", []), dtype=float)
@@ -3484,7 +3490,7 @@ def build_launch_analysis_fig(
             col=1,
         )
 
-    # Reference milestone lines at 100 km/h and 200 km/h on Panel 1
+    # 4. Reference milestone lines at 100 km/h and 200 km/h on Panel 1
     for target_v, lbl in ((100.0, "100 km/h"), (200.0, "200 km/h")):
         fig.add_hline(
             y=target_v,
@@ -3493,7 +3499,9 @@ def build_launch_analysis_fig(
             col=1,
         )
 
-    # Milestone diamond markers for 100 km/h and 200 km/h crossings
+    # 5. Milestone diamond markers for 100 km/h and 200 km/h first crossings.
+    #    Split times (t_0_100_s, t_0_200_s) are measured from car movement onset (t_move_s),
+    #    so we add t_move_s to place each diamond on the lights-out (t = 0) x-axis.
     for l_dict, drv_lbl, col_hex in (
         [(launch1, driver1, colour1)] + ([(launch2, driver2, colour2)] if has_d2 else [])
     ):
@@ -3523,7 +3531,8 @@ def build_launch_analysis_fig(
                 col=1,
             )
 
-    # Turn 1 Braking vertical reference line (Driver 1)
+    # 6. Turn 1 braking vertical reference line (Driver 1), drawn across all 3 panels
+    #    when braking occurs within the 1.5-10.0 s launch window.
     t1_brk_s = launch1.get("t1_brake_time_s")
     t1_mv_s = float(launch1.get("t_move_s") or 0.0)
     if t1_brk_s is not None and 1.5 <= (t1_mv_s + float(t1_brk_s)) <= 10.0:

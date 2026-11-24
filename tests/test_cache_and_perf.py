@@ -30,6 +30,8 @@ def test_cache_dir_matches_root_cache_and_legacy_fallback():
 
 def test_find_cached_fastf1_dir_checks_root_and_legacy(tmp_path, monkeypatch):
     """_find_cached_fastf1_dir locates complete .ff1pkl caches in either CACHE_DIR or LEGACY_CACHE_DIR."""
+    # _extended_timing_data.ff1pkl is the sentinel file FastF1 writes once lap timing is cached;
+    # placing it only in legacy_cache verifies the non-breaking fallback from ./cache -> ./src/data/cache.
     root_dir = tmp_path / "root_cache"
     legacy_dir = tmp_path / "legacy_cache"
     sess_dir = legacy_dir / "2024" / "2024-03-02_Bahrain_Grand_Prix" / "2024-03-02_Race"
@@ -46,6 +48,8 @@ def test_find_cached_fastf1_dir_checks_root_and_legacy(tmp_path, monkeypatch):
 
 def test_free_api_cache_reads_legacy_fallback(tmp_path, monkeypatch):
     """_free_api_get_json falls back to LEGACY_FREE_API_CACHE_DIR when primary cache misses."""
+    # Free-API JSON responses are keyed by SHA-256(url); ensure pre-existing files in legacy_free
+    # are returned offline without making any network call.
     import hashlib
     url = "https://example.test/openf1/sessions?year=2025"
     key = hashlib.sha256(url.encode("utf-8")).hexdigest()
@@ -77,12 +81,15 @@ def test_load_session_is_shared_cache_resource_and_clearable(monkeypatch):
     monkeypatch.setattr(fastf1.Cache, "enable_cache", lambda *a, **kw: None)
     monkeypatch.setattr(fastf1, "get_session", lambda y, g, s: _FakeSess())
 
+    # Object identity (`s1 is s2`) proves @st.cache_resource shares one instance in memory
+    # rather than deep-copying/pickling per browser session like @st.cache_data.
     s1 = load_session(2024, "Test GP", "R", load_telemetry=False)
     s2 = load_session(2024, "Test GP", "R", load_telemetry=False)
     assert s1 is s2
     assert calls["n"] == 1
     assert getattr(s1, "_pitwall_telemetry_loaded") is False
 
+    # Clearing the cache evicts the shared entry so the next call reloads cleanly.
     clear_session_cache(2024, "Test GP")
     s3 = load_session(2024, "Test GP", "R", load_telemetry=False)
     assert s3 is not s1
@@ -92,6 +99,7 @@ def test_load_session_is_shared_cache_resource_and_clearable(monkeypatch):
 
 def test_ensure_session_telemetry_upgrades_laps_only_session_once(monkeypatch):
     """ensure_session_telemetry loads telemetry exactly once on a laps-only FastF1 session."""
+    # Calling ensure_session_telemetry twice must invoke sess.load(telemetry=True, ...) only once.
     load_calls = []
 
     class _FakeSess:

@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from src.ui.styles import TEAM_COLOURS, COMPOUND_COLOURS, TRACK_STATUS_MAP
+# Explicit cross-module helper imports: _fmt_sec (#205), _build_gap_data (#206),
+# and _build_position_data (#207) are called directly by their section renderers below.
 from src.data.loader import (
     hex_to_rgb, _team_logo, _team_colour, format_laptime, _fmt_sec, driver_colour,
     _build_driver_labels, _format_classification_time, _map_driver_id_to_number,
@@ -786,10 +788,13 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list,
 
 
 def _render_ideal_lap_section(ideal_df, highlight_drivers: list, highlight_colours: list, fmt_func=None):
+    """Render per-driver Theoretical Best vs Actual Best cards and the full-grid Ideal Lap table."""
     if ideal_df is None or ideal_df.empty:
         st.info("Ideal lap analysis not available for this session.")
         return
 
+    # Build top KPI cards for selected driver(s): Delta = ActualBest - TheoreticalBest
+    # ("Time Left on Table"). Deltas <= 0.05 s are shaded green (hooked-up lap); larger gaps are red.
     _delta_cards_html = ""
     for _cd, _cc in zip(highlight_drivers, highlight_colours):
         _row = ideal_df[ideal_df["Driver"] == _cd]
@@ -4369,6 +4374,7 @@ def _render_launch_analysis_section(
         c5.markdown(_card_html("Lap 1 Gain & T1 Brake", pg_val, t1_sub, colour1), unsafe_allow_html=True)
 
     # 2. Head-to-Head Launch Comparison Callout Banner
+    #    Sign convention: (Driver 2 metric - Driver 1 metric) >= 0 means Driver 1 was quicker.
     if compare and l1 is not None and l2 is not None:
         bullets = []
         if l1.get("reaction_time_ms") is not None and l2.get("reaction_time_ms") is not None:
@@ -4450,6 +4456,7 @@ def _render_launch_analysis_section(
                 drv_code = r["driver"]
                 drv_display = fmt_func1(drv_code) if callable(fmt_func1) else drv_code
                 is_d1 = (drv_code == driver1)
+                # Only highlight Driver 2 in Session 1's grid table when comparing within the same session
                 is_d2 = bool(compare and driver2 and session_obj2 is None and drv_code == driver2)
                 accent = colour1 if is_d1 else (eff_col2 if is_d2 else "transparent")
                 row_bg = f"{accent}1a" if (is_d1 or is_d2) else "transparent"
