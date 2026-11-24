@@ -168,11 +168,12 @@ FastF1 identifies drivers by **number strings** (`"4"`, `"81"`), not names. Alwa
 
 Three distinct cache layers are in use:
 
-### Layer 1 — FastF1 disk cache
+### Layer 1 — Unified FastF1 & Free API disk cache (`./cache`)
 ```python
-fastf1.Cache.enable_cache("./cache")
+CACHE_DIR = os.environ.get("FASTF1_CACHE_DIR") or ROOT_CACHE_DIR   # ./cache
+fastf1.Cache.enable_cache(CACHE_DIR)
 ```
-Persists raw API responses to disk. Lives in `./cache/` (gitignored). Survives app restarts. Mount as a Docker volume to persist across container restarts.
+Persists raw FastF1 `.ff1pkl` archives and zero-auth OpenF1 / MultiViewer / Jolpica-F1 JSON responses (`./cache/free_api_cache/`) to disk. Lives in `./cache/` (gitignored, matching Docker's `-v "$PWD/cache:/app/cache"` volume mount) and survives app restarts. Legacy entries in `./src/data/cache/` (`LEGACY_CACHE_DIR`) are checked automatically as a read-only fallback (#203).
 
 ### Layer 1b — Real-Time Live Timing Stream Data (`fastf1.livetiming`)
 ```python
@@ -209,17 +210,17 @@ To prevent this:
    ```
 
 
-### Layer 2 — `@st.cache_data`
+### Layer 2 — `@st.cache_resource` (Shared Sessions) & `@st.cache_data` (Pure Builders)
 ```python
-@st.cache_data(show_spinner=False, ttl=3600)
-def load_session(year, gp, session_type): ...
+@st.cache_resource(show_spinner=False, ttl=3600, max_entries=8)
+def load_session(year, gp, session_type, load_telemetry=True): ...
 ```
-In-memory cache keyed by function arguments. TTL of 3600s prevents stale data accumulating during long development sessions. All data-builder functions use this pattern:
+`load_session` uses `@st.cache_resource(max_entries=8, ttl=3600)` so parsed `Session` objects are shared across browser sessions without pickling overhead; `app.py` loads laps first (`load_telemetry=False`) and calls thread-safe `ensure_session_telemetry(sess)` only when reaching high-frequency telemetry sections (#203). Season calendars and statistical data-builders use `@st.cache_data(show_spinner=False, ttl=3600)`:
 
 | Function | Cache key inputs |
 |---|---|
 | `load_schedule(year)` | `year` |
-| `load_session(year, gp, session_type)` | `year, gp, session_type` |
+| `load_session(year, gp, session_type, load_telemetry)` | `year, gp, session_type, load_telemetry` (`@st.cache_resource`) |
 | `_build_lap_history(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_fuel_adjusted(driver, sess_k, fuel_effect, laps_df)` | `driver, sess_key, fuel_effect, laps_df` |
 | `_build_fuel_sim_leaderboard(sess_k, fuel_effect, laps_df)` | `sess_key, fuel_effect, laps_df` |
@@ -227,11 +228,18 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_pit_stops(driver, sess_k, laps_df)` | `driver, sess_key, laps_df` |
 | `_build_tyre_deg_data(driver, laps_df)` | `driver, laps_df` |
 | `_build_fuel_decoupled_tyre_deg(driver, laps_df, fuel_effect, ...)` | `driver, laps_df, fuel_effect, compare, driver2` |
+| `_build_strategy_simulation(sess_k, laps_df, driver1, ...)` | `sess_key, laps_df, driver1, driver2, total_laps, pit_loss_s, fuel_effect, current_lap` |
 | `_build_consistency_analysis(sess_k, laps_df, drivers)` | `sess_key, laps_df, drivers` |
 | `_build_weather_correlation_data(sess_k, laps_df, sess_obj, drivers)` | `sess_key, laps_df, sess_obj, drivers` |
+| `_build_track_evolution_data(sess_k, laps_df, _sess_obj)` | `sess_key, laps_df` |
 | `_build_multi_year_comparison(tel1, tel2, label1, label2, ...)` | `tel1, tel2, label1, label2, lap1_time_s, lap2_time_s` |
 | `_calculate_braking_metrics(df, apex_dist)` | `df, apex_dist` |
+| `_calculate_traction_metrics(df, apex_dist, turn_dir)` | `df, apex_dist, turn_dir` |
 | `_calculate_gear_shift_metrics(tel_df)` | `tel_df` |
+| `_calculate_driving_style_dna(tel_df, _corners_df)` | `tel_df` |
+| `_build_corner_geometry_cached(sess_k, driver, lap_num, ...)` | `sess_key, driver, lap_num` |
+| `_build_microsector_delta_cached(sess_k, d1, l1, d2, l2, ...)` | `sess_key, d1, l1, d2, l2` |
+| `_build_launch_analysis_data(sess_k, laps_df, _sess_obj, ...)` | `sess_key, laps_df, driver1, driver2, compare` |
 | `_calculate_speed_trap_metrics(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_grid_heatmap_data(sess_k, laps_df, drivers, mode)` | `sess_key, laps_df, drivers, mode` |
 | `_build_race_control_messages(sess_k, sess_obj)` | `sess_key, sess_obj` |
@@ -242,9 +250,10 @@ In-memory cache keyed by function arguments. TTL of 3600s prevents stale data ac
 | `_build_ideal_lap(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_teammate_battle_data(sess_k, laps_df, sess_obj)` | `sess_key, laps_df, sess_obj` |
 | `_build_pit_transit_data(sess_k, laps_df, sess_obj, driver)` | `sess_key, laps_df, sess_obj, driver` |
+| `_build_dirty_air_analysis(sess_k, laps_df, driver)` | `sess_key, laps_df, driver` |
 | `_build_gap_data(sess_k, laps_df)` | `sess_key, laps_df` |
 | `_build_position_data(sess_k, laps_df)` | `sess_key, laps_df` |
-| `_get_telemetry_for_map(driver, lap_num, sess_k)` | `driver, lap_num, sess_key` |
+| `_get_telemetry_for_map(lap, driver, sess_k)` | `driver, lap_num, sess_key` |
 
 `sess_key` is a string formatted as `"{year}_{gp}_{session_type}"` (e.g. `"2025_British Grand Prix_R"`).
 
@@ -276,7 +285,7 @@ def get_telemetry_cached(driver, lap, sess_key):
         st.session_state[key] = lap.get_car_data().add_distance()
     return st.session_state[key]
 ```
-Telemetry DataFrames are large (~3000 rows) and can't be efficiently cached with `@st.cache_data` (unhashable types). They are stored directly in `session_state` under a compound key.
+Telemetry DataFrames are large (~3000 rows) and can't be efficiently cached with `@st.cache_data` (unhashable types). They are stored directly in `session_state` under a compound key. In single-session head-to-head Compare Mode (`sess_key2 is None`), always pass `sess_key2 or sess_key` for Driver 2 so keys never collide under `"tel_None_..."` (#209).
 
 
 
@@ -913,6 +922,12 @@ When resolving the default Grand Prix index dynamically by comparing event dates
 ### ⑰ Accurately Counting Pit Stops from Laps Data
 When counting a driver's pit stops in F1 sessions, rely on identifying laps containing both non-null `PitInTime` and `PitOutTime` columns. Do not count `PitInTime` alone, as this will also count retirements that occurred in the pit lane (which are not completed pit stops).
 
+### ⑱ Unique `key=` on `st.plotly_chart` in Tabs and Reusable Sections (#208)
+Streamlit ≥ 1.44 derives automatic element IDs for `st.plotly_chart` from figure contents and arguments when `key=` is omitted. Rendering the same component twice on one page (e.g. `_render_traction_exit_section` standalone and inside `render_maps_block` Tab 5, or per-session tabs in Multi-Session Compare Mode) raises `StreamlitDuplicateElementId`. Always pass a deterministic `key=f"..._{sess_k}_{key_suffix}"`.
+
+### ⑲ Unindented Multi-Line HTML in `st.markdown` & `COMPOUND_COLOURS["fill"]` (`0fe0e6a`)
+CommonMark treats any line indented by ≥ 4 spaces following a blank line inside an HTML block as a `<pre><code>` fenced code block. Concatenate multi-line HTML strings without leading 4-space indentation, and always index `COMPOUND_COLOURS.get(cmp.upper(), COMPOUND_COLOURS["UNKNOWN"])["fill"]` rather than interpolating the palette dict into CSS styles.
+
 
 
 
@@ -922,13 +937,16 @@ When counting a driver's pit stops in F1 sessions, rely on identifying laps cont
 
 | Bottleneck | Mitigation |
 |---|---|
-| Session first load (10–30s) | `@st.cache_data` + FastF1 disk cache — subsequent loads in <1s |
+| Cold startup import latency | Lazy-import `matplotlib` / `src.charts.matplotlib` and `src.charts.video` only inside rendering functions (#203) |
+| Session first load (10–60s) | `@st.cache_resource(max_entries=8)` shares parsed `Session` across users + `./cache` disk persistence — subsequent loads in <1s (#203) |
+| Initial lap-section render | Laps-first `load_session(..., load_telemetry=False)` + lazy thread-safe `ensure_session_telemetry(sess)` before telemetry charts (#203) |
+| Interactive widget reruns | 6 heavy interactive sections (`Teammate Battle`, `Grid Heatmap`, `Race Control Feed`, `Track Map`, `Brag Video`, `Weekend Progression`) isolated via `@st.fragment` (#203) |
 | Race replay animation build | Cached in `st.session_state`; only built on button click |
-| Telemetry per lap | Cached in `st.session_state` under compound key |
+| Telemetry per lap | Cached in `st.session_state` under compound key (`sess_key2 or sess_key` for Driver 2, #209) |
 | Leaderboard (all drivers) | `@st.cache_data` per session key |
 | Gap to Leader (all drivers) | `@st.cache_data` per session key |
 | Driver name labels | Built once at session load, stored in `_drv_labels` module-level dict |
-| Standings data fetch (Ergast) | `@st.cache_data(show_spinner=False, ttl=3600)` with exception safety filters |
+| Standings & schedule fetches | `@st.cache_data(show_spinner=False, ttl=3600)` on `load_schedule`, driver standings, and constructor standings |
 
 The heaviest single operation is `sess.load()` on first call. Everything else is sub-second once the session is cached.
 
@@ -1062,7 +1080,7 @@ Items agreed by the project owner as desirable but not yet implemented:
 | ~~High~~ | ~~**Gear Shift Strategy & RPM Power Band Optimization**~~ | ✅ **Done** — Added powertrain telemetry analytics in `_calculate_gear_shift_metrics`, `build_gear_shift_fig`, and `_render_gear_analysis_section`. Detects tactical short-shifts, redline shifts, and gear distributions with Plotly dual-subplot visualizations. |
 | ~~High~~ | ~~**Speed Trap & Intermediate Velocity Radar Breakdown**~~ | ✅ **Done** — Added grid-wide speed trap and intermediate velocity analytics in `_calculate_speed_trap_metrics`, `build_speed_trap_radar_fig`, `build_speed_trap_bar_fig`, and `_render_speed_trap_section`. Evaluates ST, I1, I2, FL, DRS deltas, and constructor/PU hierarchies with polar radars and grouped bars. |
 | ~~High~~ | ~~**Fuel-Corrected Pure Tyre Degradation & Fuel Burn Decoupler**~~ | ✅ **Done** — Added pure mechanical tyre wear decoupling in `_build_fuel_decoupled_tyre_deg`, `build_tyre_deg_fig`, and `render_fuel_decoupled_deg_metrics`. Removes race fuel mass burn gains (~0.035 s/lap) to isolate true degradation rate, fuel masking offsets, and unmasked thermal cliff laps. |
-| ~~High~~ | ~~**Architecture Decision Records (DECISIONS.md)**~~ ([#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)) | ✅ **Done** — `DECISIONS.md` holds 28 ADRs in a fixed format (context, decision, maths, alternatives, consequences) covering the TLS bypass, cache safety, modular split, tyre and fuel models, track evolution, traction, dirty air, the brag video and more. Older records are marked *(reconstructed)*. |
+| ~~High~~ | ~~**Architecture Decision Records (DECISIONS.md)**~~ ([#172](https://github.com/parekhrohan21/fastf1_pitwall/issues/172)) | ✅ **Done** — `DECISIONS.md` holds 36 ADRs (`ADR-001`–`ADR-036`) in a fixed format (context, decision, maths, alternatives, consequences) covering the TLS bypass, cache safety, modular split, tyre and fuel models, track evolution, traction, dirty air, the brag video, zero-auth OpenF1/MultiViewer/Jolpica pipeline, corner geometry, micro-sector deltas, standing-start launch telemetry, shared `@st.cache_resource` lazy telemetry, and widget-key / Markdown HTML / historical weather guardrails. Older records are marked *(reconstructed)*. |
 | ~~High~~ | ~~**Tire Stint Pace Degradation Matrix & Pit Window Re-optimisation Simulator**~~ ([#196](https://github.com/parekhrohan21/fastf1_pitwall/issues/196)) | ✅ **Done** — `_build_compound_deg_models` pools fuel-decoupled stint regressions across the field into zero-fuel pace models per dry compound (`SOFT`, `MEDIUM`, `HARD`) with a quadratic cliff penalty; `_optimise_strategies` exhaustively solves 0/1/2-stop plans via prefix sums and computes ±1 s pit windows; `_analyse_undercut_risk` evaluates ±3-lap undercut threats and rejoin traffic; `build_strategy_timeline_fig`, `build_deg_matrix_fig`, and `_render_strategy_simulator_section` render the UI (Race / Sprint only). |
 | ~~High~~ | ~~**Driver Driving Style DNA & Apex Aggression Spider Radar**~~ ([#197](https://github.com/parekhrohan21/fastf1_pitwall/issues/197)) | ✅ **Done** — `_calculate_driving_style_dna` extracts 6 normalised (0–100) driving style dimensions (trail-braking modulation, throttle ramp aggression, steering/trajectory smoothness, gear shift RPM exploitation, apex speed commitment, and high-speed aero confidence), `_classify_driving_style` assigns an archetype badge (`Aggressive Trail-Braker`, `Early Throttle Committer`, `Smooth Momentum Driver`, `High-Speed Aero Specialist`, `Rev-Band Exploiter`, `Balanced All-Rounder`), `build_driving_style_dna_fig` renders the 6-axis `go.Scatterpolar` spider radar with a reference benchmark envelope, and `_render_driving_style_dna_section` renders the archetype cards and telemetry signature table. |
 | ~~Medium~~ | ~~**Corner Geometry & Minimum Radius Apex Trajectory Curvature Analysis**~~ ([#198](https://github.com/parekhrohan21/fastf1_pitwall/issues/198)) | ✅ **Done** — `_build_corner_geometry` computes the radius-of-curvature profile and per-corner geometric apex vs the official marker; `build_corner_geometry_fig` draws the radius-coloured racing line; Compare Mode adds apex deltas and entry/apex/exit lateral offsets. |
@@ -1085,7 +1103,7 @@ Every resolved GitHub issue and pull request in the repository is logged below i
 > [!NOTE]
 > **GitHub ID Numbering**: GitHub utilizes a single, unified auto-incrementing ID counter for both **Issues** and **Pull Requests**. IDs between #85 and #100 (e.g. #86–#99) represent feature and documentation Pull Requests opened during development.
 
-- **Issue #204 / #205–#210** (`fix(charts): resolve all website chart rendering bugs`, commits `1438372`, `2b5fea5`) & **Commit `0fe0e6a`**: Imported `_fmt_sec` (#205), `_build_gap_data` (#206), and `_build_position_data` (#207) into `src/ui/components.py`; added unique `key=` parameters to `st.plotly_chart` calls across `_render_traction_exit_section`, `render_maps_block`, `_render_gap_to_leader_section`, `_render_position_section`, `_render_braking_analysis_section`, `_render_gear_analysis_section`, `_render_teammate_battle_section`, and `_render_pit_loss_section` (#208); passed `sess_key2 or sess_key` for Driver 2 in `get_telemetry_cached` (#209); enabled `build_weather_correlation_fig` to plot driver pace traces with an info notice when `TrackTemp` is unavailable on 2018–2022 Jolpica-F1 sessions (#210); fixed `COMPOUND_COLOURS` hex `fill` extraction and unindented pit-stop card HTML (`0fe0e6a`); and added plain-language inline comments across `app.py` (`6280183`–`27a0828`). Added 4 regression tests in `tests/test_chart_fixes_204.py` (226 total across 29 modules).
+- **Issue #204 / #205–#210** (`fix(charts): resolve all website chart rendering bugs`, commits `1438372`, `2b5fea5`), **Commit `0fe0e6a`**, & **Plain-Language Commentary Pass** (`6280183`–`42b8368`, `fa11dff`, `9d4b7d2`, `e51091f`): Imported `_fmt_sec` (#205), `_build_gap_data` (#206), and `_build_position_data` (#207) into `src/ui/components.py`; added unique `key=` parameters to `st.plotly_chart` calls across `_render_traction_exit_section`, `render_maps_block`, `_render_gap_to_leader_section`, `_render_position_section`, `_render_braking_analysis_section`, `_render_gear_analysis_section`, `_render_teammate_battle_section`, and `_render_pit_loss_section` (#208); passed `sess_key2 or sess_key` for Driver 2 in `get_telemetry_cached` (#209); enabled `build_weather_correlation_fig` to plot driver pace traces with an info notice when `TrackTemp` is unavailable on 2018–2022 Jolpica-F1 sessions (#210); fixed `COMPOUND_COLOURS` hex `fill` extraction and unindented pit-stop card HTML (`0fe0e6a`); recorded ADR-036 / Decision #53; and added plain-language inline comments across `app.py`, `src/ui/components.py`, `src/charts/plotly.py`, and regression tests. Added 4 regression tests in `tests/test_chart_fixes_204.py` (226 total across 29 modules).
 - **Issue #203** (`perf: speed up app load time on Streamlit`): Unified `CACHE_DIR` to repo-root `./cache` (with `FASTF1_CACHE_DIR` env override and read-only fallback to `src/data/cache`), wrapped `load_session` in `@st.cache_resource(max_entries=8, ttl=3600)` and `load_schedule` in `@st.cache_data`, added laps-first loading (`load_telemetry=False`) with thread-safe `ensure_session_telemetry()`, lazy-imported `matplotlib` and `src.charts.video`, and isolated 6 interactive sections in `@st.fragment`. Added 6 unit tests in `tests/test_cache_and_perf.py` (222 total across 28 modules).
 - **Issue #200** (`feat: Start Line Reaction Time & Launch Telemetry Acceleration Analyzer`): Added `_interp_first_speed_crossing`, `_analyze_driver_launch`, `_extract_driver_lap1_telemetry`, and `_build_launch_analysis_data` to `src/data/loader.py`; `build_launch_analysis_fig` to `src/charts/plotly.py`; `_render_launch_analysis_section` to `src/ui/components.py`; wired into `app.py` after the Corner Geometry section (gated to Race and Sprint sessions). Combines clutch-drop RPM decay and speed-ramp back-projection for sub-sample reaction time latency (ms from lights out), interpolates first-crossing 0–100 km/h and 0–200 km/h split times and distances within the initial launch pull prior to Turn 1 braking, and builds a full-grid Standing Start & Lap 1 Acceleration Leaderboard. Added 8 unit tests in `tests/test_launch_analysis.py` (216 total across 27 modules).
 - **Issue #199** (`feat: Micro-Sector Speed Delta & Dominance Streamgraph Timeline`): Added `_monotone_trace`, `_sector_distances`, `_build_microsector_delta` and `_build_microsector_delta_cached` to `src/data/loader.py`; `build_microsector_streamgraph_fig` to `src/charts/plotly.py`; `_render_microsector_section` to `src/ui/components.py`; wired after the Time Delta (Continuous) chart in `app.py` (Compare Mode). On cached 2025 and 2026 British GP and 2026 Miami GP race laps the computed lap and S1/S2/S3 gaps match official timing to the millisecond. 9 tests in `tests/test_microsector_delta.py` (208 total across 26 modules).

@@ -65,6 +65,7 @@ sequence; the mapping is given in each record where one exists.
 | [033](#adr-033--micro-sector-deltas-anchored-to-official-timing) | Micro-sector deltas anchored to official timing | #199 |
 | [034](#adr-034--standing-start-launch-telemetry-and-first-crossing-interpolation) | Standing-start launch telemetry and first-crossing interpolation | #200 |
 | [035](#adr-035--unified-disk-cache-shared-session-resource-and-lazy-telemetry) | Unified disk cache, shared session resource and lazy telemetry | #203 |
+| [036](#adr-036--widget-key-disambiguation-unindented-markdown-html-and-historical-weather-fallback) | Widget-key disambiguation, unindented Markdown HTML and historical weather fallback | #204, #205–#210 |
 
 ---
 
@@ -662,3 +663,25 @@ plus out-lap sector deltas $S_1, S_2, S_3$ against clean sector baselines. A sta
 4. **Lazy imports & fragment isolation:** `matplotlib` / `src.charts.matplotlib` and `src.charts.video` are imported only where rendered; 6 interactive heavy sections (`Teammate Battle`, `Grid Heatmap`, `Race Control Feed`, `Track Map`, `Brag Video`, `Weekend Progression`) run inside `@st.fragment`.
 
 **Consequences & guardrails.** Measured on 2024 Bahrain GP (warm cache): cold startup imports dropped from `8.734 s` to `0.365 s`, laps-first `load_session` dropped from `1.288 s` to `0.594 s`, and second-user `@st.cache_resource` hits take `0.000078 s`. `tests/test_cache_and_perf.py` (6 tests).
+
+---
+
+## ADR-036 — Widget-key disambiguation, unindented Markdown HTML and historical weather fallback
+
+**Issue / PR:** #204 (umbrella), #205–#210, commit `0fe0e6a` · `AGENT.md` Decision #53
+
+**Context.** Five runtime and rendering failure modes surfaced on the live dashboard:
+1. **Missing cross-module helper imports (#205, #206, #207):** During modular extraction, `src/ui/components.py` called `_fmt_sec` (`_render_ideal_lap_section`), `_build_gap_data` (`_render_gap_to_leader_section`), and `_build_position_data` (`_render_position_section`) without importing them from `src.data.loader`, raising `NameError` and halting every downstream section in `app.py`.
+2. **Duplicate Plotly element IDs (#208):** Streamlit ≥ 1.44 derives auto-IDs for `st.plotly_chart` from figure content and call-site parameters when `key=` is omitted. Rendering `_render_traction_exit_section` both standalone on the main page and inside `render_maps_block` Tab 5 (`⚡ Traction & Exit`), or rendering per-session sections inside Multi-Session Compare Mode tabs, raised `StreamlitDuplicateElementId`.
+3. **Null secondary session key in single-session Compare Mode (#209):** In single-session head-to-head mode `sess_key2` is `None`, so `get_telemetry_cached(driver2, lap2, sess_key2)` stored Driver 2 telemetry under `"tel_None_..."`, risking cross-session collisions.
+4. **Empty `TrackTemp` on 2018–2022 Jolpica-F1 sessions (#210):** Jolpica-F1 historical endpoints do not expose track temperature sensors, so `laps_w_df` is empty and `build_weather_correlation_fig` returned `None` even when valid driver lap-pace traces were present.
+5. **CommonMark 4-space indented HTML & palette dict interpolation (`0fe0e6a`):** In `_render_pit_loss_section`, multi-line stop-card HTML indented by 20 spaces after a blank line was parsed by CommonMark as a `<pre><code>` block, and `COMPOUND_COLOURS.get(...)` (a `{"fill", "text", "letter"}` dict) was interpolated directly into inline CSS instead of `pal["fill"]`.
+
+**Decision.**
+1. Explicitly import `_fmt_sec`, `_build_gap_data`, and `_build_position_data` in `src/ui/components.py`.
+2. Require deterministic `key=` strings (incorporating `sess_k` and `key_suffix` such as `"standalone"` vs `"maptab_single"` or `"sess1"` vs `"sess2"`) on all `st.plotly_chart` calls across reusable renderers and tabbed views.
+3. Pass `sess_key2 or sess_key` when caching Driver 2 telemetry in `app.py`.
+4. Allow `build_weather_correlation_fig` to plot primary-axis driver lap-pace traces whenever `driver_laps` is non-empty, displaying an `st.info` notice in `_render_weather_correlation_section` when `TrackTemp` is absent.
+5. Concatenate multi-line HTML strings without ≥ 4 leading spaces after newlines, and always index `COMPOUND_COLOURS[...]["fill"]`.
+
+**Consequences & guardrails.** All downstream charts, Track Map tabs, Multi-Session Compare tabs, Pit Lane Transit Loss stop cards, and 2018–2022 historical weather pace charts render cleanly without exceptions. Guarded by `tests/test_chart_fixes_204.py` (4 regression tests) and `tests/test_pit_transit_loss.py` (226 total tests across 29 modules).
