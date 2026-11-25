@@ -97,19 +97,14 @@ def _render_constructor_standings(standings_list, highlight_teams: list, highlig
     for h, align in zip(headers, alignments):
         th_html += f"<th style='padding:8px 10px; text-align:{align};'>{h}</th>"
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          {th_html}
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    # Keep HTML unindented with no blank lines so CommonMark never splits the table into a <pre><code> block.
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        f"letter-spacing:1.5px; text-transform:uppercase;'>{th_html}</tr></thead>"
+        f"<tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 
@@ -234,19 +229,13 @@ def _render_final_classification(df, highlight_drivers: list, highlight_colours:
     for h, align in zip(headers, alignments):
         th_html += f"<th style='padding:8px 10px; text-align:{align};'>{h}</th>"
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          {th_html}
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        f"letter-spacing:1.5px; text-transform:uppercase;'>{th_html}</tr></thead>"
+        f"<tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 
@@ -309,46 +298,25 @@ def _session_info_header(session, sess_type_code: str) -> None:
         sess_icon = _type_icons.get(session_label, "🏎")
 
         st.markdown(
-            f"""
-            <div class="session-info-header" style="
-                background: linear-gradient(135deg,
-                    rgba(var(--primary-rgb), 0.08) 0%,
-                    var(--secondary-background-color) 60%);
-                border: 1px solid rgba(var(--primary-rgb), 0.25);
-                border-left: 4px solid var(--primary-color);
-                border-radius: 14px;
-                padding: 14px 20px;
-                margin-bottom: 18px;
-                display: flex;
-                align-items: center;
-                gap: 24px;
-                flex-wrap: wrap;
-            ">
-                <div style="font-size: 36px; line-height: 1;">{flag}</div>
-                <div style="flex: 1; min-width: 200px;">
-                    <div style="
-                        font-size: 18px; font-weight: 700;
-                        letter-spacing: -0.3px; margin-bottom: 3px;
-                    ">{circuit}</div>
-                    <div style="font-size: 12px; opacity: 0.55; letter-spacing: 0.5px;">
-                        {country} &nbsp;·&nbsp; Round {round_no}
-                    </div>
-                </div>
-                <div style="display:flex; gap:28px; flex-wrap:wrap;">
-                    <div style="text-align:center;">
-                        <div style="font-size:20px;">{sess_icon}</div>
-                        <div style="font-size:11px; opacity:0.6; margin-top:2px;">{session_label}</div>
-                    </div>
-                    <div style="text-align:center;">
-                        <div style="
-                            font-size:13px; font-weight:600;
-                            color:var(--primary-color); white-space:nowrap;
-                        ">{date_str}</div>
-                        <div style="font-size:11px; opacity:0.6; margin-top:2px;">Event Date</div>
-                    </div>
-                </div>
-            </div>
-            """,
+            "<div class='session-info-header' style='"
+            "background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08) 0%, var(--secondary-background-color) 60%); "
+            "border: 1px solid rgba(var(--primary-rgb), 0.25); border-left: 4px solid var(--primary-color); "
+            "border-radius: 14px; padding: 14px 20px; margin-bottom: 18px; "
+            "display: flex; align-items: center; gap: 24px; flex-wrap: wrap;'>"
+            f"<div style='font-size: 36px; line-height: 1;'>{flag}</div>"
+            "<div style='flex: 1; min-width: 200px;'>"
+            f"<div style='font-size: 18px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 3px;'>{circuit}</div>"
+            f"<div style='font-size: 12px; opacity: 0.55; letter-spacing: 0.5px;'>{country} &nbsp;·&nbsp; Round {round_no}</div>"
+            "</div>"
+            "<div style='display:flex; gap:28px; flex-wrap:wrap;'>"
+            "<div style='text-align:center;'>"
+            f"<div style='font-size:20px;'>{sess_icon}</div>"
+            f"<div style='font-size:11px; opacity:0.6; margin-top:2px;'>{session_label}</div>"
+            "</div>"
+            "<div style='text-align:center;'>"
+            f"<div style='font-size:13px; font-weight:600; color:var(--primary-color); white-space:nowrap;'>{date_str}</div>"
+            "<div style='font-size:11px; opacity:0.6; margin-top:2px;'>Event Date</div>"
+            "</div></div></div>",
             unsafe_allow_html=True,
         )
     except Exception:
@@ -427,27 +395,20 @@ def render_live_status_banner(status_info: dict, auto_refresh: bool = False, int
     refresh_str = f"ON ({interval_sec}s)" if auto_refresh else "OFF"
     
     st.markdown(
-        f"""
-        <div style="background: rgba(26, 26, 26, 0.85); border: 1px solid rgba(255,255,255,0.1);
-                    border-left: 4px solid {badge_color}; border-radius: 8px; padding: 12px 16px;
-                    margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;
-                    backdrop-filter: blur(10px);">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="background: {badge_color}; color: #ffffff; font-size: 11px; font-weight: 700;
-                            letter-spacing: 1px; padding: 4px 8px; border-radius: 4px; display: flex;
-                            align-items: center;">
-                    {pulse_dot}{badge_text}
-                </div>
-                <div style="color: #ccc; font-size: 13px;">
-                    Packets: <strong>{line_count:,}</strong> | Size: <strong>{size_kb:.1f} KB</strong> | Last Update: <strong>{last_mod}</strong>
-                </div>
-            </div>
-            <div style="color: #888; font-size: 12px;">
-                Auto-Refresh: <strong>{refresh_str}</strong>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
+        f"<div style='background: rgba(26, 26, 26, 0.85); border: 1px solid rgba(255,255,255,0.1); "
+        f"border-left: 4px solid {badge_color}; border-radius: 8px; padding: 12px 16px; "
+        "margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; "
+        "backdrop-filter: blur(10px);'>"
+        "<div style='display: flex; align-items: center; gap: 12px;'>"
+        f"<div style='background: {badge_color}; color: #ffffff; font-size: 11px; font-weight: 700; "
+        "letter-spacing: 1px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center;'>"
+        f"{pulse_dot}{badge_text}</div>"
+        f"<div style='color: #ccc; font-size: 13px;'>Packets: <strong>{line_count:,}</strong> | "
+        f"Size: <strong>{size_kb:.1f} KB</strong> | Last Update: <strong>{last_mod}</strong></div>"
+        "</div>"
+        f"<div style='color: #888; font-size: 12px;'>Auto-Refresh: <strong>{refresh_str}</strong></div>"
+        "</div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -669,25 +630,20 @@ def _render_fuel_sim_leaderboard(sim_df, highlight_drivers: list, highlight_colo
             "</tr>"
         )
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          <th style='padding:8px 10px;'>Pos</th>
-          <th style='padding:8px 10px; text-align:left;'>Driver</th>
-          <th style='padding:8px 10px; text-align:left;'>Median Fuel-Adj Time</th>
-          <th style='padding:8px 10px; text-align:left;'>Gap</th>
-          <th style='padding:8px 10px; text-align:left;'>Best Fuel-Adj Lap</th>
-          <th style='padding:8px 10px; text-align:left;'>Tyre (Best)</th>
-          <th style='padding:8px 10px;'>Laps Run</th>
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        "letter-spacing:1.5px; text-transform:uppercase;'>"
+        "<th style='padding:8px 10px;'>Pos</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Median Fuel-Adj Time</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Gap</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Best Fuel-Adj Lap</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Tyre (Best)</th>"
+        "<th style='padding:8px 10px;'>Laps Run</th>"
+        f"</tr></thead><tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 
@@ -765,25 +721,20 @@ def _render_leaderboard(lb_df, highlight_drivers: list, highlight_colours: list,
             "</tr>"
         )
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          <th style='padding:8px 10px;'>Pos</th>
-          <th style='padding:8px 10px; text-align:left;'>Driver</th>
-          <th style='padding:8px 10px; text-align:left;'>Time</th>
-          <th style='padding:8px 10px; text-align:left;'>Gap</th>
-          <th style='padding:8px 10px; text-align:left;'>Compound</th>
-          <th style='padding:8px 10px;'>Lap</th>
-          <th style='padding:8px 10px;'>Top Speed</th>
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:8px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        "letter-spacing:1.5px; text-transform:uppercase;'>"
+        "<th style='padding:8px 10px;'>Pos</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Time</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Gap</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Compound</th>"
+        "<th style='padding:8px 10px;'>Lap</th>"
+        "<th style='padding:8px 10px;'>Top Speed</th>"
+        f"</tr></thead><tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 
@@ -875,29 +826,23 @@ def _render_ideal_lap_section(ideal_df, highlight_drivers: list, highlight_colou
             f"</tr>"
         )
 
-    _ideal_tbl = f"""
-    <div style='background:var(--secondary-background-color);
-                border:1px solid rgba(128,128,128,0.15);
-                border-radius:12px; padding:16px 20px; overflow-x:auto;'>
-      <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-        <thead>
-          <tr style='border-bottom:1px solid rgba(128,128,128,0.2);
-                     font-size:11px; opacity:0.55; text-transform:uppercase;
-                     letter-spacing:0.5px;'>
-            <th style='padding:5px 10px; text-align:left;'>Pos</th>
-            <th style='padding:5px 10px; text-align:left;'>Driver</th>
-            <th style='padding:5px 10px; text-align:left;'>Best S1</th>
-            <th style='padding:5px 10px; text-align:left;'>Best S2</th>
-            <th style='padding:5px 10px; text-align:left;'>Best S3</th>
-            <th style='padding:5px 10px; text-align:left;'>Theoretical Best</th>
-            <th style='padding:5px 10px; text-align:left;'>Gap to Pole</th>
-            <th style='padding:5px 10px; text-align:left;'>Time on Table</th>
-          </tr>
-        </thead>
-        <tbody>{_tbl_rows}</tbody>
-      </table>
-    </div>
-    """
+    _ideal_tbl = (
+        "<div style='background:var(--secondary-background-color); "
+        "border:1px solid rgba(128,128,128,0.15); border-radius:12px; "
+        "padding:16px 20px; overflow-x:auto;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); "
+        "font-size:11px; opacity:0.55; text-transform:uppercase; letter-spacing:0.5px;'>"
+        "<th style='padding:5px 10px; text-align:left;'>Pos</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Best S1</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Best S2</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Best S3</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Theoretical Best</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Gap to Pole</th>"
+        "<th style='padding:5px 10px; text-align:left;'>Time on Table</th>"
+        f"</tr></thead><tbody>{_tbl_rows}</tbody></table></div>"
+    )
     st.markdown(_ideal_tbl, unsafe_allow_html=True)
 
 
@@ -2392,14 +2337,15 @@ def _render_speed_trap_section(
             val_str = f"{leader_info.get('Speed', 0.0):.1f} km/h"
         team = leader_info.get("Team", "")
         t_col = _team_colour(team) if team else "#00E5FF"
+        t_txt_col = "var(--text-color)" if str(t_col).strip().lower() in ("#ffffff", "#fff", "white") else t_col
 
-        html = f"""
-        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>
-          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>{title}</div>
-          <div style='font-size:18px; font-weight:700; color:{t_col}; margin:2px 0;'>{val_str}</div>
-          <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{drv_display}</div>
-        </div>
-        """
+        html = (
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>"
+            f"<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>{title}</div>"
+            f"<div style='font-size:18px; font-weight:700; color:{t_txt_col}; margin:2px 0;'>{val_str}</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{drv_display}</div>"
+            "</div>"
+        )
         col.markdown(html, unsafe_allow_html=True)
 
     render_leader_card(col1, "Speed Trap (ST)", leaders.get("SpeedST"))
@@ -2414,13 +2360,13 @@ def _render_speed_trap_section(
         top_pu = leaders.get("TopPU")
         pu_name = top_pu.get("PowerUnit", "")
         pu_speed = top_pu.get("SpeedMean", 0.0)
-        html_pu = f"""
-        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>
-          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Top Power Unit</div>
-          <div style='font-size:18px; font-weight:700; color:#FFD600; margin:2px 0;'>{pu_speed:.1f} km/h</div>
-          <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{pu_name}</div>
-        </div>
-        """
+        html_pu = (
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:8px 12px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Top Power Unit</div>"
+            f"<div style='font-size:18px; font-weight:700; color:#FFD600; margin:2px 0;'>{pu_speed:.1f} km/h</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{pu_name}</div>"
+            "</div>"
+        )
         col5.markdown(html_pu, unsafe_allow_html=True)
     else:
         render_leader_card(col5, "Overall Top Speed", leaders.get("Overall"))
@@ -2518,44 +2464,41 @@ def _render_speed_trap_section(
         team = str(row.get("Team", "Unknown"))
         pu = str(row.get("PowerUnit", "Unknown"))
         t_col = _team_colour(team) if team else "#888"
+        t_txt_col = "var(--text-color)" if str(t_col).strip().lower() in ("#ffffff", "#fff", "white") else t_col
 
-        rows_html += f"""
-        <tr style='background:{row_bg}; {border_css}'>
-          <td style='padding:7px 10px; text-align:center;'>{pos_col}</td>
-          <td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{drv_label}</td>
-          <td style='padding:7px 10px; color:{t_col};'>{team}</td>
-          <td style='padding:7px 10px; opacity:0.8;'>{pu}</td>
-          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{st_val}</td>
-          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i1_val}</td>
-          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i2_val}</td>
-          <td style='padding:7px 10px; text-align:center; font-family:monospace;'>{fl_val}</td>
-          <td style='padding:7px 10px; text-align:center; font-weight:700; font-family:monospace;'>{max_val}</td>
-          <td style='padding:7px 10px; text-align:center; font-family:monospace; color:#00E5FF;'>{drs_str}</td>
-        </tr>
-        """
+        # Keep table rows unindented without blank lines so CommonMark never renders rows 2+ as a code block.
+        rows_html += (
+            f"<tr style='background:{row_bg}; {border_css}'>"
+            f"<td style='padding:7px 10px; text-align:center;'>{pos_col}</td>"
+            f"<td style='padding:7px 10px; font-weight:{'600' if is_hl else '400'};'>{drv_label}</td>"
+            f"<td style='padding:7px 10px; color:{t_txt_col};'>{team}</td>"
+            f"<td style='padding:7px 10px; opacity:0.8;'>{pu}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{st_val}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i1_val}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{i2_val}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-family:monospace;'>{fl_val}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-weight:700; font-family:monospace;'>{max_val}</td>"
+            f"<td style='padding:7px 10px; text-align:center; font-family:monospace; color:#00E5FF;'>{drs_str}</td>"
+            "</tr>"
+        )
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          <th style='padding:8px 10px;'>Pos</th>
-          <th style='padding:8px 10px; text-align:left;'>Driver</th>
-          <th style='padding:8px 10px; text-align:left;'>Constructor</th>
-          <th style='padding:8px 10px; text-align:left;'>Power Unit</th>
-          <th style='padding:8px 10px;'>ST (km/h)</th>
-          <th style='padding:8px 10px;'>I1 (km/h)</th>
-          <th style='padding:8px 10px;'>I2 (km/h)</th>
-          <th style='padding:8px 10px;'>FL (km/h)</th>
-          <th style='padding:8px 10px;'>Max (km/h)</th>
-          <th style='padding:8px 10px;'>DRS Boost</th>
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:16px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        "letter-spacing:1.5px; text-transform:uppercase;'>"
+        "<th style='padding:8px 10px;'>Pos</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Constructor</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Power Unit</th>"
+        "<th style='padding:8px 10px;'>ST (km/h)</th>"
+        "<th style='padding:8px 10px;'>I1 (km/h)</th>"
+        "<th style='padding:8px 10px;'>I2 (km/h)</th>"
+        "<th style='padding:8px 10px;'>FL (km/h)</th>"
+        "<th style='padding:8px 10px;'>Max (km/h)</th>"
+        "<th style='padding:8px 10px;'>DRS Boost</th>"
+        f"</tr></thead><tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 
@@ -2597,14 +2540,15 @@ def _render_teammate_battle_section(
         cb_d2 = cb.get("trailing_driver", "")
         cb_val = cb.get("qual_delta_s", 0.0)
         cb_pct = cb.get("qual_delta_pct", 0.0)
-        c1.markdown(f"""
-        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🎯 Closest Teammate Gap</div>
-          <div style='font-size:18px; font-weight:700; color:#51cf66; margin:2px 0;'>+{cb_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({cb_pct:.2f}%)</span></div>
-          <div style='font-size:12px; color:#ddd; font-weight:600;'>{cb_team}</div>
-          <div style='font-size:11px; color:#aaa;'>{cb_d1} vs {cb_d2}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        c1.markdown(
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🎯 Closest Teammate Gap</div>"
+            f"<div style='font-size:18px; font-weight:700; color:#51cf66; margin:2px 0;'>+{cb_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({cb_pct:.2f}%)</span></div>"
+            f"<div style='font-size:12px; color:#ddd; font-weight:600;'>{cb_team}</div>"
+            f"<div style='font-size:11px; color:#aaa;'>{cb_d1} vs {cb_d2}</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     else:
         c1.markdown("<div style='font-size:12px; color:#aaa;'>Closest Gap: —</div>", unsafe_allow_html=True)
 
@@ -2616,14 +2560,15 @@ def _render_teammate_battle_section(
         ld_d2 = ld.get("trailing_driver", "")
         ld_val = ld.get("qual_delta_s", 0.0)
         ld_pct = ld.get("qual_delta_pct", 0.0)
-        c2.markdown(f"""
-        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🚀 Largest Teammate Gap</div>
-          <div style='font-size:18px; font-weight:700; color:#ff6b6b; margin:2px 0;'>+{ld_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({ld_pct:.2f}%)</span></div>
-          <div style='font-size:12px; color:#ddd; font-weight:600;'>{ld_team}</div>
-          <div style='font-size:11px; color:#aaa;'>{ld_d1} over {ld_d2}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        c2.markdown(
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>🚀 Largest Teammate Gap</div>"
+            f"<div style='font-size:18px; font-weight:700; color:#ff6b6b; margin:2px 0;'>+{ld_val:.3f}s <span style='font-size:12px; opacity:0.8;'>({ld_pct:.2f}%)</span></div>"
+            f"<div style='font-size:12px; color:#ddd; font-weight:600;'>{ld_team}</div>"
+            f"<div style='font-size:11px; color:#aaa;'>{ld_d1} over {ld_d2}</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     else:
         c2.markdown("<div style='font-size:12px; color:#aaa;'>Largest Gap: —</div>", unsafe_allow_html=True)
 
@@ -2631,14 +2576,15 @@ def _render_teammate_battle_section(
     med_s = summary.get("median_delta_s", 0.0)
     med_pct = summary.get("median_delta_pct", 0.0)
     tot_teams = summary.get("total_teams", len(pairs))
-    c3.markdown(f"""
-    <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-      <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⏱️ Grid Median Gap</div>
-      <div style='font-size:18px; font-weight:700; color:#00E5FF; margin:2px 0;'>{med_s:.3f}s <span style='font-size:12px; opacity:0.8;'>({med_pct:.2f}%)</span></div>
-      <div style='font-size:12px; color:#ddd;'>Across {tot_teams} Constructors</div>
-      <div style='font-size:11px; color:#aaa;'>Average Intra-Team Spread</div>
-    </div>
-    """, unsafe_allow_html=True)
+    c3.markdown(
+        "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+        "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⏱️ Grid Median Gap</div>"
+        f"<div style='font-size:18px; font-weight:700; color:#00E5FF; margin:2px 0;'>{med_s:.3f}s <span style='font-size:12px; opacity:0.8;'>({med_pct:.2f}%)</span></div>"
+        f"<div style='font-size:12px; color:#ddd;'>Across {tot_teams} Constructors</div>"
+        "<div style='font-size:11px; color:#aaa;'>Average Intra-Team Spread</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     # 4. Sector Dominance Leader
     md = summary.get("most_dominant_driver")
@@ -2646,14 +2592,15 @@ def _render_teammate_battle_section(
         md_team = md.get("team", "")
         md_d1 = md.get("faster_driver", "")
         md_wins = md.get("d1_sector_wins", 0)
-        c4.markdown(f"""
-        <div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-          <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⚡ Sector Dominance Leader</div>
-          <div style='font-size:18px; font-weight:700; color:#ffd700; margin:2px 0;'>{md_d1} <span style='font-size:13px;'>({md_wins}/3 Sectors)</span></div>
-          <div style='font-size:12px; color:#ddd; font-weight:600;'>{md_team}</div>
-          <div style='font-size:11px; color:#aaa;'>Full Sector Superiority</div>
-        </div>
-        """, unsafe_allow_html=True)
+        c4.markdown(
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>⚡ Sector Dominance Leader</div>"
+            f"<div style='font-size:18px; font-weight:700; color:#ffd700; margin:2px 0;'>{md_d1} <span style='font-size:13px;'>({md_wins}/3 Sectors)</span></div>"
+            f"<div style='font-size:12px; color:#ddd; font-weight:600;'>{md_team}</div>"
+            "<div style='font-size:11px; color:#aaa;'>Full Sector Superiority</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     else:
         c4.markdown("<div style='font-size:12px; color:#aaa;'>Dominance Leader: —</div>", unsafe_allow_html=True)
 
@@ -2745,57 +2692,41 @@ def _render_teammate_battle_section(
 
         pos1_str = f"P{d1.get('pos')}" if d1.get("pos") is not None else "—"
         pos2_str = f"P{d2.get('pos')}" if d2.get("pos") is not None else "—"
+        t_is_white = str(t_col).strip().lower() in ("#ffffff", "#fff", "white")
+        t_txt_col = "var(--text-color)" if t_is_white else t_col
+        swatch_border = " border:1px solid rgba(128,128,128,0.4);" if t_is_white else ""
 
-        rows_html += f"""
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {hl_border}'>
-          <td style='padding:9px 12px; font-weight:600; color:{t_col};'>
-            <span style='display:inline-block; width:10px; height:10px; border-radius:2px; background:{t_col}; margin-right:6px;'></span>
-            {team}
-          </td>
-          <td style='padding:9px 12px;'>
-            <b>{c1_code}</b> <span style='opacity:0.6; font-size:11px;'>({d1.get('best_lap_str', '—')})</span>
-          </td>
-          <td style='padding:9px 12px;'>
-            <b>{c2_code}</b> <span style='opacity:0.6; font-size:11px;'>({d2.get('best_lap_str', '—')})</span>
-          </td>
-          <td style='padding:9px 12px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>
-            {gap_str}
-          </td>
-          <td style='padding:9px 12px; text-align:center; font-family:monospace; color:#aaa;'>
-            {pct_str}
-          </td>
-          <td style='padding:9px 12px; font-size:11px;'>
-            {s1_html} {s2_html} {s3_html}
-          </td>
-          <td style='padding:9px 12px; font-size:12px; text-align:center;'>
-            {pos1_str} vs {pos2_str}
-          </td>
-          <td style='padding:9px 12px; font-size:12px;'>
-            {race_str}
-          </td>
-        </tr>
-        """
+        # Keep table rows unindented without blank lines so CommonMark never renders rows 2+ as a code block.
+        rows_html += (
+            f"<tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {hl_border}'>"
+            f"<td style='padding:9px 12px; font-weight:600; color:{t_txt_col};'>"
+            f"<span style='display:inline-block; width:10px; height:10px; border-radius:2px; background:{t_col};{swatch_border} margin-right:6px;'></span>"
+            f"{team}</td>"
+            f"<td style='padding:9px 12px;'><b>{c1_code}</b> <span style='opacity:0.6; font-size:11px;'>({d1.get('best_lap_str', '—')})</span></td>"
+            f"<td style='padding:9px 12px;'><b>{c2_code}</b> <span style='opacity:0.6; font-size:11px;'>({d2.get('best_lap_str', '—')})</span></td>"
+            f"<td style='padding:9px 12px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>{gap_str}</td>"
+            f"<td style='padding:9px 12px; text-align:center; font-family:monospace; color:#aaa;'>{pct_str}</td>"
+            f"<td style='padding:9px 12px; font-size:11px;'>{s1_html} {s2_html} {s3_html}</td>"
+            f"<td style='padding:9px 12px; font-size:12px; text-align:center;'>{pos1_str} vs {pos2_str}</td>"
+            f"<td style='padding:9px 12px; font-size:12px;'>{race_str}</td>"
+            "</tr>"
+        )
 
-    tbl_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          <th style='padding:9px 12px; text-align:left;'>Constructor</th>
-          <th style='padding:9px 12px; text-align:left;'>Teammate 1 (Advantage)</th>
-          <th style='padding:9px 12px; text-align:left;'>Teammate 2</th>
-          <th style='padding:9px 12px; text-align:center;'>Delta (s)</th>
-          <th style='padding:9px 12px; text-align:center;'>Delta (%)</th>
-          <th style='padding:9px 12px; text-align:left;'>Sector Advantage (S1 / S2 / S3)</th>
-          <th style='padding:9px 12px; text-align:center;'>Finish Pos</th>
-          <th style='padding:9px 12px; text-align:left;'>Race Pace Edge</th>
-        </tr>
-      </thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </div>
-    """
+    tbl_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        "letter-spacing:1.5px; text-transform:uppercase;'>"
+        "<th style='padding:9px 12px; text-align:left;'>Constructor</th>"
+        "<th style='padding:9px 12px; text-align:left;'>Teammate 1 (Advantage)</th>"
+        "<th style='padding:9px 12px; text-align:left;'>Teammate 2</th>"
+        "<th style='padding:9px 12px; text-align:center;'>Delta (s)</th>"
+        "<th style='padding:9px 12px; text-align:center;'>Delta (%)</th>"
+        "<th style='padding:9px 12px; text-align:left;'>Sector Advantage (S1 / S2 / S3)</th>"
+        "<th style='padding:9px 12px; text-align:center;'>Finish Pos</th>"
+        "<th style='padding:9px 12px; text-align:left;'>Race Pace Edge</th>"
+        f"</tr></thead><tbody>{rows_html}</tbody></table></div>"
+    )
     st.markdown(tbl_html, unsafe_allow_html=True)
 
 
@@ -2885,60 +2816,63 @@ def _render_pit_loss_section(
         if f_stop:
             t_val = f"{f_stop['time_s']:.2f}s"
             t_drv = f"{_disp_driver(f_stop['driver'])} (Lap {f_stop['lap']})"
-            t_col = f_stop.get("team_color") or "#06B6D4"
+            raw_tc = f_stop.get("team_color") or "#06B6D4"
+            t_col = "var(--text-color)" if str(raw_tc).strip().lower() in ("#ffffff", "#fff", "white") else raw_tc
         else:
             t_val, t_drv, t_col = "—", "N/A", "#888888"
         st.markdown(
-            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Fastest Pit Lane Transit</div>
-              <div style='font-size:20px; font-weight:700; color:{t_col}; margin:2px 0;'>{t_val}</div>
-              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{t_drv}</div>
-            </div>""",
-            unsafe_allow_html=True
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Fastest Pit Lane Transit</div>"
+            f"<div style='font-size:20px; font-weight:700; color:{t_col}; margin:2px 0;'>{t_val}</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{t_drv}</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
     with c2:
         if b_in:
             in_val = f"{b_in['delta_s']:+.2f}s"
             in_drv = f"{_disp_driver(b_in['driver'])} (Lap {b_in['lap']})"
-            in_col = b_in.get("team_color") or "#F59E0B"
+            raw_ic = b_in.get("team_color") or "#F59E0B"
+            in_col = "var(--text-color)" if str(raw_ic).strip().lower() in ("#ffffff", "#fff", "white") else raw_ic
         else:
             in_val, in_drv, in_col = "—", "N/A", "#888888"
         st.markdown(
-            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best In-Lap Push Delta</div>
-              <div style='font-size:20px; font-weight:700; color:{in_col}; margin:2px 0;'>{in_val}</div>
-              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{in_drv}</div>
-            </div>""",
-            unsafe_allow_html=True
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best In-Lap Push Delta</div>"
+            f"<div style='font-size:20px; font-weight:700; color:{in_col}; margin:2px 0;'>{in_val}</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{in_drv}</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
     with c3:
         if b_out:
             out_val = f"{b_out['delta_s']:+.2f}s"
             out_drv = f"{_disp_driver(b_out['driver'])} (Lap {b_out['lap']})"
-            out_col = b_out.get("team_color") or "#8B5CF6"
+            raw_oc = b_out.get("team_color") or "#8B5CF6"
+            out_col = "var(--text-color)" if str(raw_oc).strip().lower() in ("#ffffff", "#fff", "white") else raw_oc
         else:
             out_val, out_drv, out_col = "—", "N/A", "#888888"
         st.markdown(
-            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best Out-Lap Warm-up</div>
-              <div style='font-size:20px; font-weight:700; color:{out_col}; margin:2px 0;'>{out_val}</div>
-              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{out_drv}</div>
-            </div>""",
-            unsafe_allow_html=True
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Best Out-Lap Warm-up</div>"
+            f"<div style='font-size:20px; font-weight:700; color:{out_col}; margin:2px 0;'>{out_val}</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{out_drv}</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
     with c4:
         loss_val = f"{med_loss:.2f}s" if med_loss is not None else "—"
         lane_sub = f"Transit: {med_lane:.2f}s" if med_lane is not None else f"{summary.get('total_stops', len(all_stops))} stops analysed"
         st.markdown(
-            f"""<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>
-              <div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Grid Median Pit Loss</div>
-              <div style='font-size:20px; font-weight:700; color:#51cf66; margin:2px 0;'>{loss_val}</div>
-              <div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{lane_sub}</div>
-            </div>""",
-            unsafe_allow_html=True
+            "<div style='background:rgba(255,255,255,0.03); border:1px solid rgba(128,128,128,0.15); border-radius:8px; padding:10px 14px;'>"
+            "<div style='font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#888;'>Grid Median Pit Loss</div>"
+            f"<div style='font-size:20px; font-weight:700; color:#51cf66; margin:2px 0;'>{loss_val}</div>"
+            f"<div style='font-size:12px; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{lane_sub}</div>"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
     st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
@@ -3122,46 +3056,49 @@ def _render_pit_loss_section(
         s2_c = _cell_sec_badge(s.get("out_lap_s2_delta_s"))
         s3_c = _cell_sec_badge(s.get("out_lap_s3_delta_s"))
 
-        table_rows_html += f"""
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {border_col}'>
-          <td style='padding:8px 10px; text-align:center;'>{rank_badge}</td>
-          <td style='padding:8px 10px;'>{drv_cell}</td>
-          <td style='padding:8px 10px; color:{t_col}; font-size:12px;'>
-            <span style='display:inline-block; width:8px; height:8px; border-radius:2px; background:{t_col}; margin-right:4px;'></span>
-            {team}
-          </td>
-          <td style='padding:8px 10px; text-align:center;'>S{s_num} (L{in_lap})</td>
-          <td style='padding:8px 10px; text-align:center;'>{old_c_badge} → {new_c_badge}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#f59e0b;'>{in_delta_str}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#06b6d4; font-weight:600;'>{transit_str}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; color:#8b5cf6;'>{out_delta_str}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; font-size:11px;'>{s1_c} / {s2_c} / {s3_c}</td>
-          <td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>{net_loss_str}</td>
-        </tr>
-        """
+        # Adapt white livery hexes (e.g. Audi / Cadillac #ffffff) to var(--text-color) so
+        # team names stay readable in Light Mode while keeping a bordered colour swatch.
+        t_is_white = str(t_col).strip().lower() in ("#ffffff", "#fff", "white")
+        t_txt_col = "var(--text-color)" if t_is_white else t_col
+        swatch_border = " border:1px solid rgba(128,128,128,0.4);" if t_is_white else ""
 
-    table_html = f"""
-    <div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>
-    <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-      <thead>
-        <tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px;
-                   letter-spacing:1.5px; text-transform:uppercase;'>
-          <th style='padding:8px 10px; text-align:center;'>#</th>
-          <th style='padding:8px 10px; text-align:left;'>Driver</th>
-          <th style='padding:8px 10px; text-align:left;'>Constructor</th>
-          <th style='padding:8px 10px; text-align:center;'>Stop (Lap)</th>
-          <th style='padding:8px 10px; text-align:center;'>Tyres</th>
-          <th style='padding:8px 10px; text-align:center;'>In-Lap Push Δ</th>
-          <th style='padding:8px 10px; text-align:center;'>Pit Lane Transit</th>
-          <th style='padding:8px 10px; text-align:center;'>Out-Lap Warm-up Δ</th>
-          <th style='padding:8px 10px; text-align:center;'>Sector Deltas (S1 / S2 / S3)</th>
-          <th style='padding:8px 10px; text-align:center;'>Net Pit Loss</th>
-        </tr>
-      </thead>
-      <tbody>{table_rows_html}</tbody>
-    </table>
-    </div>
-    """
+        # Keep table rows and wrapper HTML strictly unindented with zero blank lines so
+        # Streamlit's CommonMark parser never terminates the <table> block at row 1 and
+        # renders rows 2..N + </tbody> as a raw <pre><code> block.
+        table_rows_html += (
+            f"<tr style='border-bottom:1px solid rgba(128,128,128,0.12); {bg_col} {border_col}'>"
+            f"<td style='padding:8px 10px; text-align:center;'>{rank_badge}</td>"
+            f"<td style='padding:8px 10px;'>{drv_cell}</td>"
+            f"<td style='padding:8px 10px; color:{t_txt_col}; font-size:12px;'>"
+            f"<span style='display:inline-block; width:8px; height:8px; border-radius:2px; background:{t_col};{swatch_border} margin-right:4px;'></span>"
+            f"{team}</td>"
+            f"<td style='padding:8px 10px; text-align:center;'>S{s_num} (L{in_lap})</td>"
+            f"<td style='padding:8px 10px; text-align:center;'>{old_c_badge} → {new_c_badge}</td>"
+            f"<td style='padding:8px 10px; text-align:center; font-family:monospace; color:#f59e0b;'>{in_delta_str}</td>"
+            f"<td style='padding:8px 10px; text-align:center; font-family:monospace; color:#06b6d4; font-weight:600;'>{transit_str}</td>"
+            f"<td style='padding:8px 10px; text-align:center; font-family:monospace; color:#8b5cf6;'>{out_delta_str}</td>"
+            f"<td style='padding:8px 10px; text-align:center; font-family:monospace; font-size:11px;'>{s1_c} / {s2_c} / {s3_c}</td>"
+            f"<td style='padding:8px 10px; text-align:center; font-family:monospace; font-weight:700; color:#51cf66;'>{net_loss_str}</td>"
+            "</tr>"
+        )
+
+    table_html = (
+        "<div style='overflow-x:auto; border-radius:12px; border:1px solid rgba(128,128,128,0.15); margin-bottom:20px;'>"
+        "<table style='width:100%; border-collapse:collapse; font-size:13px;'>"
+        "<thead><tr style='border-bottom:1px solid rgba(128,128,128,0.2); opacity:0.6; font-size:10px; "
+        "letter-spacing:1.5px; text-transform:uppercase;'>"
+        "<th style='padding:8px 10px; text-align:center;'>#</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Driver</th>"
+        "<th style='padding:8px 10px; text-align:left;'>Constructor</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Stop (Lap)</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Tyres</th>"
+        "<th style='padding:8px 10px; text-align:center;'>In-Lap Push Δ</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Pit Lane Transit</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Out-Lap Warm-up Δ</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Sector Deltas (S1 / S2 / S3)</th>"
+        "<th style='padding:8px 10px; text-align:center;'>Net Pit Loss</th>"
+        f"</tr></thead><tbody>{table_rows_html}</tbody></table></div>"
+    )
     st.markdown(table_html, unsafe_allow_html=True)
 
 

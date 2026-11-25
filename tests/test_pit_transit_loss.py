@@ -416,3 +416,52 @@ def test_render_pit_loss_radio_state_sanitization(sample_pit_laps, monkeypatch):
     # Key should have been reset to a valid option without exception
     assert st.session_state[radio_key] == "Full Grid Overview"
 
+
+def test_leaderboard_html_has_no_commonmark_codeblock_indentation_or_white_text(sample_pit_laps, monkeypatch):
+    """Ensure multi-row HTML tables in components.py contain no blank lines or >=4-space indentation that CommonMark turns into <pre><code>."""
+    import ast
+    import re
+    from unittest.mock import MagicMock
+    import src.ui.components as components
+    from src.ui.components import _render_pit_loss_section
+    import streamlit as st
+
+    markdown_calls = []
+    monkeypatch.setattr(st, "markdown", lambda content, **kwargs: markdown_calls.append(str(content)))
+    monkeypatch.setattr(st, "columns", lambda n: [MagicMock() for _ in range(n if isinstance(n, int) else len(n))])
+    monkeypatch.setattr(st, "radio", lambda *args, **kwargs: "Full Grid Overview")
+    monkeypatch.setattr(st, "plotly_chart", lambda *args, **kwargs: None)
+
+    data = _build_pit_transit_data("mock_sess_commonmark", sample_pit_laps)
+    # Inject a white-livery constructor stop (e.g. Audi / Cadillac #ffffff) to verify Light Mode readability
+    data["all_stops"].append({
+        **data["all_stops"][0],
+        "driver": "HUL",
+        "team": "Audi",
+        "team_color": "#ffffff",
+        "rank": 3,
+    })
+
+    _render_pit_loss_section(data, driver1="VER", compare=False)
+
+    table_blocks = [m for m in markdown_calls if "<table" in m]
+    assert len(table_blocks) == 1
+    tbl = table_blocks[0]
+    # All 3 rows must be inside one contiguous <tbody>...</tbody> with no blank lines or >=4-space indented lines
+    assert tbl.count("<tr ") >= 3
+    assert not re.search(r"\n[ \t]*\n", tbl), "Blank line inside HTML breaks CommonMark <table> block"
+    assert not re.search(r"(^|\n) {4,}<", tbl), ">=4 leading spaces before HTML tag triggers CommonMark <pre><code>"
+    assert "color:#ffffff;" not in tbl
+    assert "color:var(--text-color);" in tbl
+
+    # Static AST guard: no triple-quoted multiline HTML strings (<table / <tr / <div) in src/ui/components.py
+    with open(components.__file__, encoding="utf-8") as f:
+        comp_src = f.read()
+    tree = ast.parse(comp_src, filename=components.__file__)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Constant, ast.JoinedStr)):
+            seg = ast.get_source_segment(comp_src, node) or ""
+            if seg.startswith(('"""', "'''", 'f"""', "f'''")) and any(tag in seg for tag in ("<table", "<tr", "<div")):
+                raise AssertionError(f"Triple-quoted HTML block at components.py:{node.lineno} risks CommonMark <pre><code> rendering")
+
+
